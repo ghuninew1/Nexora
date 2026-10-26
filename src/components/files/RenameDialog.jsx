@@ -10,6 +10,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { cx } from "../../utils/cx";
 
 function RenameDialog({
   open,
@@ -18,6 +19,7 @@ function RenameDialog({
   onRename,
 }) {
   const [name, setName] = useState(file?.name ?? "");
+  const [error, setError] = useState("");
 
   function handleRename() {
     const trimmedName = name.trim();
@@ -26,13 +28,19 @@ function RenameDialog({
       return;
     }
 
-    onRename(file.id, trimmedName);
+    const renamed = onRename(file.id, trimmedName);
+    if (renamed === false) {
+      setError("A file or folder with this name already exists here.");
+      return;
+    }
     setName("");
+    setError("");
   }
 
   function handleOpenChange(value) {
     if (!value) {
       setName("");
+      setError("");
     }
 
     onOpenChange(value);
@@ -46,7 +54,7 @@ function RenameDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename</DialogTitle>
+          <DialogTitle id="rename-item-title">Rename</DialogTitle>
 
           <DialogDescription>
             Enter a new name for this item.
@@ -54,15 +62,22 @@ function RenameDialog({
         </DialogHeader>
 
         <Input
+          id="rename-item-name"
+          aria-labelledby="rename-item-title"
+          aria-label={`New name for ${file.name}`}
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => { setName(event.target.value); setError(""); }}
           autoFocus
+          maxLength={255}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "rename-item-error" : undefined}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               handleRename();
             }
           }}
         />
+        {error && <p id="rename-item-error" role="alert" className={cx("text-sm text-destructive")}>{error}</p>}
 
         <DialogFooter>
           <Button

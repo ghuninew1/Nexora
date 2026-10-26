@@ -62,7 +62,22 @@ export default function useFiles() {
     return { folderId: currentFolderId, ids: allSelected ? ids.filter((id) => !currentFiles.some((file) => file.id === id)) : [...new Set([...ids, ...currentFiles.map((file) => file.id)])] };
   }), [currentFiles, currentFolderId]);
 
-  const createFolder = useCallback((name) => data.createFolder(currentFolderId, name), [data.createFolder, currentFolderId]);
+  const createFolder = useCallback((name) => {
+    const trimmed = name.trim();
+    const duplicate = files.some((file) => file.parentId === currentFolderId && file.name.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+    if (duplicate) return false;
+    data.createFolder(currentFolderId, trimmed);
+    return true;
+  }, [data.createFolder, currentFolderId, files]);
+  const rename = useCallback((id, name) => {
+    const target = files.find((file) => file.id === id);
+    if (!target) return false;
+    const trimmed = name.trim();
+    const duplicate = files.some((file) => file.id !== id && file.parentId === target.parentId && file.name.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+    if (duplicate) return false;
+    data.rename(id, trimmed);
+    return true;
+  }, [data.rename, files]);
   const remove = useCallback((ids) => {
     data.trash(ids);
     setSelection((current) => ({ ...current, ids: current.ids.filter((id) => !ids.includes(id)) }));
@@ -72,5 +87,5 @@ export default function useFiles() {
   const recentFiles = useMemo(() => data.recent.map((entry) => ({ ...activeFiles.find((file) => file.id === entry.id), accessedAt: entry.accessedAt })).filter((file) => file.id), [data.recent, activeFiles]);
   const favoriteFiles = useMemo(() => activeFiles.filter((file) => data.favorites.includes(file.id)), [activeFiles, data.favorites]);
 
-  return { files, allFiles, trashFiles, currentFolderId, currentFiles, breadcrumbs, selectedIds, query, setQuery, sortBy, setSortBy, sortDirection, setSortDirection, view, setView, favorites: data.favorites, favoriteFiles, recent: data.recent, recentFiles, toggleFavorite: data.toggleFavorite, recordAccess: data.recordAccess, restore: data.restore, permanentlyDelete: data.permanentlyDelete, navigateFolder, toggleSelect, selectAll, createFolder, addUploadedFile: data.addUploadedFile, rename: data.rename, remove, clearSelection: () => setSelection({ folderId: currentFolderId, ids: [] }) };
+  return { files, allFiles, trashFiles, currentFolderId, currentFiles, breadcrumbs, selectedIds, query, setQuery, sortBy, setSortBy, sortDirection, setSortDirection, view, setView, favorites: data.favorites, favoriteFiles, recent: data.recent, recentFiles, toggleFavorite: data.toggleFavorite, recordAccess: data.recordAccess, restore: data.restore, permanentlyDelete: data.permanentlyDelete, navigateFolder, toggleSelect, selectAll, createFolder, addUploadedFile: data.addUploadedFile, rename, remove, clearSelection: () => setSelection({ folderId: currentFolderId, ids: [] }) };
 }

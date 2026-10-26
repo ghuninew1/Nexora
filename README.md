@@ -43,6 +43,8 @@ src/
 
 Pages ใช้ `AppLayout` ร่วมกับ `AppShell` และ `<Outlet />` เพื่อให้สถานะ navigation อยู่ต่อระหว่างเปลี่ยน route `FilesProvider` เก็บ demo files, favorites, recents และ trash ระหว่างเปลี่ยน route; `useFiles` จัดการ folder/search/view state และ local operations ส่วน `useUploadQueue` จำลอง progress และเพิ่ม browser `File` เข้า memory เท่านั้น การตั้งค่า design system อยู่ใน `src/index.css` และอธิบายใน [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
 
+รายการงานถัดไป, Storage/API guardrails และ acceptance criteria อยู่ใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
+
 ## แนวทางข้อมูลและ Storage
 
 เมื่อเริ่มเชื่อมข้อมูลจริง ให้เพิ่ม domain API client ใน `src/services/` และหน้า Pages Functions ตามแผน File Management ห้ามใส่ Storage secrets ใน frontend หรือสร้าง Garage endpoint เฉพาะ UI ต้องเรียก unified Storage API ที่ server ตรวจ session, ownership และ capabilities ก่อนส่งต่อ
@@ -56,7 +58,7 @@ IssueDesk เป็นผู้ดูแล Shared Storage Service → Garage/QN
 - **Phase 3 — App Layout:** เพิ่ม shared layout, sidebar/header routes, mobile drawer และ Button hover แบบ IssueDesk
 - **Phase 4 — File Browser:** toolbar, URL breadcrumbs, search/sort, list/grid, selection, context actions, local preview/download และ demo interactions — เสร็จใน frontend
 - **Phase 5 — Remaining Pages:** Dashboard, Recent, Favorites, Shared, Trash, Storage และ Settings ในขอบเขต frontend/demo — เสร็จ
-- **Phase 6 — Polish:** accessibility, keyboard, error/loading states, responsive และ performance
+- **Phase 6 — Polish:** labels และ focus ที่ keyboard/screen reader ใช้ได้, validation ชื่อซ้ำ, select-all บนมือถือ, breadcrumb เลื่อนบนจอแคบ, upload progress semantics และ reduced-motion support — เสร็จใน frontend; ไม่มี network loading/error states เพราะยังไม่มี API
 - **Storage API implementation:** แยก approval/แผน backend จาก UI; ปัจจุบันยังไม่มี endpoint implementation ใน Nexora
 
 ## Coding conventions

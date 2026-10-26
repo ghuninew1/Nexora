@@ -23,6 +23,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/data/files.js`: fixture entries.
 - `src/components/ui/`, `src/utils/cx.js`, `src/utils/glass.js`, `src/index.css`: shared controls, classes, glass interactions, and tokens.
 - `README.md` and `docs/DESIGN_SYSTEM.md`: current user-facing project status and design usage.
+- `PROJECT_HANDOFF.md`: ordered follow-up plan, current integration boundaries, and acceptance criteria; verify source and git status before continuing.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
 
@@ -45,6 +46,9 @@ Check this map against actual files when changing the architecture; update READM
 - Every JSX `className` prop written or modified must use `cx()` from `src/utils/cx.js`, including static classes and callback return values. Do not use templates, concatenation, arrays, or object maps inside `cx()`; it only filters falsy values and joins strings and does not merge Tailwind conflicts.
 - Keep Tailwind class fragments static and semantic. Follow the existing theme tokens, glass utilities, reduced-motion behavior, and mobile-first patterns.
 - Keep keyboard access, focus-visible styling, accessible labels, and dialog titles. Clean up effects, listeners, object URLs, and timers introduced by code.
+- Show duplicate-name validation inline and associate input errors with the relevant field using `aria-invalid`, `aria-describedby`, and a live alert.
+- Use semantic progressbar values and labels for progress indicators, polite status announcements for completion, and sufficiently large touch targets for row actions.
+- Keep long breadcrumbs usable on narrow screens and honor `prefers-reduced-motion` for animation and transitions.
 - Preserve `Button` Base UI semantics, variants, `ref`, render/slot composition, state-based className callbacks, and caller event handlers when extending the shared component.
 - Use the shared `Button` for actions and retain its IssueDesk-referenced Liquid Glass hover behavior; avoid one-off button styling that bypasses the shared variants.
 

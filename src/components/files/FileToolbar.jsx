@@ -2,7 +2,7 @@ import {
   ChevronDown, Download, FolderPlus, Grid2X2, List, Pencil, Plus,
   Search, Share2, Trash2, ArrowUpDown,
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
@@ -35,9 +35,11 @@ function FileToolbar({ selectedCount, onNewFolder, onRename, onDelete, onFilesSe
         </div>
         <Separator orientation="vertical" className={cx("hidden h-6 sm:block")} />
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="outline" size="icon-sm" aria-label={`Sort by ${sortBy}`}><ArrowUpDown /></Button>} />
+          <DropdownMenuTrigger render={<Button variant="outline" size="icon-sm" aria-label={`Sort by ${sortBy}, ${sortDirection}ending`}><ArrowUpDown /></Button>} />
           <DropdownMenuContent align="end">
-            {[{ key: "name", label: "Name" }, { key: "modified", label: "Last modified" }, { key: "size", label: "File size" }].map((item) => <DropdownMenuItem key={item.key} onClick={() => onSortChange(item.key)}>{sortBy === item.key ? "✓ " : ""}{item.label}</DropdownMenuItem>)}
+            <DropdownMenuRadioGroup value={sortBy} onValueChange={onSortChange}>
+              {[{ key: "name", label: "Name" }, { key: "modified", label: "Last modified" }, { key: "size", label: "File size" }].map((item) => <DropdownMenuRadioItem key={item.key} value={item.key} closeOnClick>{item.label}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
             <Separator className={cx("my-1")} />
             <DropdownMenuItem onClick={onSortDirectionChange}>Order: {sortDirection === "asc" ? "Ascending" : "Descending"}</DropdownMenuItem>
           </DropdownMenuContent>

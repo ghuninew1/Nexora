@@ -16,8 +16,8 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
       selected && "bg-primary/5 ring-1 ring-inset ring-primary/30",
     )}>
       <div className={cx("flex min-w-0 items-center gap-3", view === "grid" && "pr-8")}>
-        <button type="button" onClick={() => onSelect(file.id)} aria-label={`${selected ? "Deselect" : "Select"} ${file.name}`} aria-pressed={selected} className={cx("flex size-4 shrink-0 items-center justify-center rounded border text-[10px] transition-colors", selected ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary")}>
-          {selected && "✓"}
+        <button type="button" onClick={() => onSelect(file.id)} aria-label={`${selected ? "Deselect" : "Select"} ${file.name}`} aria-pressed={selected} className={cx("flex size-8 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
+          <span className={cx("flex size-4 items-center justify-center rounded border text-[10px] transition-colors", selected ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary")}>{selected && "✓"}</span>
         </button>
         <button type="button" onClick={handleOpen} className={cx("flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", view === "grid" && "min-h-16")}>
           <span className={cx("flex size-10 shrink-0 items-center justify-center rounded-xl", isFolder ? "bg-amber-500/10 text-amber-600" : "bg-primary/10 text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>

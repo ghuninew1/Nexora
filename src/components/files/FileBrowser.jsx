@@ -40,8 +40,10 @@ function FileBrowser() {
 
   const handleFilesSelected = (files) => queue.addFiles(files, { parentId: browser.currentFolderId });
   const handleRename = (id, name) => {
-    browser.rename(id, name);
+    const renamed = browser.rename(id, name);
+    if (!renamed) return false;
     setRenameFile(null);
+    return true;
   };
   const confirmDelete = () => {
     browser.remove(deleteIds);
@@ -86,6 +88,7 @@ function FileBrowser() {
   return (
     <div className={cx("relative")} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
       <section className={cx("flex min-w-0 flex-col gap-5")}>
+        <h1 className={cx("sr-only")}>My Files</h1>
         <div className={cx("flex flex-wrap items-center justify-between gap-3")}>
           <FileBreadcrumbs items={browser.breadcrumbs} onNavigate={browser.navigateFolder} />
           <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Demo files · changes are temporary</span>
@@ -112,7 +115,7 @@ function FileBrowser() {
           onRename={setRenameFile} onDelete={(file) => setDeleteIds([file.id])}
           onDownload={downloadLocalFile} onToggleFavorite={browser.toggleFavorite}
         />
-        <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} onCreate={(name) => { browser.createFolder(name); setNewFolderOpen(false); }} />
+        <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} onCreate={(name) => { const created = browser.createFolder(name); if (created) setNewFolderOpen(false); return created; }} />
         <RenameDialog key={renameFile?.id ?? "rename-dialog"} open={Boolean(renameFile)} onOpenChange={(open) => { if (!open) setRenameFile(null); }} file={renameFile} onRename={handleRename} />
         <DeleteDialog open={deleteIds.length > 0} onOpenChange={(open) => { if (!open) setDeleteIds([]); }} count={deleteIds.length} onDelete={confirmDelete} />
         <FilePreviewDialog file={previewFile} open={Boolean(previewFile)} onOpenChange={(open) => { if (!open) setPreviewFile(null); }} />

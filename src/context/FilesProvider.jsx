@@ -35,17 +35,21 @@ export function FilesProvider({ children }) {
   const rename = useCallback((id, name) => setFiles((current) => current.map((file) => file.id === id ? { ...file, name: name.trim(), modified: "Just now", modifiedAt: new Date().toISOString() } : file)), []);
 
   const trash = useCallback((ids) => {
-    const toTrash = new Set(ids);
-    const pending = [...ids];
-    while (pending.length) {
-      const parentId = pending.pop();
-      files.forEach((file) => {
-        if (!file.trashedAt && file.parentId === parentId && !toTrash.has(file.id)) { toTrash.add(file.id); pending.push(file.id); }
-      });
-    }
-    const trashGroup = crypto.randomUUID();
+    const groupById = new Map();
+    ids.forEach((id) => {
+      const group = crypto.randomUUID();
+      const pending = [id];
+      while (pending.length) {
+        const parentId = pending.pop();
+        if (groupById.has(parentId)) continue;
+        groupById.set(parentId, group);
+        files.forEach((file) => {
+          if (!file.trashedAt && file.parentId === parentId && !groupById.has(file.id)) pending.push(file.id);
+        });
+      }
+    });
     const trashedAt = new Date().toISOString();
-    setFiles((current) => current.map((file) => toTrash.has(file.id) ? { ...file, trashedAt, trashGroup } : file));
+    setFiles((current) => current.map((file) => groupById.has(file.id) ? { ...file, trashedAt, trashGroup: groupById.get(file.id) } : file));
   }, [files]);
 
   const restore = useCallback((ids) => {

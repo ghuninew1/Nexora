@@ -35,9 +35,9 @@ JSX ที่สร้างหรือแก้ต้องใช้ `cx()` �
 
 `components.json` ชี้ utility ไป `@/utils/cx` มี export `cn` เป็น compatibility alias สำหรับ shadcn generator; เมื่อเพิ่ม component ให้ตรวจและเปลี่ยน application JSX ให้เรียก `cx()` ตาม convention
 
-## ขอบเขต Phase 2
+## สถานะของ UI foundation
 
-Foundation นี้ยังไม่ย้าย App Layout, Sidebar หรือ File Browser ไปใช้ glass classes ทั้งหมด งานนั้นเป็น Phase 3–4 และยังไม่เชื่อม authentication, Storage API หรือ database
+Foundation, App Layout, File Browser และหน้า workspace ใช้ design system นี้แล้ว ส่วนข้อมูลและ operations ยังเป็น demo ใน browser; Nexora ยังไม่เชื่อม authentication, Storage API หรือ database
 
 ก่อนจบแต่ละ phase ให้รัน lint/build ตามขอบเขต และตรวจ browser จริง: Dark/Light/System, desktop/mobile, keyboard, dialog/menu และ console errors
 
@@ -46,10 +46,13 @@ Foundation นี้ยังไม่ย้าย App Layout, Sidebar หรื
 - `src/layouts/AppLayout.jsx` ครอบ `Outlet` ด้วย AppShell เดียว Sidebar state จึงอยู่ต่อระหว่างเปลี่ยน route
 - Sidebar desktop ใช้ floating rail ขนาด 60px / 240px ตามแนว IssueDesk ส่วน Header เป็น sticky ที่มองเห็นเสมอเพื่อเข้าถึงเครื่องมือจัดการไฟล์
 - `src/components/navigation/navigation.js` เป็นแหล่งข้อมูลร่วมของเมนู ชื่อหน้า และคำอธิบาย
-- Dashboard, Recent, Favorites, Shared, Trash, Storage และ Settings มี route พร้อมสถานะ Coming next ฟังก์ชันจริงอยู่ใน Phase 5; URL ที่ไม่พบแสดง 404
+- Dashboard, Recent, Favorites และ Trash ใช้ in-memory state ร่วมกับ File Browser; Shared ใช้ fixture records, Storage แสดงสถานะยังไม่เชื่อม และ Settings ใช้ตั้งค่าธีมได้ URL ที่ไม่พบแสดง 404
 - Mobile navigation ใช้ Base UI Dialog: focus trap, Escape, คืน focus และปิดเมื่อเลือกเมนูหรือเปลี่ยนเป็น desktop breakpoint
 - `Button` กลางยังใช้ Base UI และ variants เดิม โดยใช้ `src/utils/glass.js` และ `.glass-interactive` ร่วมกับ navigation
 - Interaction อ้างอิง IssueDesk GlassButton: diagonal sheen, radial light ตามเมาส์, inset rim/shadow และ active scale 0.97 ปุ่ม filled/destructive คงสีเพื่อรักษา contrast
 - Pointer tracking ไม่ทำงานกับ touch/disabled และไม่ใช้ React state ต่อการขยับเมาส์ Caller ยังส่ง `onPointerMove`, `ref`, `render` และ className callback ผ่าน Button ได้
 - ปุ่มตกแต่ง Search/Notifications เดิมใน Header ถูกแทนด้วยชื่อหน้าและคำอธิบาย ปุ่ม file search ใน toolbar ยังอยู่ตาม implementation เดิม
-- File Browser ยังเป็น demo ในหน่วยความจำ ข้อมูลรีเซ็ตเมื่อ component ถูก unmount; งาน persistence และ Storage integration ต้องทำแยกตามแผน
+- `FilesProvider` เก็บ files, favorites, recents และ trash ข้าม route ในหน่วยความจำ ข้อมูล demo รีเซ็ตเมื่อ refresh; upload queue จำลอง progress และไม่ส่งข้อมูลไป Storage Service
+- File Browser มี responsive list/grid, search/sort, context actions, selection, dialogs, sample empty states และ preview สำหรับ browser `File` ใน session
+- Shared, provider usage และ permissions ยังไม่ใช่ข้อมูลหรือ operations จริง ปุ่ม Share ถูกปิดจนกว่าจะมี API ที่ผ่านการทบทวน
+- สถานะ validation ล่าสุดและลำดับ integration อยู่ใน `PROJECT_HANDOFF.md`; ยังต้องรัน lint/build และ browser QA หลัง Phase 6
