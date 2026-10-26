@@ -3,3 +3,6 @@ export function cx(...classes) {
     .filter(Boolean)
     .join(' ')
 }
+
+// shadcn's generator imports `cn`; application JSX continues to use `cx`.
+export { cx as cn };

@@ -5,6 +5,7 @@ const files = [
     name: "Documents",
     type: "folder",
     modified: "Today",
+    modifiedAt: "2026-10-27T09:00:00.000Z",
     size: null,
   },
   {
@@ -13,6 +14,7 @@ const files = [
     name: "Projects",
     type: "folder",
     modified: "Yesterday",
+    modifiedAt: "2026-10-26T09:00:00.000Z",
     size: null,
   },
   {
@@ -21,6 +23,7 @@ const files = [
     name: "Images",
     type: "folder",
     modified: "Oct 06, 2026",
+    modifiedAt: "2026-10-06T09:00:00.000Z",
     size: null,
   },
   {
@@ -29,6 +32,7 @@ const files = [
     name: "Projects",
     type: "folder",
     modified: "Today",
+    modifiedAt: "2026-10-27T08:00:00.000Z",
     size: null,
   },
   {
@@ -39,6 +43,8 @@ const files = [
     extension: "md",
     modified: "Oct 05, 2026",
     size: "12 KB",
+    sizeBytes: 12288,
+    modifiedAt: "2026-10-05T09:00:00.000Z",
   },
   {
     id: "documents-report",
@@ -48,6 +54,9 @@ const files = [
     extension: "pdf",
     modified: "Oct 04, 2026",
     size: "2.4 MB",
+    sizeBytes: 2516582,
+    modifiedAt: "2026-10-04T09:00:00.000Z",
+    sharedWith: "Ari Chen and Mika Tan · demo",
   },
   {
     id: "documents-projects-plan",
@@ -56,7 +65,9 @@ const files = [
     type: "file",
     extension: "pdf",
     modified: "Today",
+    modifiedAt: "2026-10-27T07:00:00.000Z",
     size: "1.8 MB",
+    sizeBytes: 1887436,
   },
   {
     id: "images-logo",
@@ -65,7 +76,9 @@ const files = [
     type: "file",
     extension: "png",
     modified: "Oct 06, 2026",
+    modifiedAt: "2026-10-06T09:00:00.000Z",
     size: "245 KB",
+    sizeBytes: 250880,
   },
   {
     id: "projects-report",
@@ -74,7 +87,10 @@ const files = [
     type: "file",
     extension: "pdf",
     modified: "Yesterday",
+    modifiedAt: "2026-10-26T08:00:00.000Z",
     size: "3.1 MB",
+    sizeBytes: 3250585,
+    sharedByMe: true,
   },
 ];
 

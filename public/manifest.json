@@ -1,0 +1,44 @@
+{
+  "id": "/",
+  "name": "Nexora",
+  "short_name": "Nexora",
+  "description": "Nexora",
+  "lang": "th",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#09090b",
+  "background_color": "#09090b",
+    "icons": [
+        {
+            "src": "apple-icon-144x144.webp",
+            "type": "image/webp",
+            "sizes": "144x144",
+            "density": "3.0",
+            "purpose": "any"
+        },
+        {
+            "src": "apple-icon-180x180.avif",
+            "sizes": "180x180",
+            "type": "image/avif",
+            "density": "4.0",
+            "purpose": "any"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "logo-375x375.avif",
+            "sizes": "375x375",
+            "type": "image/avif",
+            "form_factor": "wide",
+            "label": "App"
+        },
+        {
+            "src": "logo-375x375.avif",
+            "sizes": "375x375",
+            "type": "image/avif",
+            "label": "App"
+        }
+    ]
+}

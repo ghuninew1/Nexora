@@ -1,100 +1,46 @@
-import {
-  File,
-  FileCode2,
-  FileText,
-  Folder,
-} from "lucide-react";
-
+import { File, FileCode2, FileText, Folder, MoreHorizontal, Download, Eye, Pencil, Star, Trash2 } from "lucide-react";
 import { cx } from "../../utils/cx";
+import { Button } from "../ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 
-const fileIcons = {
-  md: FileCode2,
-  pdf: FileText,
-};
+const fileIcons = { md: FileCode2, pdf: FileText };
 
-function FileListItem({
-  file,
-  selected,
-  onSelect,
-  onOpenFolder,
-}) {
-  const Icon = file.type === "folder"
-    ? Folder
-    : fileIcons[file.extension] ?? File;
-
-  function handleContentClick() {
-    if (file.type === "folder") {
-      onOpenFolder(file.id);
-      return;
-    }
-
-    onSelect(file.id);
-  }
-
-  function handleSelectClick(event) {
-    event.stopPropagation();
-    onSelect(file.id);
-  }
-
+function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onPreview, onRename, onDelete, onDownload, onToggleFavorite }) {
+  const Icon = file.type === "folder" ? Folder : fileIcons[file.extension] ?? File;
+  const isFolder = file.type === "folder";
+  const handleOpen = () => isFolder ? onOpenFolder(file.id) : onPreview(file);
   return (
-    <div
-      className={cx(
-        "grid w-full items-center border-b border-border px-4 py-3 transition-colors last:border-b-0",
-        "grid-cols-[minmax(0,1fr)] gap-1 sm:grid-cols-[minmax(0,1fr)_180px_120px] sm:gap-0",
-        selected
-          ? "bg-muted"
-          : "hover:bg-muted/50",
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <button
-          type="button"
-          onClick={handleSelectClick}
-          aria-label={`Select ${file.name}`}
-          aria-pressed={selected}
-          className={cx(
-            "flex size-4 shrink-0 items-center justify-center rounded border text-[10px] transition-colors",
-            selected
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border hover:border-primary",
-          )}
-        >
+    <article className={cx(
+      "group relative min-w-0 border-border transition-colors",
+      view === "grid" ? "grid grid-cols-1 rounded-xl border bg-card p-4 hover:bg-muted/40" : "grid w-full items-center border-b px-4 py-3 pr-12 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_160px_100px_40px] sm:pr-4",
+      selected && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+    )}>
+      <div className={cx("flex min-w-0 items-center gap-3", view === "grid" && "pr-8")}>
+        <button type="button" onClick={() => onSelect(file.id)} aria-label={`${selected ? "Deselect" : "Select"} ${file.name}`} aria-pressed={selected} className={cx("flex size-4 shrink-0 items-center justify-center rounded border text-[10px] transition-colors", selected ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary")}>
           {selected && "✓"}
         </button>
-
-        <button
-          type="button"
-          onClick={handleContentClick}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
-        >
-          <Icon className="size-5 shrink-0 text-muted-foreground" />
-
-          <div className="min-w-0">
-            <span className="block truncate text-sm font-medium text-foreground">
-              {file.name}
-            </span>
-
-            <span className="block truncate text-xs text-muted-foreground sm:hidden">
-              {file.modified}
-              {file.size && (
-                <>
-                  {" • "}
-                  {file.size}
-                </>
-              )}
-            </span>
-          </div>
+        <button type="button" onClick={handleOpen} className={cx("flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", view === "grid" && "min-h-16")}>
+          <span className={cx("flex size-10 shrink-0 items-center justify-center rounded-xl", isFolder ? "bg-amber-500/10 text-amber-600" : "bg-primary/10 text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
+          <span className={cx("min-w-0 flex-1")}>
+            <span className={cx("block truncate text-sm font-medium text-foreground")}>{file.name}</span>
+            <span className={cx(view === "grid" ? "hidden" : "block truncate text-xs text-muted-foreground sm:hidden")}>{file.modified}{file.size ? ` · ${file.size}` : ""}</span>
+          </span>
         </button>
+        {favorite && <Star className={cx("size-4 shrink-0 fill-amber-400 text-amber-500")} aria-label="Favorite" />}
       </div>
-
-      <span className="hidden text-sm text-muted-foreground sm:block">
-        {file.modified}
-      </span>
-
-      <span className="hidden text-right text-sm text-muted-foreground sm:block">
-        {file.size ?? "—"}
-      </span>
-    </div>
+      <span className={cx(view === "grid" ? "mt-3 text-xs text-muted-foreground" : "hidden text-sm text-muted-foreground sm:block")}>{file.modified}</span>
+      <span className={cx(view === "grid" ? "text-xs text-muted-foreground" : "hidden text-right text-sm text-muted-foreground sm:block")}>{file.size ?? "—"}</span>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={cx(view === "grid" ? "absolute right-2 top-2" : "absolute right-2 top-2 sm:static")} aria-label={`Actions for ${file.name}`}><MoreHorizontal /></Button>} />
+        <DropdownMenuContent align="end">
+          {!isFolder && <DropdownMenuItem onClick={() => onPreview(file)}><Eye />Preview</DropdownMenuItem>}
+          {!isFolder && <DropdownMenuItem disabled={!file.sourceFile} onClick={() => onDownload(file)}><Download />Download</DropdownMenuItem>}
+          <DropdownMenuItem onClick={() => onToggleFavorite(file.id)}><Star />{favorite ? "Remove from favorites" : "Add to favorites"}</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onRename(file)}><Pencil />Rename</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={() => onDelete(file)}><Trash2 />Delete</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </article>
   );
 }
 

@@ -13,6 +13,7 @@ function DeleteDialog({
   onOpenChange,
   count,
   onDelete,
+  permanent = false,
 }) {
   function handleDelete() {
     onDelete();
@@ -23,15 +24,13 @@ function DeleteDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            Delete {count === 1 ? "item" : "items"}?
+            {permanent ? "Permanently delete" : "Delete"} {count === 1 ? "item" : "items"}?
           </DialogTitle>
 
           <DialogDescription>
-            {count === 1
-              ? "This item will be deleted."
-              : `These ${count} items will be deleted.`}
-            {" "}
-            This action cannot be undone.
+            {permanent
+              ? "This item will be removed permanently and cannot be restored."
+              : count === 1 ? "This item will move to Trash." : `These ${count} items will move to Trash.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -49,7 +48,7 @@ function DeleteDialog({
             variant="destructive"
             onClick={handleDelete}
           >
-            Delete
+            {permanent ? "Delete permanently" : "Move to Trash"}
           </Button>
         </DialogFooter>
       </DialogContent>

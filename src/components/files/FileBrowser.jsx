@@ -1,311 +1,121 @@
-import { useCallback, useRef, useState, useEffect } from "react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Info } from "lucide-react";
+import { cx } from "../../utils/cx";
+import useFiles from "../../hooks/useFiles";
+import useUploadQueue from "../../hooks/useUploadQueue";
 import DragDropOverlay from "./DragDropOverlay";
-import initialFiles from "../../data/files";
 import FileBreadcrumbs from "./FileBreadcrumbs";
 import FileToolbar from "./FileToolbar";
 import FileList from "./FileList";
 import NewFolderDialog from "./NewFolderDialog";
 import RenameDialog from "./RenameDialog";
 import DeleteDialog from "./DeleteDialog";
+import FilePreviewDialog from "./FilePreviewDialog";
 import UploadQueue from "./UploadQueue";
-import useUploadQueue from "../../hooks/useUploadQueue";
-import getUniqueFileName from "../../utils/getUniqueFileName";
+
+function downloadLocalFile(file) {
+  if (!file?.sourceFile) return;
+  const url = URL.createObjectURL(file.sourceFile);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.name;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function FileBrowser() {
-  const [files, setFiles] = useState(initialFiles);
-  const [currentFolderId, setCurrentFolderId] = useState(null);
-  const [selectedIds, setSelectedIds] = useState([]);
+  const browser = useFiles();
   const [newFolderOpen, setNewFolderOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteIds, setDeleteIds] = useState([]);
+  const [previewFile, setPreviewFile] = useState(null);
   const [dragging, setDragging] = useState(false);
   const dragCounterRef = useRef(0);
 
-  const currentFiles = files.filter((file) => file.parentId === currentFolderId);
+  const handleUploadComplete = useCallback((item) => browser.addUploadedFile(item), [browser.addUploadedFile]);
+  const queue = useUploadQueue({ onComplete: handleUploadComplete });
+  const selectedFiles = browser.files.filter((file) => browser.selectedIds.includes(file.id));
 
-  const handleUploadComplete = useCallback(
-    (item) => {
-      setFiles((current) => {
-        const existingNames = current
-          .filter((file) => file.parentId === currentFolderId)
-          .map((file) => file.name);
-
-        const name = getUniqueFileName(item.name, existingNames);
-
-        const file = {
-          id: crypto.randomUUID(),
-          parentId: currentFolderId,
-          name,
-          type: "file",
-          extension: name.includes(".") ? name.split(".").pop() : undefined,
-          modified: "Just now",
-          size: `${Math.max(1, Math.round(item.file.size / 1024))} KB`,
-        };
-
-        return [...current, file];
-      });
-    },
-    [currentFolderId],
-  );
-
-  const {
-    items: uploadItems,
-    totalFiles,
-    completedFiles,
-    totalBytes,
-    uploadedBytes,
-    progress,
-    speed,
-    elapsed,
-    isCompleted,
-    addFiles,
-  } = useUploadQueue({
-    onComplete: handleUploadComplete,
-  });
-
-  function getBreadcrumbs() {
-    const breadcrumbs = [];
-    let folderId = currentFolderId;
-
-    while (folderId) {
-      const folder = files.find((file) => file.id === folderId);
-
-      if (!folder) {
-        break;
-      }
-
-      breadcrumbs.unshift({
-        id: folder.id,
-        label: folder.name,
-      });
-
-      folderId = folder.parentId;
-    }
-
-    return [
-      {
-        id: null,
-        label: "Home",
-      },
-      ...breadcrumbs,
-    ];
-  }
-
-  function handleSelect(id) {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id],
-    );
-  }
-
-  function handleSelectAll() {
-    setSelectedIds((current) =>
-      current.length === currentFiles.length ? [] : currentFiles.map((file) => file.id),
-    );
-  }
-
-  function handleOpenFolder(id) {
-    setCurrentFolderId(id);
-    setSelectedIds([]);
-  }
-
-  function handleBreadcrumbClick(id) {
-    setCurrentFolderId(id);
-    setSelectedIds([]);
-  }
-
-  function handleCreateFolder(name) {
-    const folder = {
-      id: crypto.randomUUID(),
-      parentId: currentFolderId,
-      name,
-      type: "folder",
-      modified: "Just now",
-      size: null,
-    };
-
-    setFiles((current) => [...current, folder]);
-    setNewFolderOpen(false);
-  }
-
-  function handleRename(id, name) {
-    setFiles((current) => current.map((file) => (file.id === id ? { ...file, name } : file)));
-
+  const handleFilesSelected = (files) => queue.addFiles(files, { parentId: browser.currentFolderId });
+  const handleRename = (id, name) => {
+    browser.rename(id, name);
     setRenameFile(null);
-    setRenameOpen(false);
-  }
-
-  function handleRenameOpen() {
-    if (selectedIds.length !== 1) {
-      return;
-    }
-
-    const file = files.find((item) => item.id === selectedIds[0]);
-
-    if (!file) {
-      return;
-    }
-
-    setRenameFile(file);
-    setRenameOpen(true);
-  }
-
-  function handleDeleteOpen() {
-    if (selectedIds.length === 0) {
-      return;
-    }
-
-    setDeleteOpen(true);
-  }
-
-  function handleDelete() {
-    const idsToDelete = new Set(selectedIds);
-    const pendingIds = [...selectedIds];
-
-    while (pendingIds.length > 0) {
-      const parentId = pendingIds.pop();
-
-      files.forEach((file) => {
-        if (file.parentId === parentId && !idsToDelete.has(file.id)) {
-          idsToDelete.add(file.id);
-          pendingIds.push(file.id);
-        }
-      });
-    }
-
-    setFiles((current) => current.filter((file) => !idsToDelete.has(file.id)));
-
-    setSelectedIds([]);
-    setDeleteOpen(false);
-  }
-
-  function handleFilesSelected(files) {
-    addFiles(files);
-  }
+  };
+  const confirmDelete = () => {
+    browser.remove(deleteIds);
+    setDeleteIds([]);
+  };
 
   function handleDragEnter(event) {
     event.preventDefault();
-
-    if (!event.dataTransfer.types.includes("Files")) {
-      return;
-    }
-
+    if (!event.dataTransfer.types.includes("Files")) return;
     dragCounterRef.current += 1;
     setDragging(true);
   }
-
   function handleDragOver(event) {
     event.preventDefault();
-
-    if (event.dataTransfer.types.includes("Files")) {
-      event.dataTransfer.dropEffect = "copy";
-    }
+    if (event.dataTransfer.types.includes("Files")) event.dataTransfer.dropEffect = "copy";
   }
-
   function handleDragLeave(event) {
     event.preventDefault();
-
-    if (!event.dataTransfer.types.includes("Files")) {
-      return;
-    }
-
+    if (!event.dataTransfer.types.includes("Files")) return;
     dragCounterRef.current -= 1;
-
-    if (dragCounterRef.current <= 0) {
-      dragCounterRef.current = 0;
-      setDragging(false);
-    }
+    if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragging(false); }
   }
-
   function handleDrop(event) {
     event.preventDefault();
-
-    const files = Array.from(event.dataTransfer.files);
-
+    const droppedFiles = Array.from(event.dataTransfer.files);
     dragCounterRef.current = 0;
     setDragging(false);
-
-    if (files.length > 0) {
-      addFiles(files);
-    }
+    if (droppedFiles.length) handleFilesSelected(droppedFiles);
   }
 
   useEffect(() => {
     function handleWindowDragLeave(event) {
-      if (
-        event.clientX === 0 ||
-        event.clientY === 0 ||
-        event.clientX >= window.innerWidth ||
-        event.clientY >= window.innerHeight
-      ) {
+      if (event.clientX === 0 || event.clientY === 0 || event.clientX >= window.innerWidth || event.clientY >= window.innerHeight) {
         dragCounterRef.current = 0;
         setDragging(false);
       }
     }
-
     window.addEventListener("dragleave", handleWindowDragLeave);
-
-    return () => {
-      window.removeEventListener("dragleave", handleWindowDragLeave);
-    };
+    return () => window.removeEventListener("dragleave", handleWindowDragLeave);
   }, []);
 
   return (
-    <div
-      className="relative"
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      <section className="flex min-w-0 flex-col gap-6">
-        <FileBreadcrumbs items={getBreadcrumbs()} onNavigate={handleBreadcrumbClick} />
-
+    <div className={cx("relative")} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+      <section className={cx("flex min-w-0 flex-col gap-5")}>
+        <div className={cx("flex flex-wrap items-center justify-between gap-3")}>
+          <FileBreadcrumbs items={browser.breadcrumbs} onNavigate={browser.navigateFolder} />
+          <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Demo files · changes are temporary</span>
+        </div>
         <FileToolbar
-          selectedCount={selectedIds.length}
+          selectedCount={browser.selectedIds.length}
           onNewFolder={() => setNewFolderOpen(true)}
-          onRename={handleRenameOpen}
-          onDelete={handleDeleteOpen}
+          onRename={() => setRenameFile(selectedFiles[0] ?? null)}
+          onDelete={() => setDeleteIds(browser.selectedIds)}
           onFilesSelected={handleFilesSelected}
+          query={browser.query} onQueryChange={browser.setQuery}
+          sortBy={browser.sortBy} onSortChange={browser.setSortBy}
+          sortDirection={browser.sortDirection} onSortDirectionChange={() => browser.setSortDirection((direction) => direction === "asc" ? "desc" : "asc")}
+          view={browser.view} onViewChange={browser.setView}
+          canDownload={selectedFiles.length > 0 && selectedFiles.every((file) => Boolean(file.sourceFile))}
+          onDownload={() => selectedFiles.forEach(downloadLocalFile)}
         />
-
-        <UploadQueue
-          items={uploadItems}
-          totalFiles={totalFiles}
-          completedFiles={completedFiles}
-          totalBytes={totalBytes}
-          uploadedBytes={uploadedBytes}
-          progress={progress}
-          speed={speed}
-          elapsed={elapsed}
-          isCompleted={isCompleted}
-        />
-
+        <UploadQueue items={queue.items} totalFiles={queue.totalFiles} completedFiles={queue.completedFiles} totalBytes={queue.totalBytes} uploadedBytes={queue.uploadedBytes} progress={queue.progress} speed={queue.speed} elapsed={queue.elapsed} isCompleted={queue.isCompleted} />
         <FileList
-          files={currentFiles}
-          selectedIds={selectedIds}
-          onSelect={handleSelect}
-          onSelectAll={handleSelectAll}
-          onOpenFolder={handleOpenFolder}
+          files={browser.currentFiles} selectedIds={browser.selectedIds} query={browser.query}
+          view={browser.view} favorites={browser.favorites}
+          onSelect={browser.toggleSelect} onSelectAll={browser.selectAll}
+          onOpenFolder={browser.navigateFolder} onPreview={(file) => { browser.recordAccess(file.id); setPreviewFile(file); }}
+          onRename={setRenameFile} onDelete={(file) => setDeleteIds([file.id])}
+          onDownload={downloadLocalFile} onToggleFavorite={browser.toggleFavorite}
         />
-
-        <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} onCreate={handleCreateFolder} />
-
-        <RenameDialog
-          key={renameFile?.id ?? "rename-dialog"}
-          open={renameOpen}
-          onOpenChange={setRenameOpen}
-          file={renameFile}
-          onRename={handleRename}
-        />
-
-        <DeleteDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          count={selectedIds.length}
-          onDelete={handleDelete}
-        />
+        <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} onCreate={(name) => { browser.createFolder(name); setNewFolderOpen(false); }} />
+        <RenameDialog key={renameFile?.id ?? "rename-dialog"} open={Boolean(renameFile)} onOpenChange={(open) => { if (!open) setRenameFile(null); }} file={renameFile} onRename={handleRename} />
+        <DeleteDialog open={deleteIds.length > 0} onOpenChange={(open) => { if (!open) setDeleteIds([]); }} count={deleteIds.length} onDelete={confirmDelete} />
+        <FilePreviewDialog file={previewFile} open={Boolean(previewFile)} onOpenChange={(open) => { if (!open) setPreviewFile(null); }} />
       </section>
       {dragging && <DragDropOverlay />}
     </div>

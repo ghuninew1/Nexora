@@ -27,11 +27,12 @@ function useUploadQueue({ onComplete } = {}) {
 
     const totalFiles = items.length;
 
-    const addFiles = useCallback((files) => {
+    const addFiles = useCallback((files, { parentId } = {}) => {
         const newItems = files.map((file) => ({
             id: crypto.randomUUID(),
             file,
             name: file.name,
+            parentId,
             status: "pending",
             progress: 0,
         }));

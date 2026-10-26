@@ -1,76 +1,66 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "theme";
+const THEME_CHANGE = "nexora:theme-change";
+const SYSTEM_QUERY = "(prefers-color-scheme: dark)";
+const THEMES = { LIGHT: "light", DARK: "dark", SYSTEM: "system" };
+let sessionTheme = null;
 
-const THEMES = {
-    LIGHT: "light",
-    DARK: "dark",
-    SYSTEM: "system",
-};
-
-const getSystemTheme = () => (window.matchMedia("(prefers-color-scheme: dark)").matches ? THEMES.DARK : THEMES.LIGHT);
-
-const getStoredTheme = () => {
+function getStoredTheme() {
+    if (sessionTheme !== null) return sessionTheme;
     try {
-        const storedTheme = localStorage.getItem(STORAGE_KEY);
-
-        if (Object.values(THEMES).includes(storedTheme)) {
-            return storedTheme;
-        }
+        const stored = localStorage.getItem(STORAGE_KEY);
+        return Object.values(THEMES).includes(stored) ? stored : THEMES.DARK;
     } catch {
-        // Ignore localStorage errors
+        return THEMES.DARK;
     }
+}
 
-    return THEMES.SYSTEM;
-};
+function subscribeTheme(onChange) {
+    function handleStorage(event) {
+        if (event.key === STORAGE_KEY || event.key === null) {
+            sessionTheme = null;
+            onChange();
+        }
+    }
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(THEME_CHANGE, onChange);
+    return () => {
+        window.removeEventListener("storage", handleStorage);
+        window.removeEventListener(THEME_CHANGE, onChange);
+    };
+}
 
-const resolveTheme = (theme) => (theme === THEMES.SYSTEM ? getSystemTheme() : theme);
+function subscribeSystem(onChange) {
+    const media = window.matchMedia(SYSTEM_QUERY);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+}
 
-const applyTheme = (theme) => {
-    document.documentElement.classList.toggle("dark", theme === THEMES.DARK);
-};
+const getSystemDark = () => window.matchMedia(SYSTEM_QUERY).matches;
+const getDefaultTheme = () => THEMES.DARK;
+const getDefaultSystemDark = () => true;
 
-export const useTheme = () => {
-    const [theme, setThemeState] = useState(getStoredTheme);
-    const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(theme));
+function setTheme(nextTheme) {
+    if (!Object.values(THEMES).includes(nextTheme)) return;
+    try {
+        localStorage.setItem(STORAGE_KEY, nextTheme);
+        sessionTheme = null;
+    } catch {
+        // Theme switching still works for this session when storage is blocked.
+        sessionTheme = nextTheme;
+    }
+    window.dispatchEvent(new Event(THEME_CHANGE));
+}
+
+export function useTheme() {
+    const theme = useSyncExternalStore(subscribeTheme, getStoredTheme, getDefaultTheme);
+    const systemDark = useSyncExternalStore(subscribeSystem, getSystemDark, getDefaultSystemDark);
+    const resolvedTheme = theme === THEMES.SYSTEM ? (systemDark ? THEMES.DARK : THEMES.LIGHT) : theme;
 
     useEffect(() => {
-        const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        document.documentElement.classList.toggle("dark", resolvedTheme === THEMES.DARK);
+    }, [resolvedTheme]);
 
-        const updateTheme = () => {
-            const nextTheme = resolveTheme(theme);
-
-            setResolvedTheme(nextTheme);
-            applyTheme(nextTheme);
-        };
-
-        updateTheme();
-
-        mediaQuery.addEventListener("change", updateTheme);
-
-        return () => {
-            mediaQuery.removeEventListener("change", updateTheme);
-        };
-    }, [theme]);
-
-    const setTheme = (nextTheme) => {
-        if (!Object.values(THEMES).includes(nextTheme)) {
-            return;
-        }
-
-        setThemeState(nextTheme);
-
-        try {
-            localStorage.setItem(STORAGE_KEY, nextTheme);
-        } catch {
-            // Ignore localStorage errors
-        }
-    };
-
-    return {
-        theme,
-        resolvedTheme,
-        setTheme,
-        themes: THEMES,
-    };
-};
+    return { theme, resolvedTheme, setTheme, themes: THEMES };
+}
