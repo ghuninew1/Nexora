@@ -7,6 +7,8 @@ const CAPABILITY_BINDING_NAMES = [
   'CF_ACCESS_CLIENT_ID',
   'CF_ACCESS_CLIENT_SECRET',
 ];
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_CAPABILITY_REDIRECTS = 3;
 
 function diagnostic(logger, operation, message) {
   if (operation !== 'capabilities') return;
@@ -82,20 +84,58 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
     else incomingRequest.signal.addEventListener('abort', cancel, { once: true });
     const timer = setTimeout(() => { timedOut = true; controller.abort(new Error('timeout')); }, timeoutMs(env));
     let response;
+    let redirectBlocked = false;
+    let currentUrl = url;
+    let redirectCount = 0;
     try {
-      response = await fetchImpl(url, { method, headers, body, signal: controller.signal, redirect: 'error' });
+      while (true) {
+        // Cloudflare Workers throws TypeError for redirect: "error" before sending
+        // the request. Manual handling lets us enforce the trusted origin ourselves.
+        response = await fetchImpl(currentUrl, { method, headers, body, signal: controller.signal, redirect: 'manual' });
+        if (operation !== 'capabilities' || method !== 'GET' || !REDIRECT_STATUSES.has(response.status)) break;
+
+        const location = response.headers.get('Location');
+        if (!location) {
+          redirectBlocked = true;
+          diagnostic(logger, operation, `result=redirect-blocked status=${response.status} target=missing`);
+          break;
+        }
+
+        let target;
+        try { target = new URL(location, currentUrl); } catch {
+          redirectBlocked = true;
+          diagnostic(logger, operation, `result=redirect-blocked status=${response.status} target=invalid`);
+          break;
+        }
+
+        if (target.origin !== base.origin || target.username || target.password) {
+          redirectBlocked = true;
+          diagnostic(logger, operation, `result=redirect-blocked status=${response.status} target=untrusted-origin`);
+          break;
+        }
+        if (redirectCount >= MAX_CAPABILITY_REDIRECTS) {
+          redirectBlocked = true;
+          diagnostic(logger, operation, `result=redirect-blocked status=${response.status} target=limit`);
+          break;
+        }
+
+        redirectCount += 1;
+        diagnostic(logger, operation, `result=redirect-follow status=${response.status} target=trusted-origin`);
+        currentUrl = target;
+      }
     } catch (error) {
       clearTimeout(timer);
       incomingRequest.signal.removeEventListener('abort', cancel);
       if (error instanceof ApiError) throw error;
       diagnostic(logger, operation, timedOut
         ? 'result=timeout'
-        : `result=fetch-error type=${safeErrorType(error)} redirect=error`);
+        : `result=fetch-error type=${safeErrorType(error)} redirect=manual`);
       throw new ApiError(timedOut ? 'PROVIDER_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE', timedOut ? 504 : 503);
     }
     return {
       response,
       operation,
+      redirectBlocked,
       timedOut: () => timedOut,
       cleanup: () => {
         clearTimeout(timer);
@@ -109,6 +149,7 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
     const result = await request(args);
     try {
       if (!result.response.ok) {
+        if (result.redirectBlocked) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
         const payload = await readBoundedJson(result.response);
         const code = normalizeUpstreamError(payload, result.response.status);
         diagnostic(logger, result.operation, `result=http-error status=${result.response.status}`);

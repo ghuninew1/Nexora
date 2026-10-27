@@ -263,13 +263,78 @@ test('capabilities uses the owner mount project, exact S2 URL and server-only cr
   assert.equal(upstream.pathname, `/v3/projects/${projectId}/capabilities`);
   assert.equal(upstream.pathname.includes('//'), false);
   assert.equal(requests[0].init.method, 'GET');
-  assert.equal(requests[0].init.redirect, 'error');
+  assert.equal(requests[0].init.redirect, 'manual');
   assert.equal(requests[0].init.headers.get('CF-Access-Client-Id'), 'server-access-id');
   assert.equal(requests[0].init.headers.get('CF-Access-Client-Secret'), 'server-access-secret');
   assert.equal(requests[0].init.headers.get('Authorization'), 'Bearer server-app-secret');
   const responseText = await response.text();
   assert.match(responseText, /"list":true/u);
   assert.doesNotMatch(responseText, /server-app-secret|server-access-id|server-access-secret|private_project_alpha/u);
+});
+
+test('capabilities avoids the Cloudflare Workers redirect:error TypeError before upstream fetch', async () => {
+  let requestInit;
+  const response = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    fetchImpl: async (url, init) => {
+      requestInit = init;
+      if (init.redirect === 'error') throw new TypeError('Workers does not support redirect error mode');
+      return upstreamResponse(url, init);
+    },
+  });
+
+  assert.equal(requestInit.redirect, 'manual');
+  assert.equal(response.status, 200);
+});
+
+test('capabilities handles Workers manual redirects within the configured origin', async () => {
+  const calls = [];
+  const lines = [];
+  const logger = { warn(line) { lines.push(line); } };
+  const response = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async (url, init) => {
+      calls.push({ url: new URL(url), init });
+      assert.equal(init.redirect, 'manual');
+      if (calls.length === 1) {
+        return new Response(null, { status: 308, headers: { Location: '/v3/projects/private_project_alpha/capabilities' } });
+      }
+      return upstreamResponse(url, init);
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url.origin, 'https://storage.example.test');
+  assert.equal(calls[1].url.origin, calls[0].url.origin);
+  assert.equal(calls[1].url.pathname, `/v3/projects/${projectId}/capabilities`);
+  for (const { init } of calls) {
+    assert.equal(init.headers.get('Authorization'), 'Bearer server-app-secret');
+    assert.equal(init.headers.get('CF-Access-Client-Id'), 'server-access-id');
+    assert.equal(init.headers.get('CF-Access-Client-Secret'), 'server-access-secret');
+  }
+  assert.ok(lines.some((line) => line.includes('result=redirect-follow status=308 target=trusted-origin')));
+  assert.doesNotMatch(lines.join('\n'), /private_project_alpha|storage\.example\.test|server-app-secret|server-access-id|server-access-secret/u);
+});
+
+test('capabilities blocks redirects outside the configured origin without forwarding credentials', async () => {
+  const calls = [];
+  const lines = [];
+  const logger = { warn(line) { lines.push(line); } };
+  const response = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async (url, init) => {
+      calls.push({ url: new URL(url), init });
+      return new Response(null, { status: 302, headers: { Location: 'https://attacker.example/private_project_alpha' } });
+    },
+  });
+
+  assert.equal(response.status, 502);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url.origin, 'https://storage.example.test');
+  assert.equal(calls[0].init.redirect, 'manual');
+  assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer server-app-secret');
+  assert.ok(lines.some((line) => line.includes('result=redirect-blocked status=302 target=untrusted-origin')));
+  assert.doesNotMatch(lines.join('\n'), /attacker\.example|private_project_alpha|storage\.example\.test|server-app-secret|server-access-id|server-access-secret/u);
 });
 
 test('capability diagnostics classify missing bindings and fetch errors without logging values or identifiers', async () => {
@@ -295,7 +360,7 @@ test('capability diagnostics classify missing bindings and fetch errors without 
     fetchImpl: async () => { throw new TypeError('private_project_alpha server-access-secret'); },
   });
   assert.equal(networkFailure.status, 503);
-  assert.ok(lines.some((line) => line.includes('result=fetch-error type=TypeError redirect=error')));
+  assert.ok(lines.some((line) => line.includes('result=fetch-error type=TypeError redirect=manual')));
   assert.doesNotMatch(lines.join('\n'), /private_project_alpha|mount_alpha|server-app-secret|server-access-id|server-access-secret/u);
 });
 
