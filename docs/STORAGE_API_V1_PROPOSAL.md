@@ -1,6 +1,6 @@
 # `/api/storage/v1/*` Contract Proposal
 
-สถานะ: Nexora-facing API proposal เท่านั้น ยังไม่ implement/deploy Shared Storage S1 เพิ่มเฉพาะ internal manager/provider โดยคง `/v2`; ไม่ได้สร้าง `/api/storage/v1/*` หรือ Shared Storage public API v1 ดู [S1 report](STORAGE_PHASE_S1.md)
+สถานะ: This provider-neutral Nexora contract has a Phase 8 local server implementation. It is not connected to the React demo or production. Shared Storage `/v3` is the server-only upstream; Phase 8 did not add a new Shared Storage public API. See [Phase 8 report](PHASE_8.md) and [S2 report](STORAGE_PHASE_S2.md).
 
 ## Principles
 
@@ -126,4 +126,4 @@ Provider adapter receives a trusted mount plus opaque provider refs and implemen
 - `502/503/504`: provider unavailable, upstream failure or bounded timeout; include opaque request/operation ID, never provider payload.
 - Retry is safe only when request carries idempotency key and API can identify prior operation. Do not auto-retry non-idempotent delete/move without operation state.
 
-This contract is ready for review only. Phase 8 implementation, migrations, Shared Storage Service changes, secrets and deploy all require explicit approval.
+Current implementation limitations: upload forwarding is bounded but Shared Storage S2 buffers multipart; preview/share/range reads are unavailable; move is within one mount; usage is unavailable. The frontend remains demo-only. Production provisioning, remote D1 migration, secrets, and deployment are outside Phase 8 and require separate review.

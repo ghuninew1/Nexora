@@ -2,9 +2,9 @@
 
 Nexora เป็นเว็บจัดการไฟล์บน private cloud โดยใช้ **React + Vite + Tailwind CSS v4 + React Router 7** และ Base UI components เป้าหมายด้านภาพและการจัดวางใช้ IssueDesk เป็น reference ส่วนข้อมูลและ business logic ยังเป็นของ Nexora
 
-## Shared Storage Phase S1/S2
+## Shared Storage S1/S2 and Nexora Phase 8
 
-Shared Storage ใน checkout แยก `issuedesk/garage/storage/` เพิ่ม manager/provider boundary และ File Manager API `/v3` พร้อม additive folder/file metadata, pagination, copy, Trash/restore/permanent delete และ operation recovery state. S1/S2 tests 27/27 ผ่าน, IssueDesk lint ผ่าน; migration ยังไม่ได้ apply และ service ยังไม่ deploy/ตรวจ production Garage/Access. Nexora ยังไม่มี backend/API หรือ D1 changes. ดู [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md); Phase 8 ยังรอ approval แยก
+Shared Storage ใน checkout แยก `issuedesk/garage/storage/` มี File Manager API `/v3`, metadata สำหรับ folder/file, pagination, copy, Trash/restore/permanent delete และ operation state. S1/S2 tests 27/27 ผ่าน; migration ยังไม่ได้ apply กับ service runtime และไม่มี production verification. Nexora Phase 8 เพิ่ม Pages Functions, D1 schema, session auth และ same-origin `/api/storage/v1/*`; `FilesProvider` ยังใช้ demo state จนถึง Phase 9. ดู [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md), [Phase 8](docs/PHASE_8.md)
 
 ## สถานะปัจจุบัน
 
@@ -12,9 +12,9 @@ Frontend ทำงานด้วยข้อมูลตัวอย่าง�
 
 File Browser มีปุ่มรูปดาวสำหรับเพิ่ม/นำรายการออกจาก Favorites อยู่หน้าสัญลักษณ์ไฟล์หรือโฟลเดอร์ กดได้โดยตรงโดยไม่ต้องเปิดเมนู Actions; สถานะยังเป็น demo ใน memory และหายเมื่อ refresh เช่นเดิม Sidebar ใช้โลโก้เต็มเมื่อขยายและโลโก้ย่อเมื่อพับ พร้อมรองรับเมนูบนจอเล็ก
 
-ข้อมูลจาก `src/data/files.js` เป็น fixture ไม่มีการเชื่อม authentication, API, Cloudflare D1 หรือ Storage Service สถานะไฟล์, Recent, Favorites, Trash และ upload demo อยู่ใน memory และหายเมื่อ refresh; ไฟล์ที่อัปโหลดจะไม่ถูกส่งไป Garage/QNAP ธีมเป็นการตั้งค่าฝั่ง browser และเก็บแยกใน localStorage
+ข้อมูลจาก `src/data/files.js` เป็น fixture; frontend ยังไม่เรียก API และสถานะ files, Recent, Favorites, Trash และ upload demo อยู่ใน memory และหายเมื่อ refresh. Phase 8 มี auth/API ฝั่ง server แต่ยังไม่มี production D1 binding, credentials หรือ Storage mount. ไฟล์ที่อัปโหลดจากหน้าเว็บยังไม่ถูกส่งไป Garage/QNAP; ธีมเป็นการตั้งค่าฝั่ง browser และเก็บแยกใน localStorage
 
-Dashboard, Recent, Favorites และ Trash ใช้ข้อมูล demo ร่วมกับ File Browser; Shared แสดงรายการตัวอย่างที่ระบุไว้ใน fixtures ส่วน Storage แสดงว่า provider ยังไม่เชื่อม และ Settings ให้ปรับธีมได้ Share, permissions, cross-device download, persistent metadata, live capacity และ provider operations ยังไม่มี backend ปุ่ม Share จึงปิดไว้จนกว่าจะเชื่อม Storage/API จริง
+Dashboard, Recent, Favorites และ Trash ใน UI ยังใช้ข้อมูล demo ร่วมกับ File Browser; Shared แสดง fixture ส่วน Storage แสดงว่า provider ยังไม่เชื่อม. Phase 8 backend มี Favorites/Recent API แต่ UI ยังไม่เรียกใช้. Share, permissions, cross-device download, live capacity และ provider operations ยังไม่เปิดใน UI; ปุ่ม Share จึงปิดไว้
 
 ## เริ่มใช้งาน
 
@@ -27,7 +27,7 @@ pnpm build
 pnpm preview
 ```
 
-`pnpm preview` build ก่อนเปิด `wrangler pages dev`; `pnpm deploy` ทำการ deploy จริง โปรเจกต์ยังไม่มี root test script
+`pnpm preview` build ก่อนเปิด `wrangler pages dev`; `pnpm test` รัน backend tests ใน memory; `pnpm db:migrate:local` apply เฉพาะ local D1; `pnpm admin:create:local` สร้าง admin เฉพาะ local D1. `pnpm deploy` ทำการ deploy จริงและไม่ได้ใช้ใน Phase 8
 
 ## โครงสร้าง
 
@@ -45,17 +45,23 @@ src/
 ├── pages/           # route pages
 ├── theme/           # theme control
 └── utils/            # cx, names, glass pointer effects
+functions/
+├── api/[[path]].js   # Cloudflare Pages API routes
+└── _lib/             # server-only auth, authorization, Storage adapter
+migrations/           # Nexora-owned D1 SQL migrations
+scripts/              # local-only admin provisioning
+tests/                # backend security/contract tests
 ```
 
 Pages ใช้ `AppLayout` ร่วมกับ `AppShell` และ `<Outlet />` เพื่อให้สถานะ navigation อยู่ต่อระหว่างเปลี่ยน route `FilesProvider` เก็บ demo files, favorites, recents และ trash ระหว่างเปลี่ยน route; `useFiles` จัดการ folder/search/view state และ local operations ส่วน `useUploadQueue` จำลอง progress และเพิ่ม browser `File` เข้า memory เท่านั้น การตั้งค่า design system อยู่ใน `src/index.css` และอธิบายใน [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
 
 รายการงานถัดไป, Storage/API guardrails และ acceptance criteria อยู่ใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
 
-ผลตรวจ frontend หลัง Phase 6 และข้อเสนอ Storage สำหรับ Phase 8 อยู่ใน [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md), [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md) และ [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md) เอกสารเหล่านี้เป็น source audit/proposal; ยังไม่ได้เชื่อม service หรือเปลี่ยน production
+ผลตรวจ frontend, source audit, API contract และ Phase 8 implementation อยู่ใน [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md), [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md), [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md) และ [`docs/PHASE_8.md`](docs/PHASE_8.md). Backend ผ่าน local validation; ยังไม่ได้ตั้งค่าหรือเปลี่ยน production
 
 ## แนวทางข้อมูลและ Storage
 
-เมื่อเริ่มเชื่อมข้อมูลจริง ให้เพิ่ม domain API client ใน `src/services/` และหน้า Pages Functions ตามแผน File Management ห้ามใส่ Storage secrets ใน frontend หรือสร้าง Garage endpoint เฉพาะ UI ต้องเรียก unified Storage API ที่ server ตรวจ session, ownership และ capabilities ก่อนส่งต่อ
+Phase 8 เพิ่ม Pages Functions และ same-origin Storage API แล้ว; Phase 9 จึงเพิ่ม domain API client ใน `src/services/` และเชื่อม File Browser. ห้ามใส่ Storage secrets ใน frontend หรือเรียก Garage โดยตรง; server ตรวจ session, mount ownership และ capabilities ก่อนส่งต่อ Shared Storage `/v3`
 
 IssueDesk เชื่อมกับ Shared Storage Service แยกต่างหาก; source ของ Service ใช้ SQLite สำหรับ metadata และ S3-compatible API สำหรับ object bytes โดย Garage เป็น provider หลัง service ในการตั้งค่าปัจจุบัน แต่ checkout นี้ไม่ได้ยืนยัน remote Garage/QNAP availability. Nexora ต้องมี metadata database แยก และยึดผล audit/proposal ใน `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md` กับ `docs/STORAGE_API_V1_PROPOSAL.md` ก่อนเริ่ม integration
 
@@ -68,8 +74,9 @@ IssueDesk เชื่อมกับ Shared Storage Service แยกต่า�
 - **Phase 5 — Remaining Pages:** Dashboard, Recent, Favorites, Shared, Trash, Storage และ Settings ในขอบเขต frontend/demo — เสร็จ
 - **Phase 6 — Polish:** labels และ focus ที่ keyboard/screen reader ใช้ได้, validation ชื่อซ้ำ, select-all บนมือถือ, breadcrumb เลื่อนบนจอแคบ, upload progress semantics และ reduced-motion support — เสร็จใน frontend; ไม่มี network loading/error states เพราะยังไม่มี API
 - **Phase 7 — Validation & Storage Proposal:** `pnpm lint` และ `pnpm build` ผ่าน; ตรวจทุก route และหลาย workflow ใน in-app browser ที่ mobile-size, สลับธีม Light/Dark/System ได้; desktop browser, upload file chooser, permanent delete, reduced-motion OS override และ console log ยังไม่ได้ยืนยัน — ทำ source audit และเอกสาร proposal ครบ แต่ยังไม่ implement backend
+- **Phase 8 — Backend Foundation:** Pages Functions, D1 schema, session auth, mount ownership, server-only Shared Storage `/v3` client, `/api/storage/v1/*`, Favorites/Recent persistence และ 25 backend tests เสร็จและตรวจในเครื่อง; frontend demo ไม่ได้เปลี่ยน, ไม่มี production migration/secrets/deploy
 - **UI follow-up:** ปรับ Sidebar ให้เต็มความสูงและ responsive, สลับโลโก้ตามสถานะพับ/ขยาย, เพิ่ม Liquid Glass hover ให้รายการ File Browser และปุ่มดาว Favorites แบบกดตรงหน้าไฟล์/โฟลเดอร์; ตรวจ interaction และ List/Grid/เมนู Sidebar บนหน้าจอมือถือแล้ว ส่วน desktop/console และ QA ที่ค้างให้ดูใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
-- **Storage API implementation:** แยก approval/แผน backend จาก UI; ปัจจุบันยังไม่มี endpoint implementation ใน Nexora
+- **Phase 8 — Backend Foundation:** Pages Functions, D1 schema, session auth, mount authorization, server-only `/v3` client, `/api/storage/v1/*`, Favorites/Recent persistence และ tests เสร็จในเครื่อง; ไม่มี production credentials/configuration/migration/deploy. Frontend ยังเป็น demo จนถึง Phase 9
 
 ## Coding conventions
 

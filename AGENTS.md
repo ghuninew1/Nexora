@@ -9,7 +9,10 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/components/layout/` contains responsive navigation, header, and app shell. `src/components/files/` contains file browser UI. `src/hooks/` owns reusable state. `src/services/` is the intended location for domain API clients as integrations are added.
 - `src/index.css` owns design tokens and Liquid Glass primitives. Base UI/shadcn wrappers live in `src/components/ui/`.
 - `src/data/files.js` is demo data. `FilesProvider` keeps file state, favorites, recents, and Trash in memory across routes; these demo changes reset when the tab is refreshed. Uploaded browser `File` objects remain local to the current page session.
-- `wrangler.jsonc` configures Pages output in `dist/`; it currently has no D1/database binding. The repository currently has no `functions/` or `migrations/` directory.
+- `wrangler.jsonc` configures Pages output in `dist/` and a Nexora-owned `DB` D1 binding with a local placeholder ID. `functions/` contains the Phase 8 Pages API; `migrations/` contains Nexora-owned schema only. Production D1 is not configured or migrated.
+- `functions/_lib/` owns Pages API routing, PBKDF2 password verification, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
+- `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
+- Phase 8 API/auth exists locally; `FilesProvider`, `useFiles`, fixtures, and upload simulation remain demo-only until Phase 9.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
@@ -18,16 +21,21 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/context/FilesProvider.jsx`: in-memory file, favorite, recent, and trash state shared across routes.
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
-- `src/components/files/`, `src/hooks/useFiles.js`: File Browser UI and browser-only domain state/operations. No file API service exists yet.
+- `src/components/files/`, `src/hooks/useFiles.js`: File Browser UI and browser-only domain state/operations; not connected to the Phase 8 API.
+- `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry and server-only auth/storage handlers.
+- `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata.
+- `scripts/create-admin.mjs`: local-only first-admin provisioning via Wrangler `--local`.
+- `tests/backend.test.js`: Node tests using in-memory SQLite and mocked Shared Storage.
 - `src/hooks/useUploadQueue.js`: current local demo upload queue; it is not a network uploader.
 - `src/data/files.js`: fixture entries.
 - `src/components/ui/`, `src/utils/cx.js`, `src/utils/glass.js`, `src/index.css`: shared controls, classes, glass interactions, and tokens.
 - `README.md` and `docs/DESIGN_SYSTEM.md`: current user-facing project status and design usage.
 - `docs/STORAGE_API_AUDIT.md`: source-derived IssueDesk and Shared Storage API endpoint/auth/streaming audit.
-- `docs/STORAGE_ARCHITECTURE.md`: target provider architecture, metadata/auth/security proposal, and Phase 8 file sequence.
-- `docs/STORAGE_API_V1_PROPOSAL.md`: proposed provider-neutral `/api/storage/v1/*` contract; proposal only.
-- `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: local Shared Storage implementation in the separate IssueDesk checkout. S2 migration is not applied; Nexora remains frontend/demo-only and Phase 8 needs separate approval.
-- `PROJECT_HANDOFF.md`: verified Phase 7/S1 status, implementation boundaries, and approval gates for Shared Storage S2 and Nexora Phase 8; verify source and git status before continuing.
+- `docs/STORAGE_ARCHITECTURE.md`: current/target provider architecture and Phase 8 implementation boundary.
+- `docs/STORAGE_API_V1_PROPOSAL.md`: reviewed provider-neutral `/api/storage/v1/*` contract; implemented routes remain subject to later production review.
+- `docs/PHASE_8.md`: backend/auth/API implementation report and local verification.
+- `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: local Shared Storage implementation in the separate IssueDesk checkout. S2 migration remains unapplied to its service runtime.
+- `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2 and local Phase 8 status; production provisioning and Phase 9 remain separate.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
 
@@ -80,12 +88,15 @@ Use pnpm. The current root scripts are:
 pnpm dev
 pnpm lint
 pnpm build
+pnpm test
+pnpm db:migrate:local
+pnpm admin:create:local
 pnpm preview
 pnpm deploy
 pnpm cf-typegen
 ```
 
-There is no root test script. Do not add tests that mirror implementation details. Choose checks appropriate to the requested change and report only commands that were actually run. `pnpm preview` builds and starts Wrangler Pages locally. `pnpm deploy` deploys; it is not a validation command and requires explicit authorization.
+`pnpm test` uses Node's test runner with in-memory SQLite and mocked upstream calls. `pnpm db:migrate:local` always uses Wrangler `--local`; never remove that flag for routine validation. `pnpm admin:create:local` is hard-coded to local D1. `pnpm preview` builds and starts Wrangler Pages locally. `pnpm deploy` deploys; it is not a validation command and requires explicit authorization.
 
 When dependencies appear incomplete, inspect the package manager/store and preserve `package.json` and `pnpm-lock.yaml`. Do not change dependency versions merely to work around a local `node_modules` hydration problem.
 

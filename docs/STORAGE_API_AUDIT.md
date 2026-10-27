@@ -4,7 +4,13 @@
 
 ## S1/S2 implementation delta (2026-10-27)
 
-ตาราง audit ด้านล่างเก็บ baseline ก่อน S1: routes ย้ายไป `src/app.js`, download เป็น stream และ S2 เพิ่ม additive logical object/folder metadata พร้อม authenticated internal `/v3` routes กับ migration. `/v2` คง response/auth contract หลัง apply migration; Trash ซ่อนรายการปกติ, v2 DELETE ยัง permanent. Upload ยัง buffered; migration ยังไม่ apply และไม่มี Nexora API/deploy. ดู [S1](STORAGE_PHASE_S1.md) / [S2](STORAGE_PHASE_S2.md)
+ตาราง audit ด้านล่างเก็บ baseline ก่อน S1: routes ย้ายไป `src/app.js`, download เป็น stream และ S2 เพิ่ม additive logical object/folder metadata พร้อม authenticated internal `/v3` routes กับ migration. `/v2` คง response/auth contract หลัง apply migration; Trash ซ่อนรายการปกติ, v2 DELETE ยัง permanent. Upload ยัง buffered; S2 migration ยังไม่ apply กับ service runtime. ดู [S1](STORAGE_PHASE_S1.md) / [S2](STORAGE_PHASE_S2.md)
+
+## Nexora Phase 8 source implementation (2026-10-27)
+
+Nexora now has local Pages Functions under `functions/`, migration `migrations/0001_backend_foundation.sql`, hashed-cookie session auth and a server-only client for Shared Storage S2 `/v3`. Same-origin `/api/storage/v1/*` derives project IDs from owner-scoped D1 mounts; browser-facing serializers omit project/provider references. `/api/auth/*`, Favorites and bounded Recent routes are also present. See [Phase 8 report](PHASE_8.md) for the endpoint matrix, security checks and test results.
+
+The React demo is not wired to these routes. D1 migration has only run against Wrangler local D1; production D1, Access service identity, Shared Storage credentials/mount and deploy remain unconfigured. Nexora upload remains bounded but S2 buffers multipart; downloads stream. This audit is based on local source and does not prove production behavior.
 
 ## ภาพรวม API ที่พบ
 

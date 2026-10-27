@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-27
 
-เอกสารนี้สรุปสถานะ Nexora และเป็นจุดเริ่มงานหลัง Phase 7; แยก local validation, source audit และ proposal ออกจาก backend/production ที่ยังไม่ได้รับอนุมัติ
+เอกสารนี้สรุปสถานะ Nexora หลัง Phase 8; แยก local validation, source audit และ proposal ออกจาก production ที่ยังไม่ได้ตั้งค่า
 
 ## สถานะปัจจุบัน
 
@@ -12,7 +12,9 @@
 - Browser: ตรวจ route `/dashboard`, `/files`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings` และ unknown route ใน in-app browser ขนาดแคบประมาณ 576 px; ยืนยัน mobile navigation menu, search, list/grid, folder/breadcrumb, create folder, move to Trash, restore, preview sample state, theme Light/Dark/System, Tab focus ring และปิด preview dialog ได้
 - Browser QA ที่ยังไม่ยืนยัน: desktop viewport, native file chooser/upload queue (เลือกไฟล์ไม่ได้ใน browser control นี้), permanent delete (ต้องให้ผู้ใช้ยืนยัน ณ เวลาลบ), reduced-motion system override และ console log
 - UI follow-up mobile QA: ตรวจ File Browser ที่ `/files` ใน in-app browser บนหน้าจอมือถือ, สลับ List/Grid, กดดาวเพิ่ม Favorites แล้วตรวจสถานะปุ่มเปลี่ยนเป็น Remove, เปิด mobile Sidebar และตรวจ labels/โลโก้เต็ม; screenshot ยืนยัน layout ไม่มีการตัดแถวรายการใน viewport ที่ตรวจ
-- Nexora ยังไม่มี authentication, domain API, Pages Functions, D1 binding หรือ migrations; `wrangler.jsonc` ปัจจุบันตั้งค่า Pages output เป็น `dist/` เท่านั้น
+- Phase 8 backend foundation เสร็จในเครื่อง: Pages Functions, D1 binding placeholder, schema migration, hashed-cookie sessions, origin checks, mount ownership และ server-only Shared Storage `/v3` client
+- `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; ไม่มี remote migration, production D1 ID, deploy หรือ secret provision
+- `FilesProvider`, `useFiles`, fixtures และ upload simulation ยังเป็น demo และไม่เรียก backend; frontend integration อยู่ Phase 9
 - `FilesProvider` เก็บ files, Favorites, Recent และ Trash ใน memory ระหว่าง route; refresh จะคืนข้อมูล demo
 - Upload queue จำลอง progress ใน browser; preview/download ทำได้กับไฟล์ที่ผู้ใช้เลือกและยังอยู่ใน session เท่านั้น
 - Shared แสดง fixture records, Share action ยังปิดอยู่, Storage แสดงว่า provider ยังไม่ได้เชื่อม
@@ -32,18 +34,24 @@
 - Checks ที่รันในรอบก่อน: `pnpm lint` ผ่าน, `pnpm build` ผ่าน, browser route/interaction checks ตามรายการด้านบน
 - UI follow-up ล่าสุด: `pnpm lint`, `pnpm build` และ `git diff --check` ผ่านหลังเพิ่มปุ่ม Favorites inline; in-app browser mobile interaction/layout ผ่านตามรายการด้านบน
 - Browser plugin ไม่อยู่ในเครื่องมือของ session นี้ และ `pnpm exec playwright --version` แจ้งว่าไม่มี Playwright; desktop viewport กับ browser console จึงยังไม่ได้ตรวจ ยังค้าง native file chooser/upload queue, permanent delete, reduced-motion OS override และ console logs
-- Project ไม่มี root test script
+- Phase 8 เพิ่ม `pnpm test`; 25/25 backend tests ผ่านด้วย Node in-memory SQLite และ mocked Shared Storage
 - QA ที่ยังไม่ครบตามรายการด้านบนต้องตรวจแยกก่อนสรุปว่า UI ผ่านทุก flow/viewport
 
 ## Shared Storage Phase S1/S2 — 2026-10-27
 
-Shared Storage S1/S2 เสร็จใน checkout แยก `issuedesk/garage/storage/`: `/v3` internal manager API, logical folder/file tree, migration/backfill, name policy, copy verification, Trash/restore/purge และ operation records; `/v2` auth/response contract คงเดิมหลัง migration. `pnpm test` 27/27 และ IssueDesk lint ผ่านด้วย memory SQLite/fake S3; migration ไม่ได้ apply และไม่มี deployment/production verification. Nexora backend/API/D1 ยังไม่เริ่ม. รายละเอียด [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md). หยุดรอ review ก่อน Phase S3 หรือ Phase 8
+Shared Storage S1/S2 เสร็จใน checkout แยก `issuedesk/garage/storage/`: `/v3` internal manager API, logical folder/file tree, migration/backfill, name policy, copy verification, Trash/restore/purge และ operation records; `/v2` auth/response contract คงเดิมหลัง migration. `pnpm test` 27/27 และ IssueDesk lint ผ่านด้วย memory SQLite/fake S3; S2 migration ยังไม่ได้ apply กับ service runtime และไม่มี deployment/production verification. Nexora Phase 8 เริ่มต่อแล้วและมีรายงานแยก [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md)
 
-## งานถัดไป: Phase 8 (รอ approval หลัง S1/S2)
+## Nexora Phase 8 — 2026-10-27
 
-หลัง review S2 และได้รับ approval แยกสำหรับ Phase 8 จึงเริ่ม D1/schema/auth boundary และ Nexora server-side adapter ที่เรียก Shared Storage internal `/v3`; จากนั้นเปลี่ยน frontend ออกจาก demo state
+เพิ่ม Pages Functions API สำหรับ `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`; Storage mounts/list/capabilities/usage-unavailable, object list/stat, folder/upload/download/rename/move/copy/Trash/restore/permanent-delete/operations; Favorites และ bounded Recent. Mount/project mapping อยู่ D1 และ every operation derives the project from the current session-owned mount. Download passes `ReadableStream` with safe headers and cancellation. Upload body is bounded and forwarded as a stream, but Shared Storage S2 still buffers multipart; resumable/large-file upload is unsupported.
 
-S1/S2 authorization covers Shared Storage only. Nexora backend, D1 migrations, credentials, SMB and deployment still require separate Phase 8 approval.
+Auth uses PBKDF2-HMAC-SHA-256 at 600,000 iterations via Web Crypto, 32 random bytes per session, SHA-256 token hashes in D1, 14-day Secure/HttpOnly/SameSite=Lax cookies, inactive-user rejection and bounded login attempts. Bootstrap tooling `pnpm admin:create:local` is hard-coded to Wrangler `--local`; it was not run. No public registration, share mutation API, or SMB support.
+
+See [Phase 8 report](docs/PHASE_8.md). Production D1, Cloudflare Access, Shared Storage URL/app credential, mount provisioning, production users and deployment are still unconfigured. Review those as Phase 9 provisioning work before frontend integration.
+
+## งานถัดไป: Phase 9 (รอ review)
+
+หลัง review Phase 8 ให้เตรียม production provisioning แยกและเชื่อม File Browser/UI กับ Nexora API โดยคง demo mode ตามแผน; ห้ามย้าย frontend ไป backend ใน Phase 8
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -71,13 +79,13 @@ S1/S2 authorization covers Shared Storage only. Nexora backend, D1 migrations, c
 - `src/components/files/`: File Browser, demo grid, dialogs, preview และ upload queue UI
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, Settings
 - `src/data/files.js`: fixtures; metadata ตัวอย่างไม่ใช่สถานะ Storage จริง
-- `src/services/`, `functions/`, `migrations/`: ยังไม่มี implementation ใน checkout ปัจจุบัน
+- `src/services/`: ยังไม่มี Nexora browser API client; `functions/` และ `migrations/` มี Phase 8 backend foundation
 - `README.md`, `AGENTS.md`, `docs/DESIGN_SYSTEM.md`: project status, working conventions และ UI foundation
-- `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`: Phase 7 audit และ proposal
+- `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`, `docs/PHASE_8.md`: source audit, API contract และ Phase 8 report
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md` และตรวจ `git status --short`; ทวน UI follow-up/QA ที่ค้างก่อน จากนั้น Phase 8 เริ่มได้เฉพาะหลังได้รับ approval แยก
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_8.md` และตรวจ `git status --short`; Phase 8 เสร็จในเครื่องแล้ว รอ review ก่อน Phase 9
 
 ## กติกาการดูแลเอกสาร
 

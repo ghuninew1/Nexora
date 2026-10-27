@@ -7,9 +7,14 @@
         "dev": "vite",
         "build": "vite build",
         "lint": "eslint .",
+        "test": "node --test",
+        "db:migrate:local": "wrangler d1 migrations apply nexora-db --local",
+        "admin:create:local": "node scripts/create-admin.mjs",
         "preview": "pnpm run build && wrangler pages dev",
         "deploy": "pnpm run build && wrangler pages deploy",
-        "cf-typegen": "wrangler types"
+        "cf-typegen": "wrangler types",
+        "migrate": "pnpm exec wrangler d1 migrations list nexora-db --remote",
+        "migrate-apply": "pnpm exec wrangler d1 migrations apply nexora-db --remote"
     },
     "dependencies": {
         "@base-ui/react": "^1.9.0",

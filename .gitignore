@@ -90,6 +90,10 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
 
 # Gatsby files
 .cache/

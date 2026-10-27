@@ -7,6 +7,14 @@
 	"name": "nexora",
 	"compatibility_date": "2026-10-06",
 	"pages_build_output_dir": "./dist",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "nexora-db",
+			"database_id": "6bdcab31-cb01-411b-8873-e2ffd23ef439",
+			"migrations_dir": "migrations"
+		}
+	],
 	"observability": {
 		"enabled": true
 	},

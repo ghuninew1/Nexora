@@ -1,6 +1,6 @@
 # Nexora Storage Architecture Proposal
 
-สถานะ: Nexora architecture ยังเป็น proposal; Shared Storage S1/S2 implement service foundation และ File Manager internal API ใน checkout แยกแล้ว ดู [S1 report](STORAGE_PHASE_S1.md) ยังไม่มี Nexora backend/migration/connection หรือ production deployment; S2 เสร็จในเครื่องและรอ review ก่อน Phase S3
+สถานะ: Nexora architecture proposal has a local Phase 8 implementation. Pages Functions, D1 schema, session auth, owner-scoped mount model and `/api/storage/v1/*` are implemented and locally validated. Production D1/secrets/Access/Storage mount/deployment remain unconfigured. Shared Storage S2 migration remains unapplied to its runtime.
 
 ## Architecture ปัจจุบันจาก source
 
@@ -19,6 +19,12 @@ Shared Storage Service (Hono / Node.js)
 ```
 
 IssueDesk currently selects one fixed Storage project. Garage is the current object provider behind the service, while the Storage Service owns project/app credential enforcement and metadata. Nexora must treat Garage as the **first storage provider, not the storage architecture itself**.
+
+## Phase 8 implementation
+
+Current Nexora source now contains `functions/api/[[path]].js`, server-only modules under `functions/_lib/`, D1 schema `migrations/0001_backend_foundation.sql`, and a `DB` Wrangler binding using a placeholder local ID. The browser still runs the Phase 7 demo and does not import or call server modules. See [Phase 8 report](PHASE_8.md) for routes, tests and limitations.
+
+The implemented Storage client sends Cloudflare Access service identity plus the Shared Storage app Bearer credential from server bindings, and derives the project ID from the current user's D1-owned mount. It proxies the actual S2 `/v3` File Manager, including pagination, folders, copy, Trash, restore and permanent deletion. It reports usage unavailable, preview/share/rangeRead false, and rejects cross-mount moves. Download streams; upload is bounded through Nexora but remains buffered inside Shared Storage S2.
 
 ## Target architecture
 
@@ -196,15 +202,8 @@ Cloudflare's current Workers limits list 128 MiB memory per isolate and account-
 
 SMB is future-only. Keep public endpoints provider-neutral and make adapters consume the same behavior contract. Before implementing SMB, decide share discovery/mount lifecycle, SMB protocol/client library support in the chosen runtime, credential vault, SMB ACL-to-Nexora permission mapping, read-only behavior, case/Unicode naming rules, symlink handling, file locking, stale handles, offline/error semantics, server reachability and backup strategy. Do not install a client or attempt a connection in Phase 7. SMB capabilities may be narrower than Garage and the UI must hide/disable unsupported actions from capability response.
 
-## Phase 8 file-level sequence (proposal only)
+## Phase 8 implementation and Phase 9 follow-up
 
-1. `wrangler.jsonc`, `functions/`, `migrations/`: add a Nexora-owned D1 binding and first ordered schema only after approval; do not reuse IssueDesk database or deploy remote migrations as part of local implementation.
-2. `src/services/storage.js` plus `functions/api/storage/v1/`: typed/validated same-origin client and server routes for mounts, list/stat, folders and capabilities; consistent error envelope, session/authz and ownership.
-3. `functions/_middleware.js` or a narrowly shared auth module: Nexora session, CSRF/origin policy, request IDs, bounded error mapping; do not copy IssueDesk auth blindly.
-4. Server-only `functions/lib/storage/` registry/manager/provider contract modules; add first Garage adapter using reviewed Shared Storage internal API (existing /v2 compatibility retained) and secrets only in server bindings.
-5. `src/context/FilesProvider.jsx`, `src/hooks/useFiles.js`, file dialogs/components: replace demo operations incrementally with API state/loading/error/retry while preserving a demo mode and selection semantics until migration is complete.
-6. Upload/download/preview: implement streaming and operation lifecycle before raising upload limits; check runtime plan and upstream service; support cancellation, retries, checksum and partial cleanup.
-7. Favorites/Recent/Trash first, then shares only after access policy approval; integrate capability-driven controls.
-8. Add integration/security tests, desktop/mobile browser QA, failure/ownership/IDOR/path/MIME/size/stream interruption checks; document local vs remote validation and rollback before any deployment.
+Phase 8 implemented `wrangler.jsonc`, the Nexora D1 schema, Pages API routing/auth helpers, the server-side `/v3` client, bounded Favorites/Recent state, and local security/contract tests. The D1 migration was applied only to local D1. `FilesProvider`, `useFiles`, demo fixtures and simulated uploads remain unchanged.
 
-Phase 8 must be separately approved before implementation begins. Phase 7 does not authorize API/service changes, D1 migrations, secret configuration, SMB, or deployment.
+Phase 9 review can provision a real Nexora D1, server secrets, Cloudflare Access service identity, Shared Storage app/project/mount, and connect the UI incrementally. Confirm deployed upload ceilings before configuring `STORAGE_MAX_UPLOAD_BYTES`. No production secrets, user, mount, migration, or deployment was made in Phase 8.
