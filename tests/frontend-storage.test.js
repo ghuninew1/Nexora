@@ -305,6 +305,17 @@ test('operation clients reject invalid names and identity-breaking rename/move/c
   }), { code: 'PROVIDER_UNAVAILABLE' });
 });
 
+test('copy keeps known S2 error classifications instead of flattening operation failures', async () => {
+  for (const [status, code] of [
+    [400, 'INVALID_INPUT'], [404, 'NOT_FOUND'], [409, 'NAME_CONFLICT'],
+    [413, 'OPERATION_TOO_LARGE'], [500, 'INTERNAL_ERROR'], [502, 'PROVIDER_UNAVAILABLE'],
+  ]) {
+    await assert.rejects(copyStorageObject('mount_123', 'object_a', null, {
+      fetchImpl: async () => Response.json({ error: { code, message: 'private upstream details' } }, { status }),
+    }), (error) => error.code === code && !error.message.includes('private upstream details'));
+  }
+});
+
 test('download uses an authenticated Nexora path and leaves the response body to the browser stream', async () => {
   let authRequest;
   let downloadUrl;

@@ -33,10 +33,10 @@ function safeErrorCode(body, status) {
   if (status === 413) return body?.error?.code === 'OPERATION_TOO_LARGE' ? 'OPERATION_TOO_LARGE' : 'UPLOAD_TOO_LARGE';
   if (status === 422) return 'CAPABILITY_UNAVAILABLE';
   if (status === 429) return body?.error?.code === 'QUOTA_EXCEEDED' ? 'QUOTA_EXCEEDED' : 'RATE_LIMITED';
-  if (status >= 500 || status === 0) return 'PROVIDER_UNAVAILABLE';
   if (status === 400) return 'INVALID_INPUT';
   const bodyCode = body?.error?.code;
   if (SAFE_MESSAGES[bodyCode]) return bodyCode;
+  if (status >= 500 || status === 0) return 'PROVIDER_UNAVAILABLE';
   return 'INTERNAL_ERROR';
 }
 

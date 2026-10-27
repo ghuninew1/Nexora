@@ -4,7 +4,16 @@ import { createStorageClient, normalizeCapabilities, normalizeObject, readBounde
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_MULTIPART_OVERHEAD = 1024 * 1024;
+const COPY_DIAGNOSTIC_CODES = new Set([
+  'UNAUTHENTICATED', 'FORBIDDEN', 'NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT',
+  'CAPABILITY_UNAVAILABLE', 'QUOTA_EXCEEDED', 'UPLOAD_TOO_LARGE', 'OPERATION_TOO_LARGE',
+  'PROVIDER_UNAVAILABLE', 'TRANSFER_INCOMPLETE', 'RATE_LIMITED', 'INTERNAL_ERROR',
+]);
 function resourcePath(suffix = '') { return `/objects${suffix}`; }
+
+function copyDiagnostic(logger, message) {
+  try { logger?.warn?.(`[storage-upstream] operation=copy ${message}`); } catch { /* diagnostics must not affect API behavior */ }
+}
 
 function limitStream(body, maxBytes) {
   const reader = body.getReader();
@@ -146,6 +155,9 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     logger,
   });
   const restTail = tail.slice(1);
+  if (route === 'objects' && restTail[1] === 'copy' && method === 'POST') {
+    copyDiagnostic(logger, 'stage=mount-resolved');
+  }
 
   if (route === 'capabilities' && method === 'GET' && restTail.length === 0) {
     const payload = await callJson(client, request, mount, '/capabilities', { operation: 'capabilities' });
@@ -260,10 +272,22 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       if (body.targetStorageId !== undefined && body.targetStorageId !== mount.id) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
       const parentId = body.parentId ?? null;
       if (parentId !== null) requireObjectId(parentId);
-      await requireCapability(client, request, writable, 'copy');
-      const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}/copy`, { method: 'POST', body: JSON.stringify({ parentId }), contentType: 'application/json' });
+      copyDiagnostic(logger, 'stage=capability-check');
+      try { await requireCapability(client, request, writable, 'copy'); }
+      catch (error) {
+        const code = COPY_DIAGNOSTIC_CODES.has(error?.code) ? error.code : 'INTERNAL_ERROR';
+        copyDiagnostic(logger, `result=operation-error code=${code} stage=capability-check`);
+        throw error;
+      }
+      const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}/copy`, {
+        method: 'POST', body: JSON.stringify({ parentId }), contentType: 'application/json', operation: 'copy',
+      });
       const object = normalizeObject(payload?.object);
-      if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+      if (!object || object.objectId === objectId || object.parentId !== parentId) {
+        copyDiagnostic(logger, 'result=invalid-response');
+        throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+      }
+      copyDiagnostic(logger, 'result=success');
       return json({ object, operationId: typeof payload?.operationId === 'string' ? payload.operationId : null }, 201);
     }
     if (suffix.length === 0 && method === 'DELETE') {

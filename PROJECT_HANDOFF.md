@@ -78,7 +78,9 @@ Dashboard, Recent, Favorites, Shared, Trash และ local demo operations rema
 
 File Browser adds capability-gated upload, streamed download, rename, move and copy through `/api/storage/v1/*`. The client sends only Nexora mount and logical object IDs; server derives the owner-scoped Shared Storage project and checks capabilities/readOnly before mutations. Upload queue runs at most two real transfers and reports state without fabricated byte progress. Rename/move retain IDs; copy returns new IDs and finishes synchronously under the Shared Storage S2 100-object limit. Folder destinations load lazily. Delete/Trash/restore/permanent delete, preview, bulk operations, SMB and Phase 9.4 are out of scope.
 
-Local validation: `pnpm lint`, `pnpm test` (68/68), `pnpm build`, and `git diff --check` passed. A `/private/tmp` mock Pages runtime was isolated from project `.dev.vars`; mock/temporary D1 provisioning succeeded, but browser sign-in returned HTTP 500, so end-to-end browser QA is not claimed. No production deployment or data changes occurred. See [docs/PHASE_9_3.md](docs/PHASE_9_3.md) for production smoke steps and QA limitations.
+Production smoke results reported by the user: upload/download/rename/move pass; Copy fails with `PROVIDER_UNAVAILABLE`. Source audit confirms Nexora uses the same server-only Shared Storage client and maps the D1-owned project to `POST /v3/projects/:projectId/objects/:objectId/copy`, JSON `{parentId}`, and manual redirects. The client previously followed trusted redirects only for capabilities GET, so a trusted Copy 307/308 was not followed; source now follows only same-origin 307/308 for Copy POST, with redirects logged by status/origin class and cross-origin redirects blocked. The production response did not include a diagnostic trace, so this code difference is a proven gap and minimal fix, but not yet proven to be the production failure cause. Safe diagnostics now distinguish timeout/fetch failure, upstream HTTP/provider error, operation error, invalid response, redirect, and success without logging identifiers, headers, secrets or response bodies.
+
+The Shared Storage S2 source implements copy synchronously: it validates source/destination and duplicate name, then copies file bytes through Garage Get → Put → Head → Get/checksum, then commits new logical IDs. Missing source/destination, duplicate names, oversized trees and database failures have distinct safe codes. Unknown Garage S3 failures normalize to `PROVIDER_UNAVAILABLE`; the source code alone cannot identify which Garage request failed in production. The full S2 `pnpm test` suite passed 27/27 and includes copy coverage for copied bytes, new IDs, source retention and nested folder copy. Nexora final validation passed: `pnpm lint`, `pnpm test` (73/73), `pnpm build`, and `git diff --check`. Browser mock QA had the prior isolated sign-in 500; no production deploy or data changes were made. Do not mark Phase 9.3 complete until the production Copy stop conditions in [docs/PHASE_9_3.md](docs/PHASE_9_3.md) pass.
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -114,7 +116,7 @@ Local validation: `pnpm lint`, `pnpm test` (68/68), `pnpm build`, and `git diff 
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md` และ `docs/PHASE_9_3.md`, จากนั้นตรวจ `git status --short`. Phase 9.3 source เสร็จและ local lint/test/build ผ่าน แต่ browser sign-in mock QA และ production operations ยังไม่ได้ยืนยัน. ห้ามเริ่ม Phase 9.4 หรืออนุมาน production state จาก source.
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md` และ `docs/PHASE_9_3.md`, จากนั้นตรวจ `git status --short`. Phase 9.3 upload/download/rename/move ผ่าน production ตามผู้ใช้รายงาน แต่ Copy ยังไม่ผ่านและ root cause production ยังต้องยืนยันจาก safe logs หลัง deploy. ห้ามเริ่ม Preview, Phase 9.3.1 หรือ Phase 9.4.
 
 ## กติกาการดูแลเอกสาร
 

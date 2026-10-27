@@ -526,6 +526,139 @@ test('folder create, rename, move, copy, Trash, restore, permanent delete, and o
   assert.doesNotMatch(operationText, /sensitive|details|projectId/u);
 });
 
+test('copy uses the owner project, S2 POST contract, manual redirects, and safe same-origin 307/308 handling', async () => {
+  const calls = [];
+  const lines = [];
+  const logger = { warn(line) { lines.push(line); } };
+  const headers = { Origin: origin, 'Content-Type': 'application/json' };
+  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+    method: 'POST', headers, body: JSON.stringify({ parentId: 'folder_parent' }), logger,
+    fetchImpl: async (url, init) => {
+      const parsed = new URL(url);
+      calls.push({ url: parsed, init });
+      if (parsed.pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      if (parsed.pathname.endsWith('/copy')) {
+        return new Response(null, { status: 308, headers: { Location: `${parsed.pathname}/` } });
+      }
+      return Response.json({ success: true, object: { ...object('object_copy'), parentId: 'folder_parent' }, operationId: 'operation_copy' }, { status: 201 });
+    },
+  });
+  const payload = await response.json();
+  const copyCalls = calls.filter((call) => call.url.pathname.includes('/objects/') && call.url.pathname.endsWith('/copy/'));
+  assert.equal(response.status, 201);
+  assert.equal(payload.data.object.objectId, 'object_copy');
+  assert.equal(payload.data.object.parentId, 'folder_parent');
+  assert.equal(payload.data.operationId, 'operation_copy');
+  assert.equal(calls[1].url.pathname, `/v3/projects/${projectId}/objects/${objectId}/copy`);
+  assert.equal(calls[1].init.method, 'POST');
+  assert.equal(calls[1].init.redirect, 'manual');
+  assert.deepEqual(JSON.parse(calls[1].init.body), { parentId: 'folder_parent' });
+  assert.equal(calls[1].init.headers.get('Authorization'), 'Bearer server-app-secret');
+  assert.equal(copyCalls.length, 1);
+  assert.equal(calls[2].init.method, 'POST');
+  assert.equal(calls[2].init.redirect, 'manual');
+  assert.deepEqual(JSON.parse(calls[2].init.body), { parentId: 'folder_parent' });
+  assert.equal(calls[2].init.headers.get('CF-Access-Client-Id'), 'server-access-id');
+  assert.ok(lines.includes('[storage-upstream] operation=copy stage=mount-resolved'));
+  assert.ok(lines.includes('[storage-upstream] operation=copy result=redirect-follow status=308 target=trusted-origin'));
+  assert.ok(lines.includes('[storage-upstream] operation=copy result=success'));
+  assert.doesNotMatch(lines.join('\n'), /private_project_alpha|storage\.example\.test|server-app-secret|server-access-id|server-access-secret|folder_parent|object_alpha/u);
+});
+
+test('copy blocks cross-origin redirects without sending Access or Bearer headers to the target', async () => {
+  const calls = [];
+  const lines = [];
+  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentId: null }), logger: { warn(line) { lines.push(line); } },
+    fetchImpl: async (url, init) => {
+      const parsed = new URL(url);
+      calls.push({ parsed, init });
+      if (parsed.pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      return new Response(null, { status: 307, headers: { Location: 'https://untrusted.example/copy' } });
+    },
+  });
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).error.code, 'INTERNAL_ERROR');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].parsed.origin, 'https://storage.example.test');
+  assert.equal(calls[1].init.redirect, 'manual');
+  assert.ok(lines.includes('[storage-upstream] operation=copy result=redirect-blocked status=307 target=untrusted-origin'));
+  assert.doesNotMatch(lines.join('\n'), /untrusted\.example|private_project_alpha|server-app-secret|server-access-id|server-access-secret/u);
+});
+
+test('copy preserves safe S2 error codes and classifies provider and transport failures without logging details', async () => {
+  const cases = [
+    [400, 'INVALID_INPUT', 'operation-error code=INVALID_INPUT'],
+    [404, 'NOT_FOUND', 'operation-error code=NOT_FOUND'],
+    [409, 'NAME_CONFLICT', 'operation-error code=NAME_CONFLICT'],
+    [413, 'OPERATION_TOO_LARGE', 'operation-error code=OPERATION_TOO_LARGE'],
+    [502, 'PROVIDER_UNAVAILABLE', 'provider-error'],
+  ];
+  for (const [status, code, diagnostic] of cases) {
+    const lines = [];
+    const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentId: null }), logger: { warn(line) { lines.push(line); } },
+      fetchImpl: async (url) => new URL(url).pathname.endsWith('/capabilities')
+        ? Response.json({ success: true, capabilities: { copy: true } })
+        : Response.json({ success: false, error: { code, message: 'sensitive provider internals' } }, { status }),
+    });
+    const payload = await response.json();
+    assert.equal(response.status, status === 502 ? 503 : status);
+    assert.equal(payload.error.code, code);
+    assert.ok(lines.some((line) => line.includes(`result=${diagnostic}`)));
+    assert.doesNotMatch(lines.join('\n'), /sensitive provider internals|private_project_alpha|server-app-secret|server-access-secret/u);
+  }
+
+  const transportLines = [];
+  const transport = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
+    logger: { warn(line) { transportLines.push(line); } },
+    fetchImpl: async (url) => {
+      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      throw new TypeError('private network details');
+    },
+  });
+  assert.equal(transport.status, 503);
+  assert.ok(transportLines.some((line) => line.includes('result=fetch-error type=TypeError redirect=manual')));
+  assert.doesNotMatch(transportLines.join('\n'), /private network details|private_project_alpha|server-app-secret/u);
+});
+
+test('copy classifies timeout and malformed successful responses without exposing upstream data', async () => {
+  const previousTimeout = env.STORAGE_TIMEOUT_MS;
+  env.STORAGE_TIMEOUT_MS = '100';
+  try {
+    const timeoutLines = [];
+    const timeout = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
+      logger: { warn(line) { timeoutLines.push(line); } },
+      fetchImpl: async (url, init) => {
+        if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+        return new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('private timeout details')), { once: true }));
+      },
+    });
+    assert.equal(timeout.status, 504);
+    assert.ok(timeoutLines.includes('[storage-upstream] operation=copy result=timeout'));
+    assert.doesNotMatch(timeoutLines.join('\n'), /private_project_alpha|server-app-secret|private timeout details/u);
+
+    const invalidLines = [];
+    const invalid = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
+      logger: { warn(line) { invalidLines.push(line); } },
+      fetchImpl: async (url) => new URL(url).pathname.endsWith('/capabilities')
+        ? Response.json({ success: true, capabilities: { copy: true } })
+        : Response.json({ success: true, message: 'provider internals' }, { status: 201 }),
+    });
+    assert.equal(invalid.status, 502);
+    assert.ok(invalidLines.includes('[storage-upstream] operation=copy result=invalid-response'));
+    assert.doesNotMatch(invalidLines.join('\n'), /provider internals|private_project_alpha|server-app-secret/u);
+  } finally {
+    if (previousTimeout === undefined) delete env.STORAGE_TIMEOUT_MS;
+    else env.STORAGE_TIMEOUT_MS = previousTimeout;
+  }
+});
+
 test('normal delete and permanent delete use separate upstream routes', async () => {
   requests = [];
   await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'DELETE', headers: { Origin: origin } });

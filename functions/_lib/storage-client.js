@@ -8,11 +8,11 @@ const CAPABILITY_BINDING_NAMES = [
   'CF_ACCESS_CLIENT_SECRET',
 ];
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-const MAX_CAPABILITY_REDIRECTS = 3;
+const MAX_TRUSTED_REDIRECTS = 3;
 
 function diagnostic(logger, operation, message) {
-  if (operation !== 'capabilities') return;
-  try { logger?.warn?.(`[storage-upstream] operation=capabilities ${message}`); } catch { /* diagnostics must not break storage requests */ }
+  if (!['capabilities', 'copy'].includes(operation)) return;
+  try { logger?.warn?.(`[storage-upstream] operation=${operation} ${message}`); } catch { /* diagnostics must not break storage requests */ }
 }
 
 function safeErrorType(error) {
@@ -48,7 +48,9 @@ function safeProject(projectId) {
 
 export function createStorageClient({ env, fetchImpl = fetch, logger = console }) {
   async function request({ request: incomingRequest, projectId, path, method = 'GET', body, contentType, accept = 'application/json', operation }) {
-    diagnostic(logger, operation, `stage=bindings ${bindingPresence(env)}`);
+    if (operation === 'capabilities' || operation === 'copy') {
+      diagnostic(logger, operation, `stage=bindings ${bindingPresence(env)}`);
+    }
 
     let base;
     try {
@@ -92,7 +94,16 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
         // Cloudflare Workers throws TypeError for redirect: "error" before sending
         // the request. Manual handling lets us enforce the trusted origin ourselves.
         response = await fetchImpl(currentUrl, { method, headers, body, signal: controller.signal, redirect: 'manual' });
-        if (operation !== 'capabilities' || method !== 'GET' || !REDIRECT_STATUSES.has(response.status)) break;
+        if (operation === 'copy') diagnostic(logger, operation, `stage=upstream-response status=${response.status}`);
+        if (!REDIRECT_STATUSES.has(response.status)) break;
+
+        const canFollowGetRedirect = operation === 'capabilities' && method === 'GET';
+        const canFollowCopyRedirect = operation === 'copy' && method === 'POST' && [307, 308].includes(response.status);
+        if (!canFollowGetRedirect && !canFollowCopyRedirect) {
+          redirectBlocked = true;
+          diagnostic(logger, operation, `result=redirect-blocked status=${response.status} target=method-policy`);
+          break;
+        }
 
         const location = response.headers.get('Location');
         if (!location) {
@@ -113,7 +124,7 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
           diagnostic(logger, operation, `result=redirect-blocked status=${response.status} target=untrusted-origin`);
           break;
         }
-        if (redirectCount >= MAX_CAPABILITY_REDIRECTS) {
+        if (redirectCount >= MAX_TRUSTED_REDIRECTS) {
           redirectBlocked = true;
           diagnostic(logger, operation, `result=redirect-blocked status=${response.status} target=limit`);
           break;
@@ -149,18 +160,27 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
     const result = await request(args);
     try {
       if (!result.response.ok) {
-        if (result.redirectBlocked) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+        if (result.redirectBlocked) throw new ApiError('INTERNAL_ERROR', 502);
         const payload = await readBoundedJson(result.response);
         const code = normalizeUpstreamError(payload, result.response.status);
-        diagnostic(logger, result.operation, `result=http-error status=${result.response.status}`);
+        if (result.operation === 'copy') {
+          diagnostic(logger, result.operation, `result=upstream-http-error status=${result.response.status}`);
+          diagnostic(logger, result.operation, code === 'PROVIDER_UNAVAILABLE'
+            ? 'result=provider-error'
+            : `result=operation-error code=${code}`);
+        } else diagnostic(logger, result.operation, `result=http-error status=${result.response.status}`);
         throw new ApiError(code, statusFor(code));
       }
       try {
+        if (result.operation === 'copy') diagnostic(logger, result.operation, `stage=response-parse status=${result.response.status}`);
         const payload = await result.response.json();
-        diagnostic(logger, result.operation, `result=http-ok status=${result.response.status}`);
+        if (result.operation === 'copy') diagnostic(logger, result.operation, 'result=response-parsed');
+        else diagnostic(logger, result.operation, `result=http-ok status=${result.response.status}`);
         return payload;
       } catch {
-        diagnostic(logger, result.operation, `result=parse-error status=${result.response.status}`);
+        diagnostic(logger, result.operation, result.operation === 'copy'
+          ? `result=invalid-response status=${result.response.status}`
+          : `result=parse-error status=${result.response.status}`);
         throw new ApiError('PROVIDER_UNAVAILABLE', 502);
       }
     } finally { result.cleanup(); }

@@ -1,6 +1,6 @@
 # Nexora — Phase 9.3: Real File Operations
 
-สถานะ: implementation เสร็จใน source; `pnpm lint`, `pnpm test` (68/68), `pnpm build` และ `git diff --check` ผ่าน. Local API contract tests ผ่าน. Browser end-to-end mock QA ยังไม่ผ่าน: runtime แยกใน `/private/tmp` compile และ provision temporary D1 ได้ แต่ sign-in ตอบ HTTP 500 จึงไม่อ้างว่า UI-to-Storage flow ผ่าน. ยังไม่ได้ deploy และยังไม่มี production verification สำหรับ operations ใน Phase นี้.
+สถานะ: ผู้ใช้ยืนยัน production smoke test ผ่านสำหรับ upload/download/rename/move แต่ Copy ยังตอบ `PROVIDER_UNAVAILABLE`. Final validation ผ่าน: Nexora `pnpm lint`, `pnpm test` (73/73), `pnpm build`, `git diff --check`; Shared Storage `pnpm test` (27/27). Browser end-to-end mock QA ยังไม่ผ่าน: isolated runtime compile/provision ผ่านแต่ sign-in ตอบ HTTP 500. ยังไม่ได้ deploy diagnostics/fix และยังไม่ทราบ production Copy failure branch ที่แน่ชัด.
 
 ## ขอบเขต
 
@@ -28,10 +28,28 @@ Delete, Trash, restore, permanent delete, preview, bulk operations, SMB, persist
 
 Browser ส่งเพียง Nexora `storageId`, logical object ID, logical parent ID, file body และชื่อ object. Browser ไม่ส่งหรือรับ `shared_storage_project_id`, provider reference, bucket/key หรือ Storage credentials. Server resolve mount แบบ owner scoped, derive project ID จาก D1 และตรวจ capability/read-only ก่อน proxy ไป Shared Storage. Upstream download เป็น stream และ upload body ถูกจำกัด/ส่งต่อผ่าน server contract. ไม่มี production credentials ใน tests หรือ fixtures.
 
+## Production Copy incident trace
+
+Production result supplied by the user: upload/download/rename/move pass; Copy returns safe `PROVIDER_UNAVAILABLE`. That browser-facing code alone does not identify whether Nexora timed out, fetch failed, Shared Storage returned a provider error, or a success response was invalid.
+
+Static request path:
+
+1. File Browser `copyObject` → `copyStorageObject` sends same-origin `POST /api/storage/v1/storages/:storageId/objects/:objectId/copy` with JSON `{parentId}`.
+2. Pages API authenticates session, applies same-origin checks, resolves active owner-scoped D1 mount, checks writable state and Shared Storage `copy` capability.
+3. Nexora derives `shared_storage_project_id` from that mount and constructs `POST /v3/projects/:projectId/objects/:objectId/copy`. It uses the shared server-side client, configured Access/Bearer headers, timeout and `redirect: 'manual'`. No frontend project identifier or headers are forwarded.
+4. Shared Storage S2 route calls `manager.copy`; on file trees the Garage provider performs source Get, target Put, target Head, target Get/checksum, then S2 commits metadata/new object IDs. The successful response is HTTP 201 with `{success:true,object,operationId}`.
+
+The previous Nexora redirect handler followed trusted redirects only for capabilities GET. Copy POST did not use `redirect: 'error'` and did use the same secure fetch helper, but it stopped on a 307/308 response. Source now follows only same-origin 307/308 for Copy POST while preserving method/body; it blocks 301/302/303 and cross-origin, malformed, credentialed, or excessive redirects. This is a proven source-level gap and a safe minimal fix. The supplied production error did not include the new trace, so it is not proven that production Copy received a redirect.
+
+Copy diagnostics record only binding presence, stage, HTTP status, allowlisted error code, redirect classification and result. They do not record storage/project/object IDs, URL, body, headers, credentials or provider references. The new stages distinguish mount resolution, capability check, request, upstream response, parse, timeout/fetch failure, upstream HTTP/provider error, operation error, invalid response and success. If deployment logs `result=provider-error`, the S2 source indicates an underlying Garage operation in the copy pipeline; current Nexora logs cannot distinguish source Get, target Put, verification Head or target Get. Do not claim a provider substage without Shared Storage-side evidence.
+
+S2 source/error contract inspected: missing source/destination maps to `NOT_FOUND`; duplicate name to `NAME_CONFLICT`; >100 objects to `OPERATION_TOO_LARGE`; byte verification mismatch to `TRANSFER_INCOMPLETE`; unexpected Garage request errors normalize to `PROVIDER_UNAVAILABLE`; SQLite metadata failures map to `INTERNAL_ERROR` except unique conflicts. The full S2 test suite passed 27/27 and its file-manager tests exercise successful folder-tree copy, source retention, new logical IDs, destination, bytes and provider failures. Nexora tests cover copy URL/method/body/project/headers, same-origin 307/308, cross-origin blocking, operation error mapping (400/404/409/413), provider HTTP error, transport error, timeout, invalid response, and redacted diagnostics.
+
 ## Local verification
 
 - `pnpm lint`: passed.
-- `pnpm test`: 68 passed, 0 failed.
+- `pnpm test`: 73 passed, 0 failed.
+- Shared Storage `pnpm test`: 27 passed, 0 failed (existing in-memory/mock tests; no live service).
 - `pnpm build`: passed.
 - `git diff --check`: passed after documentation updates.
 - Browser mock QA: blocked at local sign-in. The temporary Pages runtime used a separate `/private/tmp` project config, D1 database, fake credentials and loopback-only Storage mock; it did not load repository `.dev.vars`. Pages compiled with the temporary DB binding, but login returned HTTP 500. The local temporary QA files and servers were cleaned up after recording this limitation. This result is not production evidence.
@@ -48,4 +66,6 @@ Use an authorized test account and a non-production test folder/file in the depl
 6. Try each operation when its capability is false and with a read-only mount; confirm UI disables it and direct same-origin API calls are rejected server-side.
 7. Verify duplicate-name, missing source/destination, oversized upload/copy, network failure, cancellation/retry and expired-session messages remain safe and do not expose upstream response bodies or credentials.
 
-Production success must be reported only after the operator deploys and confirms these checks. No deployment, remote D1 change, Storage mutation, or secret change was done for this implementation.
+Deploy the Nexora source change, then retry a small file copy. Inspect only the redacted Pages log stages. A same-origin redirect should show `result=redirect-follow status=307|308 target=trusted-origin` and then continue to `result=success`; a provider/upstream failure should produce an HTTP status and `result=provider-error`; timeout and fetch failure have separate results. If the trace reaches provider-error, inspect the Shared Storage service's existing logs for the specific Garage copy stage without exposing keys, bucket, URL, credentials or object contents.
+
+Production Copy is not complete until the operator confirms: a small file copy succeeds, source remains, destination contains the copy with a new logical ID, refresh preserves both, and no provider internals leak. No deployment, remote D1 change, Storage mutation, or secret change was done for this debugging change. Preview, Phase 9.3.1 and Phase 9.4 remain unstarted.
