@@ -14,6 +14,7 @@ const origin = 'https://nexora.example.test';
 const storageId = 'mount_alpha';
 const projectId = 'private_project_alpha';
 const objectId = 'object_alpha';
+const silentLogger = { warn() {} };
 let sqlite;
 let env;
 let handler;
@@ -73,8 +74,10 @@ function upstreamResponse(url, init = {}) {
   return Response.json({ success: false, error: { code: 'NOT_FOUND', message: 'SQLite at internal-host leaked details' } }, { status: 404 });
 }
 
-async function request(path, { method = 'GET', body, headers = {}, fetchImpl = upstreamResponse } = {}) {
-  const activeHandler = fetchImpl === upstreamResponse ? handler : createApiHandler({ fetchImpl });
+async function request(path, { method = 'GET', body, headers = {}, fetchImpl = upstreamResponse, logger = silentLogger } = {}) {
+  const activeHandler = fetchImpl === upstreamResponse && logger === silentLogger
+    ? handler
+    : createApiHandler({ fetchImpl, logger });
   return activeHandler(new Request(`${origin}${path}`, {
     method,
     headers: { Cookie: cookie, ...headers },
@@ -96,7 +99,7 @@ before(async () => {
   sqlite.exec(migration);
   env = { DB: d1(sqlite), STORAGE_API_URL: 'https://storage.example.test', STORAGE_APP_SECRET: 'server-app-secret',
     CF_ACCESS_CLIENT_ID: 'server-access-id', CF_ACCESS_CLIENT_SECRET: 'server-access-secret' };
-  handler = createApiHandler({ fetchImpl: upstreamResponse });
+  handler = createApiHandler({ fetchImpl: upstreamResponse, logger: silentLogger });
   requests = [];
   user = await createUser({ db: env.DB, email: 'owner@example.test', displayName: 'Storage Owner', password: 'correct horse battery staple' });
   otherUser = await createUser({ db: env.DB, email: 'other@example.test', displayName: 'Other Admin', password: 'another correct horse battery staple', role: 'admin' });
@@ -244,6 +247,142 @@ test('storage list, detail, and actual S2 capabilities never reveal project IDs 
   assert.equal(caps.rangeRead, false);
 });
 
+test('capabilities uses the owner mount project, exact S2 URL and server-only credentials', async () => {
+  requests = [];
+  const originalUrl = env.STORAGE_API_URL;
+  const originalAccessId = env.CF_ACCESS_CLIENT_ID;
+  env.STORAGE_API_URL = ' https://storage.example.test/ \n';
+  env.CF_ACCESS_CLIENT_ID = ' server-access-id \n';
+  const response = await request(`/api/storage/v1/storages/${storageId}/capabilities`);
+  env.STORAGE_API_URL = originalUrl;
+  env.CF_ACCESS_CLIENT_ID = originalAccessId;
+
+  assert.equal(response.status, 200);
+  const upstream = new URL(requests[0].url);
+  assert.equal(upstream.origin, 'https://storage.example.test');
+  assert.equal(upstream.pathname, `/v3/projects/${projectId}/capabilities`);
+  assert.equal(upstream.pathname.includes('//'), false);
+  assert.equal(requests[0].init.method, 'GET');
+  assert.equal(requests[0].init.redirect, 'error');
+  assert.equal(requests[0].init.headers.get('CF-Access-Client-Id'), 'server-access-id');
+  assert.equal(requests[0].init.headers.get('CF-Access-Client-Secret'), 'server-access-secret');
+  assert.equal(requests[0].init.headers.get('Authorization'), 'Bearer server-app-secret');
+  const responseText = await response.text();
+  assert.match(responseText, /"list":true/u);
+  assert.doesNotMatch(responseText, /server-app-secret|server-access-id|server-access-secret|private_project_alpha/u);
+});
+
+test('capability diagnostics classify missing bindings and fetch errors without logging values or identifiers', async () => {
+  const lines = [];
+  const logger = { warn(line) { lines.push(line); } };
+  const originalSecret = env.CF_ACCESS_CLIENT_SECRET;
+  delete env.CF_ACCESS_CLIENT_SECRET;
+  let fetchCalled = false;
+  const missing = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => { fetchCalled = true; throw new Error('must not fetch'); },
+  });
+  env.CF_ACCESS_CLIENT_SECRET = originalSecret;
+  assert.equal(missing.status, 503);
+  assert.equal(fetchCalled, false);
+  assert.ok(lines.some((line) => line.includes('CF_ACCESS_CLIENT_SECRET=missing')));
+  assert.ok(lines.some((line) => line.includes('stage=config result=missing-binding')));
+  assert.ok(!lines.join('\n').includes('server-app-secret'));
+
+  lines.length = 0;
+  const networkFailure = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => { throw new TypeError('private_project_alpha server-access-secret'); },
+  });
+  assert.equal(networkFailure.status, 503);
+  assert.ok(lines.some((line) => line.includes('result=fetch-error type=TypeError redirect=error')));
+  assert.doesNotMatch(lines.join('\n'), /private_project_alpha|mount_alpha|server-app-secret|server-access-id|server-access-secret/u);
+});
+
+test('capability diagnostics classify invalid secret header bytes without logging values', async () => {
+  const lines = [];
+  const logger = { warn(line) { lines.push(line); } };
+  const originalSecret = env.CF_ACCESS_CLIENT_SECRET;
+  env.CF_ACCESS_CLIENT_SECRET = 'fake-secret\ninvalid-header';
+  let fetchCalled = false;
+  const response = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => { fetchCalled = true; throw new Error('must not fetch'); },
+  });
+  env.CF_ACCESS_CLIENT_SECRET = originalSecret;
+  assert.equal(response.status, 500);
+  assert.equal(fetchCalled, false);
+  assert.ok(lines.some((line) => line.includes('stage=request-build result=header-error type=TypeError')));
+  assert.doesNotMatch(lines.join('\n'), /fake-secret|invalid-header|private_project_alpha/u);
+});
+
+test('capabilities logs only upstream HTTP status and preserves safe error mapping', async () => {
+  const lines = [];
+  const logger = { warn(line) { lines.push(line); } };
+  const upstreamFailure = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => Response.json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'credential detail' } }, { status: 500 }),
+  });
+  assert.equal(upstreamFailure.status, 503);
+  assert.match(await upstreamFailure.text(), /PROVIDER_UNAVAILABLE/u);
+  assert.ok(lines.some((line) => line.includes('result=http-error status=500')));
+  assert.doesNotMatch(lines.join('\n'), /credential detail|private_project_alpha|server-app-secret/u);
+
+  lines.length = 0;
+  const accessDenied = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => Response.json({ success: false, error: { code: 'FORBIDDEN', message: 'private detail' } }, { status: 403 }),
+  });
+  assert.equal(accessDenied.status, 500);
+  assert.match(await accessDenied.text(), /INTERNAL_ERROR/u);
+  assert.ok(lines.some((line) => line.includes('result=http-error status=403')));
+  assert.doesNotMatch(lines.join('\n'), /private detail/u);
+
+  lines.length = 0;
+  const missingProject = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => Response.json({ success: false, error: { code: 'NOT_FOUND' } }, { status: 404 }),
+  });
+  assert.equal(missingProject.status, 404);
+  assert.match(await missingProject.text(), /NOT_FOUND/u);
+  assert.ok(lines.some((line) => line.includes('result=http-error status=404')));
+
+  lines.length = 0;
+  const upstreamUnauthenticated = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => Response.json({ success: false, error: { code: 'UNAUTHENTICATED' } }, { status: 401 }),
+  });
+  assert.equal(upstreamUnauthenticated.status, 500);
+  assert.match(await upstreamUnauthenticated.text(), /INTERNAL_ERROR/u);
+  assert.ok(lines.some((line) => line.includes('result=http-error status=401')));
+});
+
+test('capabilities distinguishes parse and schema failures after an upstream 200', async () => {
+  const lines = [];
+  const logger = { warn(line) { lines.push(line); } };
+  const parseFailure = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => new Response('<html>not json</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
+  });
+  assert.equal(parseFailure.status, 502);
+  assert.match(await parseFailure.text(), /PROVIDER_UNAVAILABLE/u);
+  assert.ok(lines.some((line) => line.includes('result=parse-error status=200')));
+
+  lines.length = 0;
+  const schemaFailure = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    logger,
+    fetchImpl: async () => Response.json({ success: true }),
+  });
+  assert.equal(schemaFailure.status, 200);
+  assert.deepEqual((await schemaFailure.json()).data.capabilities, {
+    list: false, stat: false, upload: false, download: false, createFolder: false,
+    rename: false, move: false, copy: false, trash: false, restore: false,
+    permanentDelete: false, preview: false, share: false, rangeRead: false,
+    readOnly: false, maxUploadBytes: 26214400,
+  });
+  assert.ok(lines.some((line) => line.includes('result=schema-error status=200')));
+});
+
 test('object listing validates and forwards bounded pagination using the server mount project', async () => {
   requests = [];
   const response = await request(`/api/storage/v1/storages/${storageId}/objects?parentId=folder_parent&cursor=cursor_123&limit=25`);
@@ -389,13 +528,18 @@ test('Shared Storage errors are normalized and secrets or provider details are n
 });
 
 test('upstream timeout is bounded and normalized', async () => {
+  const lines = [];
   env.STORAGE_TIMEOUT_MS = '100';
   const fetchImpl = (_url, { signal }) => new Promise((resolve, reject) => {
     signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
   });
-  const response = await request(`/api/storage/v1/storages/${storageId}/objects`, { fetchImpl });
+  const response = await request(`/api/storage/v1/storages/${storageId}/capabilities`, {
+    fetchImpl,
+    logger: { warn(line) { lines.push(line); } },
+  });
   assert.equal(response.status, 504);
   assert.match(await response.text(), /PROVIDER_UNAVAILABLE/u);
+  assert.ok(lines.some((line) => line.includes('result=timeout')));
   delete env.STORAGE_TIMEOUT_MS;
 });
 

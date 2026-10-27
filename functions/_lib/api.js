@@ -25,7 +25,7 @@ async function handleAuth({ request, env, parts }) {
   throw new ApiError('NOT_FOUND', 404);
 }
 
-export function createApiHandler({ fetchImpl = fetch } = {}) {
+export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
   return async function handleApiRequest(request, env) {
     try {
       const parts = decodePath(new URL(request.url).pathname);
@@ -34,7 +34,7 @@ export function createApiHandler({ fetchImpl = fetch } = {}) {
       if (parts[1] === 'storage' && parts[2] === 'v1') {
         const user = await requireUser(request, env);
         if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
-        return await handleStorageApi({ request, env, user, parts, fetchImpl });
+        return await handleStorageApi({ request, env, user, parts, fetchImpl, logger });
       }
       if (parts[1] === 'favorites') {
         const user = await requireUser(request, env);

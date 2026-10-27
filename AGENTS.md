@@ -25,7 +25,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
 - `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`: remote File Browser list/navigation/create-folder UI and isolated demo domain state for other workspace views.
-- `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry and server-only auth/storage handlers.
+- `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, and value-free capability-upstream diagnostics.
 - `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata.
 - `scripts/create-admin.mjs`: local-only first-admin provisioning via Wrangler `--local`.
 - `scripts/create-admin-remote.mjs`, `scripts/create-storage-mount-remote.mjs`: explicit production-only provisioning commands; both target `nexora-db` using Wrangler `--remote`.
@@ -74,6 +74,7 @@ Check this map against actual files when changing the architecture; update READM
 - Preserve `Button` Base UI semantics, variants, `ref`, render/slot composition, state-based className callbacks, and caller event handlers when extending the shared component.
 - Use the shared `Button` for actions and retain its IssueDesk-referenced Liquid Glass hover behavior; button sheen and pointer light should contrast with light and dark button surfaces; avoid one-off button styling that bypasses the shared variants.
 - Never log auth request bodies, credentials, passwords, password hashes, salts, cookies, session tokens, authorization headers, or raw secrets. Use the shared password helper for all user creation and verification.
+- Storage diagnostics may log only binding presence, request stage, HTTP status, and allowlisted error type/result; never log storage/project IDs, upstream URL, provider references, headers/values, or response bodies.
 
 ## File Browser behavior
 

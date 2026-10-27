@@ -111,8 +111,8 @@ function streamResponse(result) {
   return new Response(body, { status: 200, headers });
 }
 
-export async function handleStorageApi({ request, env, user, parts, fetchImpl = fetch }) {
-  const client = createStorageClient({ env, fetchImpl });
+export async function handleStorageApi({ request, env, user, parts, fetchImpl = fetch, logger = console }) {
+  const client = createStorageClient({ env, fetchImpl, logger });
   const method = request.method.toUpperCase();
   const [api, version, storages, storageId, ...rest] = parts;
   if (api !== 'api' || version !== 'storage' || storages !== 'v1') throw new ApiError('NOT_FOUND', 404);
@@ -135,12 +135,18 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     if (tail.length === 0 && method === 'GET') return json({ storage: { storageId: mount.id, name: mount.name,
       providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only } });
   }
-  const mount = await requireStorageMount(env.DB, user, mountId);
   const route = tail[0];
+  const mount = await requireStorageMount(env.DB, user, mountId, {
+    diagnosticOperation: route === 'capabilities' ? 'capabilities' : undefined,
+    logger,
+  });
   const restTail = tail.slice(1);
 
   if (route === 'capabilities' && method === 'GET' && restTail.length === 0) {
-    const payload = await callJson(client, request, mount, '/capabilities');
+    const payload = await callJson(client, request, mount, '/capabilities', { operation: 'capabilities' });
+    if (!payload?.capabilities || typeof payload.capabilities !== 'object' || Array.isArray(payload.capabilities)) {
+      try { logger?.warn?.('[storage-upstream] operation=capabilities result=schema-error status=200'); } catch { /* diagnostics must not affect response handling */ }
+    }
     const configuredLimit = Number(env.STORAGE_MAX_UPLOAD_BYTES || MAX_UPLOAD_BYTES);
     const maxUploadBytes = Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? Math.min(configuredLimit, MAX_UPLOAD_BYTES) : MAX_UPLOAD_BYTES;
     return json({ capabilities: normalizeCapabilities(payload?.capabilities, mount, maxUploadBytes) });

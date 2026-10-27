@@ -1,6 +1,27 @@
 import { ApiError, normalizeUpstreamError, statusFor } from './http.js';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const CAPABILITY_BINDING_NAMES = [
+  'STORAGE_API_URL',
+  'STORAGE_APP_SECRET',
+  'CF_ACCESS_CLIENT_ID',
+  'CF_ACCESS_CLIENT_SECRET',
+];
+
+function diagnostic(logger, operation, message) {
+  if (operation !== 'capabilities') return;
+  try { logger?.warn?.(`[storage-upstream] operation=capabilities ${message}`); } catch { /* diagnostics must not break storage requests */ }
+}
+
+function safeErrorType(error) {
+  return ['AbortError', 'DOMException', 'Error', 'TypeError'].includes(error?.name) ? error.name : 'Other';
+}
+
+function bindingPresence(env) {
+  return CAPABILITY_BINDING_NAMES
+    .map((name) => `${name}=${typeof env[name] === 'string' && env[name].trim() ? 'present' : 'missing'}`)
+    .join(' ');
+}
 
 function safeBaseUrl(raw) {
   if (typeof raw !== 'string' || !raw.trim()) throw new ApiError('PROVIDER_UNAVAILABLE', 503);
@@ -23,27 +44,43 @@ function safeProject(projectId) {
   return encodeURIComponent(projectId);
 }
 
-export function createStorageClient({ env, fetchImpl = fetch }) {
-  async function request({ request: incomingRequest, projectId, path, method = 'GET', body, contentType, accept = 'application/json' }) {
-    const base = safeBaseUrl(env.STORAGE_API_URL);
+export function createStorageClient({ env, fetchImpl = fetch, logger = console }) {
+  async function request({ request: incomingRequest, projectId, path, method = 'GET', body, contentType, accept = 'application/json', operation }) {
+    diagnostic(logger, operation, `stage=bindings ${bindingPresence(env)}`);
+
+    let base;
+    try {
+      base = safeBaseUrl(env.STORAGE_API_URL);
+    } catch (error) {
+      diagnostic(logger, operation, `stage=config result=invalid-url type=${safeErrorType(error)}`);
+      throw error;
+    }
     if (!env.STORAGE_APP_SECRET || !env.CF_ACCESS_CLIENT_ID || !env.CF_ACCESS_CLIENT_SECRET) {
+      diagnostic(logger, operation, 'stage=config result=missing-binding');
       throw new ApiError('PROVIDER_UNAVAILABLE', 503);
     }
     const project = safeProject(projectId);
     const url = new URL(`/v3/projects/${project}${path}`, base);
+    diagnostic(logger, operation, 'stage=request');
+    let headers;
+    try {
+      headers = new Headers({
+        Accept: accept,
+        Authorization: `Bearer ${env.STORAGE_APP_SECRET}`,
+        'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
+        'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
+      });
+      if (contentType) headers.set('Content-Type', contentType);
+    } catch (error) {
+      diagnostic(logger, operation, `stage=request-build result=header-error type=${safeErrorType(error)}`);
+      throw error;
+    }
     const controller = new AbortController();
     let timedOut = false;
     const cancel = () => controller.abort(incomingRequest.signal.reason);
     if (incomingRequest.signal.aborted) cancel();
     else incomingRequest.signal.addEventListener('abort', cancel, { once: true });
     const timer = setTimeout(() => { timedOut = true; controller.abort(new Error('timeout')); }, timeoutMs(env));
-    const headers = new Headers({
-      Accept: accept,
-      Authorization: `Bearer ${env.STORAGE_APP_SECRET}`,
-      'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
-      'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
-    });
-    if (contentType) headers.set('Content-Type', contentType);
     let response;
     try {
       response = await fetchImpl(url, { method, headers, body, signal: controller.signal, redirect: 'error' });
@@ -51,10 +88,14 @@ export function createStorageClient({ env, fetchImpl = fetch }) {
       clearTimeout(timer);
       incomingRequest.signal.removeEventListener('abort', cancel);
       if (error instanceof ApiError) throw error;
+      diagnostic(logger, operation, timedOut
+        ? 'result=timeout'
+        : `result=fetch-error type=${safeErrorType(error)} redirect=error`);
       throw new ApiError(timedOut ? 'PROVIDER_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE', timedOut ? 504 : 503);
     }
     return {
       response,
+      operation,
       timedOut: () => timedOut,
       cleanup: () => {
         clearTimeout(timer);
@@ -69,10 +110,18 @@ export function createStorageClient({ env, fetchImpl = fetch }) {
     try {
       if (!result.response.ok) {
         const payload = await readBoundedJson(result.response);
-        throw new ApiError(normalizeUpstreamError(payload, result.response.status), statusFor(normalizeUpstreamError(payload, result.response.status)));
+        const code = normalizeUpstreamError(payload, result.response.status);
+        diagnostic(logger, result.operation, `result=http-error status=${result.response.status}`);
+        throw new ApiError(code, statusFor(code));
       }
-      try { return await result.response.json(); }
-      catch { throw new ApiError('PROVIDER_UNAVAILABLE', 502); }
+      try {
+        const payload = await result.response.json();
+        diagnostic(logger, result.operation, `result=http-ok status=${result.response.status}`);
+        return payload;
+      } catch {
+        diagnostic(logger, result.operation, `result=parse-error status=${result.response.status}`);
+        throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+      }
     } finally { result.cleanup(); }
   }
 

@@ -13,12 +13,22 @@ export async function requireAdmin(request, env) {
   return user;
 }
 
-export async function requireStorageMount(db, user, storageId, { mutation = false, allowInactive = false } = {}) {
+export async function requireStorageMount(db, user, storageId, {
+  mutation = false,
+  allowInactive = false,
+  diagnosticOperation,
+  logger = console,
+} = {}) {
   if (!/^[A-Za-z0-9_-]{1,128}$/u.test(storageId || '')) throw new ApiError('NOT_FOUND', 404);
   const mount = await db.prepare(`SELECT id, owner_user_id, name, provider, status, read_only, shared_storage_project_id
     FROM storage_mounts WHERE id = ? AND owner_user_id = ?`).bind(storageId, user.id).first();
   if (!mount || (!allowInactive && mount.status !== 'active')) throw new ApiError('NOT_FOUND', 404);
-  if (mount.provider !== 'garage') throw new ApiError('PROVIDER_UNAVAILABLE', 503);
+  if (mount.provider !== 'garage') {
+    if (diagnosticOperation === 'capabilities') {
+      try { logger?.warn?.('[storage-upstream] operation=capabilities stage=mount result=unsupported-provider'); } catch { /* diagnostics must not affect authorization */ }
+    }
+    throw new ApiError('PROVIDER_UNAVAILABLE', 503);
+  }
   if (mutation && Number(mount.read_only) === 1) throw new ApiError('FORBIDDEN', 403);
   return { ...mount, read_only: Number(mount.read_only) === 1 };
 }
