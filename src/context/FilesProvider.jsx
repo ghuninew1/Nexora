@@ -21,7 +21,7 @@ export function FilesProvider({ children }) {
 
   const addUploadedFile = useCallback(({ file, parentId, name }) => {
     setFiles((current) => {
-      const existing = current.filter((item) => item.parentId === (parentId ?? null) && !item.trashedAt).map((item) => item.name);
+      const existing = current.filter((item) => item.parentId === (parentId ?? null)).map((item) => item.name);
       let uniqueName = name;
       let suffix = 1;
       while (existing.includes(uniqueName)) {
@@ -35,47 +35,10 @@ export function FilesProvider({ children }) {
 
   const rename = useCallback((id, name) => setFiles((current) => current.map((file) => file.id === id ? { ...file, name: name.trim(), modified: "Just now", modifiedAt: new Date().toISOString() } : file)), []);
 
-  const trash = useCallback((ids) => {
-    const groupById = new Map();
-    ids.forEach((id) => {
-      const group = crypto.randomUUID();
-      const pending = [id];
-      while (pending.length) {
-        const parentId = pending.pop();
-        if (groupById.has(parentId)) continue;
-        groupById.set(parentId, group);
-        files.forEach((file) => {
-          if (!file.trashedAt && file.parentId === parentId && !groupById.has(file.id)) pending.push(file.id);
-        });
-      }
-    });
-    const trashedAt = new Date().toISOString();
-    setFiles((current) => current.map((file) => groupById.has(file.id) ? { ...file, trashedAt, trashGroup: groupById.get(file.id) } : file));
-  }, [files]);
-
-  const restore = useCallback((ids) => {
-    const groups = new Set(files.filter((file) => ids.includes(file.id)).map((file) => file.trashGroup).filter(Boolean));
-    const restoreIds = new Set(files.filter((file) => ids.includes(file.id) || (file.trashGroup && groups.has(file.trashGroup))).map((file) => file.id));
-    setFiles((current) => current.map((file) => {
-      if (!restoreIds.has(file.id)) return file;
-      const activeFile = { ...file };
-      delete activeFile.trashedAt;
-      delete activeFile.trashGroup;
-      return activeFile;
-    }));
-  }, [files]);
-
-  const permanentlyDelete = useCallback((ids) => {
-    const groups = new Set(files.filter((file) => ids.includes(file.id)).map((file) => file.trashGroup).filter(Boolean));
-    const removeIds = new Set(files.filter((file) => ids.includes(file.id) || (file.trashGroup && groups.has(file.trashGroup))).map((file) => file.id));
-    setFiles((current) => current.filter((file) => !removeIds.has(file.id)));
-    setFavorites((current) => current.filter((id) => !removeIds.has(id)));
-  }, [files]);
-
   const toggleFavorite = useCallback((id) => setFavorites((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]), []);
   const recordAccess = useCallback((id) => setRecent((current) => [{ id, accessedAt: new Date().toISOString() }, ...current.filter((entry) => entry.id !== id)].slice(0, 30)), []);
 
-  const value = useMemo(() => ({ files, favorites, recent, createFolder, addUploadedFile, rename, trash, restore, permanentlyDelete, toggleFavorite, recordAccess }), [files, favorites, recent, createFolder, addUploadedFile, rename, trash, restore, permanentlyDelete, toggleFavorite, recordAccess]);
+  const value = useMemo(() => ({ files, favorites, recent, createFolder, addUploadedFile, rename, toggleFavorite, recordAccess }), [files, favorites, recent, createFolder, addUploadedFile, rename, toggleFavorite, recordAccess]);
   return <FilesContext.Provider value={value}>
     <RemoteFilesContext.Provider value={remoteFiles}>{children}</RemoteFilesContext.Provider>
   </FilesContext.Provider>;

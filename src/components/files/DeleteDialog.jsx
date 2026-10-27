@@ -12,8 +12,10 @@ function DeleteDialog({
   open,
   onOpenChange,
   count,
+  file = null,
   onDelete,
   permanent = false,
+  isPending = false,
 }) {
   function handleDelete() {
     onDelete();
@@ -24,13 +26,21 @@ function DeleteDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {permanent ? "Permanently delete" : "Delete"} {count === 1 ? "item" : "items"}?
+            {file
+              ? permanent ? `Permanently delete “${file.name}”?` : `Move “${file.name}” to Trash?`
+              : `${permanent ? "Permanently delete" : "Delete"} ${count === 1 ? "item" : "items"}?`}
           </DialogTitle>
 
           <DialogDescription>
-            {permanent
-              ? "This item will be removed permanently and cannot be restored."
-              : count === 1 ? "This item will move to Trash." : `These ${count} items will move to Trash.`}
+            {file?.type === "folder"
+              ? permanent
+                ? "This permanently deletes this folder and its trashed contents and cannot be undone."
+                : "This folder and its contents will move to Trash and no longer appear in My Files."
+              : file
+                ? permanent ? "This permanently deletes the item and cannot be undone." : "This item will be moved to Trash."
+                : permanent
+                  ? "This item will be removed permanently and cannot be restored."
+                  : count === 1 ? "This item will move to Trash." : `These ${count} items will move to Trash.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -38,6 +48,7 @@ function DeleteDialog({
           <Button
             type="button"
             variant="outline"
+            disabled={isPending}
             onClick={() => onOpenChange(false)}
           >
             Cancel
@@ -46,9 +57,11 @@ function DeleteDialog({
           <Button
             type="button"
             variant="destructive"
+            disabled={isPending}
+            aria-busy={isPending}
             onClick={handleDelete}
           >
-            {permanent ? "Delete permanently" : "Move to Trash"}
+            {isPending ? "Working…" : permanent ? "Delete permanently" : "Move to Trash"}
           </Button>
         </DialogFooter>
       </DialogContent>

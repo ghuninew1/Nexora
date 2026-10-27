@@ -69,7 +69,7 @@ function upstreamResponse(url, init = {}) {
   if (path.endsWith('/objects/object_alpha') && init.method === 'PATCH') return Response.json({ success: true, object: { ...object(), name: 'renamed.txt' } });
   if (path.endsWith('/objects/object_alpha') && init.method === 'DELETE') return Response.json({ success: true, object: object() });
   if (path.endsWith('/trash')) return Response.json({ success: true, items: [object('object_trashed')], nextCursor: null });
-  if (path.endsWith('/restore')) return Response.json({ success: true, object: object() });
+  if (path.endsWith('/restore')) return Response.json({ success: true, object: object('object_trashed') });
   if (path.endsWith('/permanent')) return Response.json({ success: true, operationId: 'operation_delete' });
   return Response.json({ success: false, error: { code: 'NOT_FOUND', message: 'SQLite at internal-host leaked details' } }, { status: 404 });
 }
@@ -492,6 +492,9 @@ test('unknown objects and foreign destination parents return safe errors', async
 test('foreign mount and caller-supplied project routes are hidden', async () => {
   const beforeCalls = requests.length;
   assert.equal((await request('/api/storage/v1/storages/mount_other/objects')).status, 404);
+  assert.equal((await request('/api/storage/v1/storages/mount_other/trash')).status, 404);
+  assert.equal((await request('/api/storage/v1/storages/mount_other/trash/object_foreign/restore', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}' })).status, 404);
+  assert.equal((await request('/api/storage/v1/storages/mount_other/trash/object_foreign/permanent', { method: 'DELETE', headers: { Origin: origin } })).status, 404);
   assert.equal((await request(`/api/storage/v1/projects/${projectId}/objects`)).status, 404);
   assert.equal(requests.length, beforeCalls);
 });
@@ -517,7 +520,7 @@ test('folder create, rename, move, copy, Trash, restore, permanent delete, and o
   assert.equal((await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'DELETE', headers: { Origin: origin } })).status, 200);
   assert.equal((await request(`/api/storage/v1/storages/${storageId}/trash`)).status, 200);
   const restored = await request(`/api/storage/v1/storages/${storageId}/trash/object_trashed/restore`, { method: 'POST', headers: jsonHeaders, body: '{}' });
-  assert.equal((await restored.json()).data.object.objectId, objectId);
+  assert.equal((await restored.json()).data.object.objectId, 'object_trashed');
   const purged = await request(`/api/storage/v1/storages/${storageId}/trash/object_trashed/permanent`, { method: 'DELETE', headers: { Origin: origin } });
   assert.equal((await purged.json()).data.operationId, 'operation_delete');
   const operation = await request(`/api/storage/v1/storages/${storageId}/operations/operation_alpha`);
@@ -686,6 +689,29 @@ test('normal delete and permanent delete use separate upstream routes', async ()
   assert.ok(requests.some((entry) => entry.url.endsWith(`/trash/${objectId}/permanent`) && entry.init.method === 'DELETE'));
 });
 
+test('Trash listing preserves cursor pagination and exposes only normalized logical metadata', async () => {
+  const calls = [];
+  const response = await request(`/api/storage/v1/storages/${storageId}/trash?limit=25&cursor=page_2`, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url: new URL(url), init });
+      return Response.json({ success: true, items: [{
+        ...object('object_trashed'), deletedAt: '2026-10-27T12:00:00.000Z',
+        provider_reference: 'secret-reference', projectId: 'secret-project', bucket: 'secret-bucket',
+      }], nextCursor: 'page_3' });
+    },
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url.pathname, /\/trash$/u);
+  assert.equal(calls[0].url.searchParams.get('limit'), '25');
+  assert.equal(calls[0].url.searchParams.get('cursor'), 'page_2');
+  assert.equal(payload.data.items[0].objectId, 'object_trashed');
+  assert.equal(payload.data.items[0].deletedAt, '2026-10-27T12:00:00.000Z');
+  assert.equal(payload.data.nextCursor, 'page_3');
+  assert.doesNotMatch(JSON.stringify(payload), /secret-reference|secret-project|secret-bucket|provider_reference|projectId/u);
+});
+
 test('file operations enforce Shared Storage capabilities server-side before mutation requests', async () => {
   const calls = [];
   const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
@@ -702,6 +728,30 @@ test('file operations enforce Shared Storage capabilities server-side before mut
   assert.match(await response.text(), /CAPABILITY_UNAVAILABLE/u);
   assert.equal(calls.length, 1);
   assert.ok(calls[0].url.endsWith('/capabilities'));
+});
+
+test('Trash, Restore, and Permanent Delete enforce their own capabilities server-side', async () => {
+  const cases = [
+    { path: `/api/storage/v1/storages/${storageId}/objects/${objectId}`, method: 'DELETE', capability: 'trash' },
+    { path: `/api/storage/v1/storages/${storageId}/trash/${objectId}/restore`, method: 'POST', capability: 'restore', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+    { path: `/api/storage/v1/storages/${storageId}/trash/${objectId}/permanent`, method: 'DELETE', capability: 'permanentDelete' },
+  ];
+  for (const item of cases) {
+    let mutationCalls = 0;
+    const response = await request(item.path, {
+      method: item.method,
+      headers: { Origin: origin, ...item.headers },
+      body: item.body,
+      fetchImpl: async (url, init) => {
+        if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { [item.capability]: false } });
+        mutationCalls += 1;
+        return upstreamResponse(url, init);
+      },
+    });
+    assert.equal(response.status, 422, item.capability);
+    assert.match(await response.text(), /CAPABILITY_UNAVAILABLE/u);
+    assert.equal(mutationCalls, 0, item.capability);
+  }
 });
 
 test('upload forwards a bounded stream without materializing file bytes in Nexora', async () => {
@@ -882,6 +932,9 @@ test('D1 capabilities do not invent provider usage and mount read-only policy re
     request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'PATCH', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Denied' }) }),
     request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/move`, { method: 'POST', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }) }),
     request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, { method: 'POST', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }) }),
+    request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'DELETE', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin } }),
+    request(`/api/storage/v1/storages/${storageId}/trash/${objectId}/restore`, { method: 'POST', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}' }),
+    request(`/api/storage/v1/storages/${storageId}/trash/${objectId}/permanent`, { method: 'DELETE', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin } }),
   ];
   for (const denied of await Promise.all(deniedMutations)) assert.equal(denied.status, 403);
   assert.equal(upstreamCalls, 0);

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Activity, Files, FolderClock, HardDrive, Heart, RefreshCw, Share2, ShieldCheck, Trash2, UploadCloud, Users } from "lucide-react";
+import { Activity, File, FileText, Files, Folder, FolderClock, HardDrive, Heart, LoaderCircle, RefreshCw, RotateCcw, Share2, ShieldCheck, Trash2, UploadCloud, Users } from "lucide-react";
 import { getPageInfo } from "../components/navigation/navigation";
 import { Button } from "../components/ui/button";
 import { cx } from "../utils/cx";
 import { useFilesData } from "../context/FilesProvider";
 import { useStorage } from "../hooks/useStorage";
-import { useDemoFiles } from "../hooks/useFiles";
+import { useDemoFiles, useFiles } from "../hooks/useFiles";
 import ThemeToggle from "../theme/ThemeToggle";
 import DemoFileGrid from "../components/files/DemoFileGrid";
 import FilePreviewDialog from "../components/files/FilePreviewDialog";
@@ -36,7 +36,7 @@ function DashboardPage({ browser, openFile, navigate }) {
     { icon: Files, label: "My files", value: browser.files.filter((file) => file.type === "file").length, hint: "Files in this demo workspace" },
     { icon: Heart, label: "Favorites", value: browser.favoriteFiles.length, hint: "Saved for quick access" },
     { icon: Share2, label: "Shared", value: sharedCount, hint: "Sample sharing records" },
-    { icon: Trash2, label: "Trash", value: browser.trashFiles.length, hint: "Items awaiting review" },
+    { icon: Trash2, label: "Trash", value: "—", hint: "Open Trash to review connected items" },
   ];
   return <div className={cx("flex flex-col gap-8")}>
     <PageHeading eyebrow="Workspace overview" title="Good to see you" description="A quick look at your files and recent activity." action={<Button onClick={() => navigate("/files")}><Files data-icon="inline-start" />Browse files</Button>} />
@@ -70,13 +70,66 @@ function ListingPage({ page, browser, openFile }) {
   </div>;
 }
 
-function TrashPage({ page, browser }) {
+function formatTrashSize(bytes) {
+  if (!Number.isSafeInteger(bytes) || bytes < 0) return "Size unavailable";
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatTrashDate(value) {
+  if (typeof value !== "string") return "Deletion date unavailable";
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? "Deletion date unavailable" : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(timestamp);
+}
+
+function TrashItemRow({ file, browser, onPermanentDelete }) {
+  const Icon = file.type === "folder" ? Folder : file.mimeType === "application/pdf" ? FileText : File;
+  const isPending = browser.mutatingIds.has(file.objectId);
+  const details = [file.type === "folder" ? "Folder" : formatTrashSize(file.sizeBytes), formatTrashDate(file.deletedAt)];
+  return <article className={cx("glass-surface flex min-w-0 flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between")}>
+    <div className={cx("flex min-w-0 items-start gap-3")}>
+      <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
+      <div className={cx("min-w-0")}>
+        <p className={cx("break-all text-sm font-medium text-foreground")}>{file.name}</p>
+        <p className={cx("mt-1 text-xs text-muted-foreground")}>{details.join(" · ")}</p>
+      </div>
+    </div>
+    <div className={cx("flex flex-wrap gap-2 sm:shrink-0")}>
+      <Button type="button" variant="outline" className={cx("min-h-11")} onClick={() => void browser.restoreTrashObject(file)} disabled={!browser.canRestore || isPending} aria-busy={isPending} aria-label={`Restore ${file.name}`}><RotateCcw aria-hidden="true" />Restore</Button>
+      <Button type="button" variant="destructive" className={cx("min-h-11")} onClick={() => onPermanentDelete(file)} disabled={!browser.canPermanentDelete || isPending} aria-busy={isPending} aria-label={`Permanently delete ${file.name}`}><Trash2 aria-hidden="true" />Delete permanently</Button>
+    </div>
+  </article>;
+}
+
+function TrashPage({ page }) {
+  const browser = useFiles();
   const [deleteFile, setDeleteFile] = useState(null);
+  const isLoading = browser.trashStatus === "loading" || (browser.trashStatus === "refreshing" && browser.trashItems.length === 0);
+
+  async function handlePermanentDelete() {
+    if (!deleteFile) return;
+    const result = await browser.permanentlyDeleteTrashObject(deleteFile);
+    if (result.ok) setDeleteFile(null);
+  }
+
   return <div className={cx("flex flex-col gap-6")}>
-    <PageHeading eyebrow="Recently deleted" title={page.label} description="Restore items to their original folders or permanently remove them from this demo workspace." />
-    <div className={cx("glass-surface flex items-start gap-3 p-4")}><Trash2 className={cx("mt-0.5 size-4 shrink-0 text-muted-foreground")} /><p className={cx("text-sm text-muted-foreground")}>Deleting from My Files moves items here. Permanent deletion only removes local demo state; no remote storage is involved.</p></div>
-    <DemoFileGrid files={browser.trashFiles} mode="trash" onOpen={() => {}} onRestore={(file) => browser.restore([file.id])} onDelete={setDeleteFile} emptyTitle="Trash is empty" emptyDescription="Items you delete from My Files will show up here." />
-    <DeleteDialog open={Boolean(deleteFile)} onOpenChange={(open) => { if (!open) setDeleteFile(null); }} count={1} permanent onDelete={() => { browser.permanentlyDelete([deleteFile.id]); setDeleteFile(null); }} />
+    <PageHeading eyebrow="Recently deleted" title={page.label} description="Restore items or permanently delete them from connected storage." action={<Button type="button" variant="outline" onClick={() => void browser.refreshTrash()} disabled={isLoading || ["no-storage", "unavailable", "unsupported"].includes(browser.trashStatus)} aria-busy={isLoading}><RefreshCw data-icon="inline-start" />{isLoading ? "Refreshing…" : "Refresh"}</Button>} />
+    {browser.trashStatus === "no-storage" && <div className={cx("glass-surface p-5")} role="status"><h2 className={cx("text-sm font-semibold")}>No connected storage</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Connect an active storage mount to view Trash.</p></div>}
+    {browser.trashStatus === "unsupported" && <div className={cx("glass-surface p-5")} role="status"><h2 className={cx("text-sm font-semibold")}>Trash is unavailable</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>This storage does not report Trash, Restore, or Permanent Delete support.</p></div>}
+    {browser.trashStatus === "unavailable" && <div className={cx("glass-surface p-5")} role="alert"><h2 className={cx("text-sm font-semibold")}>Storage is unavailable</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>{browser.error || "Storage could not be reached. Try again later."}</p></div>}
+    {isLoading && <div className={cx("glass-surface flex min-h-40 items-center justify-center gap-3 p-5 text-sm text-muted-foreground")} role="status" aria-live="polite" aria-busy="true"><LoaderCircle className={cx("size-5 animate-spin motion-reduce:animate-none")} aria-hidden="true" />Loading Trash…</div>}
+    {browser.trashStatus === "error" && <div className={cx("flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-card p-4")} role="alert"><p className={cx("text-sm text-destructive")}>{browser.trashError || "Trash could not be loaded."}</p><Button type="button" variant="outline" onClick={() => void browser.refreshTrash()}>Try again</Button></div>}
+    {browser.trashError && browser.trashStatus !== "error" && <p className={cx("rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status">Could not refresh Trash. Showing the last loaded items.</p>}
+    {browser.operationFeedback && <p className={cx("rounded-lg border px-3 py-2 text-sm", browser.operationFeedback.type === "error" ? "border-destructive/30 text-destructive" : "border-primary/30 text-foreground")} role={browser.operationFeedback.type === "error" ? "alert" : "status"} aria-live="polite">{browser.operationFeedback.message}</p>}
+    {browser.trashStatus === "empty" && <div className={cx("glass-surface flex min-h-56 flex-col items-center justify-center px-6 text-center")}><span className={cx("glass-control flex size-12 items-center justify-center rounded-2xl text-muted-foreground")}><Trash2 className={cx("size-5")} aria-hidden="true" /></span><h2 className={cx("mt-4 text-sm font-semibold")}>Trash is empty.</h2></div>}
+    {(browser.trashStatus === "ready" || browser.trashStatus === "refreshing") && <>
+      <div className={cx("flex flex-col gap-3")} aria-label="Items in Trash">{browser.trashItems.map((file) => <TrashItemRow key={file.objectId} file={file} browser={browser} onPermanentDelete={setDeleteFile} />)}</div>
+      {browser.trashPaginationError && <p className={cx("text-sm text-destructive")} role="alert">{browser.trashPaginationError}</p>}
+      {browser.trashNextCursor && <div className={cx("flex justify-center")}><Button type="button" variant="outline" onClick={() => void browser.loadMoreTrash()} disabled={browser.trashPaginationStatus === "loading"} aria-busy={browser.trashPaginationStatus === "loading"}>{browser.trashPaginationStatus === "loading" ? "Loading more…" : "Load more"}</Button></div>}
+    </>}
+    <DeleteDialog open={Boolean(deleteFile)} onOpenChange={(open) => { if (!open) setDeleteFile(null); }} file={deleteFile} permanent isPending={Boolean(deleteFile && browser.mutatingIds.has(deleteFile.objectId))} onDelete={() => void handlePermanentDelete()} />
   </div>;
 }
 
@@ -129,7 +182,7 @@ function SettingsPage({ page }) {
       <div><h2 className={cx("text-sm font-semibold")}>Appearance</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Choose light, dark, or follow your system preference.</p></div><ThemeToggle />
     </section>
     <section className={cx("glass-surface p-5")}>
-      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Files, Favorites, Recent activity, and Trash are held in app memory. Refreshing the page clears those demo changes. Theme preference is saved locally in this browser.</p></div></div>
+      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Favorites, and Recent activity use demo data held in app memory. Connected File Browser and Trash data come from the active storage API. Theme preference is saved locally in this browser.</p></div></div>
     </section>
   </div>;
 }
@@ -154,7 +207,7 @@ export default function WorkspacePage() {
   if (!page) screen = <section className={cx("glass-surface p-8 text-center")}><h1 className={cx("text-xl font-semibold")}>Page not found</h1><Button variant="outline" className={cx("mt-4")} onClick={() => navigate("/files")}>Back to My Files</Button></section>;
   else if (pathname === "/dashboard") screen = <DashboardPage browser={browser} openFile={openFile} navigate={navigate} />;
   else if (["/recent", "/favorites", "/shared"].includes(pathname)) screen = <ListingPage page={page} browser={browser} openFile={openFile} />;
-  else if (pathname === "/trash") screen = <TrashPage page={page} browser={browser} />;
+  else if (pathname === "/trash") screen = <TrashPage page={page} />;
   else if (pathname === "/storage") screen = <StoragePage page={page} navigate={navigate} />;
   else if (pathname === "/settings") screen = <SettingsPage page={page} />;
 

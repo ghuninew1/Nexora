@@ -12,6 +12,7 @@ import RenameDialog from "./RenameDialog";
 import FolderDestinationDialog from "./FolderDestinationDialog";
 import UploadQueue from "./UploadQueue";
 import StorageFilePreviewDialog from "./StorageFilePreviewDialog";
+import DeleteDialog from "./DeleteDialog";
 
 function FileListLoading() {
   return <div className={cx("overflow-hidden rounded-xl border border-border bg-card")} role="status" aria-live="polite" aria-busy="true" aria-label="Loading files">
@@ -30,6 +31,7 @@ function FileBrowser() {
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
   const [destinationAction, setDestinationAction] = useState(null);
+  const [trashFile, setTrashFile] = useState(null);
   const selectedCount = browser.selectedIds.length;
   const isLoading = browser.status === "loading";
   const isRefreshing = browser.status === "refreshing";
@@ -59,13 +61,22 @@ function FileBrowser() {
     return result;
   }
 
+  async function handleTrash() {
+    if (!trashFile) return;
+    const result = await browser.trashObject(trashFile);
+    if (result.ok) {
+      browser.clearSelection();
+      setTrashFile(null);
+    }
+  }
+
   return (
     <div className={cx("relative")}>
       <section className={cx("flex min-w-0 flex-col gap-5")}>
         <h1 className={cx("sr-only")}>My Files</h1>
         <div className={cx("flex flex-wrap items-center justify-between gap-3")}>
           <FileBreadcrumbs items={browser.breadcrumbs.map((item) => ({ id: item.objectId, label: item.label }))} onNavigate={browser.navigateToBreadcrumb} />
-          <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Preview on demand · Trash unavailable</span>
+          <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Preview on demand</span>
         </div>
         {browser.notice && <p className={cx("rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite">{browser.notice}</p>}
         {browser.revalidationError && <div className={cx("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><span>{browser.revalidationError}</span><Button type="button" variant="ghost" size="sm" onClick={() => void browser.refreshCurrentFolder()}>Refresh</Button></div>}
@@ -104,12 +115,12 @@ function FileBrowser() {
             onOpenFolder={browser.openFolder}
             onPreview={(file) => void browser.openPreview(file)}
             onRename={setRenameFile}
-            onDelete={() => {}}
             onDownload={(file) => void browser.downloadObject(file)}
             onMove={(file) => setDestinationAction({ action: "move", file, key: crypto.randomUUID() })}
             onCopy={(file) => setDestinationAction({ action: "copy", file, key: crypto.randomUUID() })}
+            onTrash={setTrashFile}
             onToggleFavorite={() => {}}
-            capabilities={{ download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy }}
+            capabilities={{ download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}
             mutatingIds={browser.mutatingIds}
             canCreateFolder={browser.canCreateFolder}
             onCreateFolder={() => setNewFolderOpen(true)}
@@ -132,6 +143,7 @@ function FileBrowser() {
         onConfirm={handleDestination}
       />
       <StorageFilePreviewDialog preview={browser.preview} onOpenChange={(open) => { if (!open) browser.closePreview(); }} onDownload={(file) => void browser.downloadObject(file)} maxTextPreviewBytes={browser.maxTextPreviewBytes} />
+      <DeleteDialog open={Boolean(trashFile)} onOpenChange={(open) => { if (!open) setTrashFile(null); }} file={trashFile} permanent={false} isPending={Boolean(trashFile && browser.mutatingIds.has(trashFile.objectId))} onDelete={() => void handleTrash()} />
     </div>
   );
 }

@@ -6,12 +6,13 @@ import { getStoragePreviewSpec } from "../../utils/storage-preview";
 
 const fileIcons = { md: FileCode2, pdf: FileText };
 
-function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy }) {
+function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy, onTrash }) {
   const Icon = file.type === "folder" ? Folder : fileIcons[file.extension] ?? File;
   const isFolder = file.type === "folder";
   const canRename = Boolean(capabilities.rename && !readOnly && !busy);
   const canMove = Boolean(capabilities.move && !readOnly && !busy);
   const canCopy = Boolean(capabilities.copy && !readOnly && !busy);
+  const canTrash = Boolean(capabilities.trash && !readOnly && !busy);
   const canDownload = Boolean(!isFolder && capabilities.download && !busy);
   const canPreview = Boolean(!isFolder && !busy && (capabilities.preview
     ? capabilities.preview(file)
@@ -61,7 +62,7 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
           <DropdownMenuItem disabled={!canRename} onClick={() => onRename?.(file)}><Pencil />Rename</DropdownMenuItem>
           <DropdownMenuItem disabled={!canMove} onClick={() => onMove?.(file)}><ArrowRightLeft />Move</DropdownMenuItem>
           <DropdownMenuItem disabled={!canCopy} onClick={() => onCopy?.(file)}><Copy />Copy</DropdownMenuItem>
-          <DropdownMenuItem disabled variant="destructive"><Trash2 />Delete</DropdownMenuItem>
+          <DropdownMenuItem disabled={!canTrash} variant="destructive" onClick={() => onTrash?.(file)}><Trash2 />Move to Trash</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </article>

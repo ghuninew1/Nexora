@@ -7,9 +7,13 @@ import {
   getStorageCapabilities,
   getStorageUsage,
   listStorageObjects,
+  listStorageTrash,
   listStorages,
   mergeStorageObjects,
   moveStorageObject,
+  trashStorageObject,
+  restoreStorageObject,
+  permanentlyDeleteStorageObject,
   normalizeStorageObject,
   normalizeStorageCapabilities,
   normalizeStorageUsage,
@@ -294,6 +298,51 @@ test('rename and move use logical object IDs and preserve identity; copy creates
   assert.equal(copied.operationId, 'operation_copy');
 });
 
+test('Trash API clients use same-origin logical IDs, preserve pagination, and trust confirmed responses', async () => {
+  const calls = [];
+  const responseObject = { objectId: 'object_a', parentId: 'folder_a', name: 'report.pdf', type: 'file', deletedAt: '2026-10-27T12:00:00.000Z' };
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    if (url.includes('/trash?')) return Response.json({ data: { items: [{ ...responseObject, provider_reference: 'hidden', projectId: 'hidden' }], nextCursor: 'page_2' } });
+    if (url.endsWith('/permanent')) return Response.json({ data: { deleted: true, operationId: 'operation_1' } });
+    return Response.json({ data: { object: responseObject } });
+  };
+  const page = await listStorageTrash('mount_123', { cursor: 'page_1', fetchImpl });
+  assert.equal(calls[0].url, '/api/storage/v1/storages/mount_123/trash?limit=50&cursor=page_1');
+  assert.equal(calls[0].options.credentials, 'same-origin');
+  assert.equal(page.nextCursor, 'page_2');
+  assert.equal(page.items[0].deletedAt, responseObject.deletedAt);
+  assert.doesNotMatch(JSON.stringify(page), /provider_reference|projectId/u);
+
+  const trashed = await trashStorageObject('mount_123', 'object_a', { fetchImpl });
+  assert.equal(calls[1].url, '/api/storage/v1/storages/mount_123/objects/object_a');
+  assert.equal(calls[1].options.method, 'DELETE');
+  assert.equal(trashed.objectId, 'object_a');
+  const restored = await restoreStorageObject('mount_123', 'object_a', { fetchImpl });
+  assert.equal(calls[2].url, '/api/storage/v1/storages/mount_123/trash/object_a/restore');
+  assert.deepEqual(JSON.parse(calls[2].options.body), {});
+  assert.equal(restored.parentId, 'folder_a');
+  const permanentlyDeleted = await permanentlyDeleteStorageObject('mount_123', 'object_a', { fetchImpl });
+  assert.equal(calls[3].url, '/api/storage/v1/storages/mount_123/trash/object_a/permanent');
+  assert.equal(calls[3].options.method, 'DELETE');
+  assert.deepEqual(permanentlyDeleted, { deleted: true, operationId: 'operation_1' });
+});
+
+test('Trash API clients safely map conflicts, authorization failures, and malformed permanent-delete results', async () => {
+  await assert.rejects(restoreStorageObject('mount_123', 'object_a', {
+    fetchImpl: async () => Response.json({ error: { code: 'NAME_CONFLICT', message: 'provider path secret' } }, { status: 409 }),
+  }), (error) => error.code === 'NAME_CONFLICT' && !error.message.includes('provider path secret'));
+  await assert.rejects(trashStorageObject('mount_123', 'object_a', {
+    fetchImpl: async () => Response.json({ error: { code: 'FORBIDDEN' } }, { status: 403 }),
+  }), { code: 'FORBIDDEN' });
+  await assert.rejects(permanentlyDeleteStorageObject('mount_123', 'object_a', {
+    fetchImpl: async () => Response.json({ data: { deleted: false } }),
+  }), { code: 'PROVIDER_UNAVAILABLE' });
+  await assert.rejects(listStorageTrash('mount_123', {
+    fetchImpl: async () => Response.json({ data: { items: [], nextCursor: 12 } }),
+  }), { code: 'PROVIDER_UNAVAILABLE' });
+});
+
 test('operation clients reject invalid names and identity-breaking rename/move/copy responses', async () => {
   for (const name of ['', '   ', 'bad/name', `x${'a'.repeat(255)}`]) assert.equal(validateStorageObjectName(name), false);
   assert.equal(validateStorageObjectName('valid name.txt'), true);
@@ -539,6 +588,25 @@ test('cache invalidation and clear remove listings, metadata and prevent late re
   await pending;
   assert.equal(cache.get('mount_a', null), null);
   assert.equal(cache.getBreadcrumbs('mount_a', 'folder_a', rootBreadcrumbs()[0]), null);
+});
+
+test('removing a trashed folder drops only its cached subtree metadata and listings', () => {
+  const cache = new RemoteFilesCache();
+  cache.setPage('mount_a', null, null, { items: [listingItem('folder_a', null), listingItem('folder_keep', null)], nextCursor: null });
+  cache.setPage('mount_a', 'folder_a', null, { items: [listingItem('folder_b', 'folder_a')], nextCursor: null });
+  cache.setPage('mount_a', 'folder_b', null, { items: [listingItem('file_nested', 'folder_b', 'inside.txt', 'file')], nextCursor: null });
+  cache.setPage('mount_a', 'folder_keep', null, { items: [listingItem('file_keep', 'folder_keep', 'keep.txt', 'file')], nextCursor: null });
+
+  const removed = cache.removeObjectMetadata('mount_a', 'folder_a', { includeDescendants: true });
+
+  assert.deepEqual([...removed].sort(), ['file_nested', 'folder_a', 'folder_b']);
+  assert.notEqual(cache.get('mount_a', null), null);
+  assert.equal(cache.get('mount_a', 'folder_a'), null);
+  assert.equal(cache.get('mount_a', 'folder_b'), null);
+  assert.notEqual(cache.get('mount_a', 'folder_keep'), null);
+  assert.deepEqual(cache.getBreadcrumbs('mount_a', 'folder_keep', rootBreadcrumbs()[0]), [
+    ...rootBreadcrumbs(), { objectId: 'folder_keep', label: 'folder_keep' },
+  ]);
 });
 
 test('folder cache uses a bounded least-recently-used entry count', () => {

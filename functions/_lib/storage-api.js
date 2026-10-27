@@ -398,8 +398,11 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       return json({ object, operationId: typeof payload?.operationId === 'string' ? payload.operationId : null }, 201);
     }
     if (suffix.length === 0 && method === 'DELETE') {
+      await requireCapability(client, request, writable, 'trash');
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}`, { method: 'DELETE' });
-      return json({ object: normalizeObject(payload?.object) });
+      const object = normalizeObject(payload?.object);
+      if (!object || object.objectId !== objectId) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+      return json({ object });
     }
   }
   if (route === 'trash' && restTail.length === 0 && method === 'GET') {
@@ -410,23 +413,31 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const query = new URLSearchParams({ limit: String(limit) });
     if (cursor) query.set('cursor', cursor);
     const payload = await callJson(client, request, mount, `/trash?${query}`);
-    return json({ items: (Array.isArray(payload?.items) ? payload.items : []).map(normalizeObject).filter(Boolean), nextCursor: payload?.nextCursor || null });
+    const nextCursor = payload?.nextCursor ?? null;
+    if (nextCursor !== null && (typeof nextCursor !== 'string' || nextCursor.length > 512 || !/^[A-Za-z0-9_-]+$/u.test(nextCursor))) {
+      throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+    }
+    return json({ items: (Array.isArray(payload?.items) ? payload.items : []).map(normalizeObject).filter(Boolean), nextCursor });
   }
   if (route === 'trash' && restTail.length === 2 && restTail[1] === 'restore' && method === 'POST') {
     const writable = await requireStorageMount(env.DB, user, mountId, { mutation: true });
     const objectId = requireObjectId(restTail[0]);
     const body = await readJson(request);
     if (body.parentId !== undefined && body.parentId !== null) requireObjectId(body.parentId);
+    await requireCapability(client, request, writable, 'restore');
     const payload = await callJson(client, request, writable, `/trash/${encodeURIComponent(objectId)}/restore`, { method: 'POST', body: JSON.stringify(body), contentType: 'application/json' });
     const object = normalizeObject(payload?.object);
-    if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+    if (!object || object.objectId !== objectId) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
     return json({ object });
   }
   if (route === 'trash' && restTail.length === 2 && restTail[1] === 'permanent' && method === 'DELETE') {
     const writable = await requireStorageMount(env.DB, user, mountId, { mutation: true });
     const objectId = requireObjectId(restTail[0]);
+    await requireCapability(client, request, writable, 'permanentDelete');
     const payload = await callJson(client, request, writable, `/trash/${encodeURIComponent(objectId)}/permanent`, { method: 'DELETE' });
-    return json({ operationId: payload?.operationId || null, deleted: true });
+    const operationId = typeof payload?.operationId === 'string' && /^[A-Za-z0-9_-]{1,128}$/u.test(payload.operationId)
+      ? payload.operationId : null;
+    return json({ operationId, deleted: true });
   }
   if (route === 'operations' && restTail.length === 1 && method === 'GET') {
     const operationId = requireObjectId(restTail[0]);

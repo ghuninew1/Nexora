@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-28
 
-เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.3.2; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลังเริ่ม implementation Phase 9.4; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
@@ -11,6 +11,7 @@
 - Codex workflow: [Nexora project skill](.agents/skills/nexora-project/SKILL.md); `AGENTS.md` remains the detailed source for repository rules.
 - Phase 9.3.1 เพิ่ม bounded in-memory listing cache, stale-while-revalidate, cursor-aware dedupe, metadata breadcrumbs และ selective mutation invalidation. Final validation: `pnpm lint` passed; `pnpm test` 81/81; `pnpm build` passed; `git diff --check` passed. Local File Browser rendering was blocked at the auth gate because the local auth API is unavailable; no production endpoint or deploy was used.
 - Phase 9.3.2 adds exact ancestor breadcrumb routing and on-demand safe preview through an authenticated inline endpoint. Local validation: `pnpm lint`, `pnpm test` (88/88), `pnpm build`, and `git diff --check` passed. Browser preview interaction remains unverified: Playwright is not installed, and the local Vite page stopped at the session gate because no local auth service is available. No production endpoint or deployment was used.
+- Phase 9.4 connects File Browser Move to Trash and the Trash page to the existing mount-scoped Storage API. Trash has separate cursor-paginated state; Restore and Permanent Delete are capability/readOnly-gated, server-confirmed, and protected by per-object mutation state. Cache updates are targeted; folder subtree metadata is removed and a previewed trashed file closes/cancels preview. `pnpm test` passed 93/93 and `git diff --check` passed. `pnpm lint` and `pnpm build` did not complete because local ESLint/Tailwind dependency resolution stalled or failed; manifests remain unchanged. Browser/mobile QA was not run because Browser and Playwright are unavailable. No production endpoint or deployment was used.
 - Phase 6 เพิ่ม labels/focus, keyboard/touch behavior, duplicate-name validation, responsive breadcrumbs, progressbar semantics และ reduced-motion support
 - Phase 7: `pnpm lint` และ `pnpm build` ผ่านหลังแก้ lint errors/warnings ใน preview lifecycle, FilesProvider restore helper และ hook dependencies
 - Browser: ตรวจ route `/dashboard`, `/files`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings` และ unknown route ใน in-app browser ขนาดแคบประมาณ 576 px; ยืนยัน mobile navigation menu, search, list/grid, folder/breadcrumb, create folder, move to Trash, restore, preview sample state, theme Light/Dark/System, Tab focus ring และปิด preview dialog ได้
@@ -21,8 +22,8 @@
 - `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; `wrangler.jsonc` กำหนด D1 `nexora-db` พร้อม database ID
 - Phase 9.1 เพิ่ม storage discovery/capabilities/usage client และ provider ผ่าน same-origin Nexora API; Storage page แสดง safe connection state. Production deploy/connection ยังไม่ได้ตรวจในงานนี้
 - Phase 9.2 เปลี่ยน File Browser เป็น real listing/navigation ผ่าน Nexora API: root/child listing, cursor pagination, logical-ID breadcrumbs, refresh, loaded-item search/sort และ create-folder ตาม capability
-- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Phase 9.3 operations and Phase 9.3.2 preview are connected through Nexora same-origin APIs when authorized; Trash/Favorites/Share remain demo-only or unavailable.
-- `FilesProvider` demo data ยังคงใช้กับ Dashboard, Recent, Favorites, Shared และ Trash; สถานะเหล่านี้อยู่ใน memory และ refresh แล้ว reset
+- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Phase 9.3 operations, Phase 9.3.2 preview, and Phase 9.4 Trash lifecycle use Nexora same-origin APIs when authorized; Favorites/Share remain demo-only or unavailable.
+- `FilesProvider` demo data ยังคงใช้กับ Dashboard, Recent, Favorites และ Shared; Trash ใช้ remote state แยกตาม active storage mount
 - Upload queue ที่เหลือใน demo จำลอง progress ใน browser; ไม่ส่ง bytes ไป storage
 - Shared แสดง fixture records และ Share action ยังปิดอยู่. Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
 - Theme เป็น browser preference ใน `localStorage`
@@ -94,6 +95,12 @@ The Shared Storage S2 source implements copy synchronously: it validates source/
 
 Breadcrumb clicks now resolve the exact clicked ancestor ID and preserve query/history/router state; unknown IDs are ignored, and root returns to the root listing/cache. The preview menu is enabled only for supported formats when the authenticated mount has `download`. Preview bytes load only after a click through a new same-origin `/objects/:objectId/preview` endpoint. The server checks object metadata/MIME, requires download capability, keeps upstream `preview:false` unchanged, returns inline/no-store/nosniff bytes, and enforces 1 MiB text and 20 MiB image/PDF limits. HTML, SVG, office formats, and unknown types are excluded. The UI safely renders text/JSON source, sandboxed PDF, and images; request races, cancellation and object URL cleanup are handled. Listing cache remains metadata-only. Local checks passed (`pnpm lint`, `pnpm test` 88/88, `pnpm build`, `git diff --check`); in-app browser reached the local session gate, so the preview interaction was not rendered or verified. Playwright is not installed and no production endpoint/deploy was used. Details: [docs/PHASE_9_3_2.md](docs/PHASE_9_3_2.md).
 
+## Phase 9.4 — Trash / Restore / Permanent Delete
+
+The existing routes are reused: object `DELETE` means Move to Trash; `GET .../trash` is cursor-paginated; Restore uses the authoritative returned object and its parent; Permanent Delete uses its separate Trash route and synchronous `{deleted:true}` response. Shared Storage S2 retains IDs/original parents, moves folder subtrees, restores to the saved active parent, rejects name conflicts, and permanently deletes provider bytes before metadata finalization. The UI has explicit confirmation for both Trash and irreversible permanent deletion; Permanent Delete is available only from Trash. Server mutations check mount ownership, capability, and read-only policy. Trash state is separate from folder cache; only source/authoritative destination and safe subtree metadata are updated. Preview cancellation/revocation is retained. See [Phase 9.4 report](docs/PHASE_9_4.md).
+
+Local checks and browser QA for Phase 9.4 are recorded in `docs/PHASE_9_4.md`. Production Trash/Restore/Permanent Delete remains unverified until approved production QA; this implementation pass did not deploy or modify production data.
+
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
 - endpoint matrix และ architecture/security review อ้างอิง source ปัจจุบันและได้รับ approval
@@ -128,7 +135,7 @@ Breadcrumb clicks now resolve the exact clicked ancestor ID and preserve query/h
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md`, `docs/PHASE_9_3.md`, `docs/PHASE_9_3_1.md` และ `docs/PHASE_9_3_2.md`, จากนั้นตรวจ `git status --short`. Phase 9.3.2 source and automated tests are complete; run rendered preview/Network QA with a local auth and mock storage API before release. Phase 9.3 production success เป็นข้อมูลที่ผู้ใช้ยืนยัน; รอบนี้ไม่ได้ deploy. ห้ามเริ่ม Trash/Restore หรือ Phase 9.4 เว้นแต่มีการสั่งเพิ่ม.
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, phase reports ที่เกี่ยวข้อง แล้วตรวจ `git status --short`. Phase 9.4 local checks are recorded in `docs/PHASE_9_4.md`; run rendered preview/mobile/API QA with local auth and a mock storage API before release. Production Trash/Restore/Permanent Delete remains unverified until approved production QA. รอบนี้ไม่ได้ deploy หรือแก้ข้อมูล production.
 
 ## กติกาการดูแลเอกสาร
 

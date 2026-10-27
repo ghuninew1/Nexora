@@ -11,8 +11,12 @@ import {
   mergeStorageObjects,
   moveStorageObject,
   renameStorageObject,
+  listStorageTrash,
+  permanentlyDeleteStorageObject,
+  restoreStorageObject,
   startStorageObjectDownload,
   StorageApiError,
+  trashStorageObject,
   uploadStorageFile,
   validateStorageObjectName,
 } from '../services/storage';
@@ -34,6 +38,16 @@ const EMPTY_BROWSER_STATE = {
   revalidationError: null,
 };
 
+const EMPTY_TRASH_STATE = {
+  storageId: null,
+  items: [],
+  nextCursor: null,
+  status: 'idle',
+  error: null,
+  paginationStatus: 'idle',
+  paginationError: null,
+};
+
 function routeStateFor(storageId, breadcrumbs, notice = null) {
   return {
     fileBrowser: { storageId, breadcrumbs },
@@ -41,8 +55,9 @@ function routeStateFor(storageId, breadcrumbs, notice = null) {
   };
 }
 
-function operationErrorMessage(code) {
-  if (code === 'NAME_CONFLICT') return 'A file or folder with this name already exists here.';
+function operationErrorMessage(code, operation = null) {
+  if (code === 'NAME_CONFLICT' && operation === 'restore') return 'An item with this name already exists in the restore location.';
+  if (code === 'NAME_CONFLICT') return 'An item with this name already exists in the destination.';
   if (code === 'INVALID_INPUT') return 'Check the name or destination and try again.';
   if (code === 'UPLOAD_TOO_LARGE') return 'This file is too large for the connected storage.';
   if (code === 'FORBIDDEN' || code === 'CAPABILITY_UNAVAILABLE') return 'You do not have permission to do that.';
@@ -65,12 +80,17 @@ export default function useRemoteFilesState() {
   const [operationFeedback, setOperationFeedback] = useState(null);
   const [notice, setNotice] = useState('');
   const [preview, setPreview] = useState(null);
+  const [trashState, setTrashState] = useState(EMPTY_TRASH_STATE);
   const createControllerRef = useRef(null);
   const generationRef = useRef(0);
   const previousStorageIdRef = useRef(null);
   const currentListingRef = useRef(null);
   const loadFirstPageRef = useRef(null);
   const operationControllersRef = useRef(new Map());
+  const trashControllerRef = useRef(null);
+  const trashGenerationRef = useRef(0);
+  const trashStateRef = useRef(trashState);
+  trashStateRef.current = trashState;
   const cacheRef = useRef(null);
   if (!cacheRef.current) cacheRef.current = new RemoteFilesCache();
   const previousCacheScopeRef = useRef({ storageId: null, userEmail: null, authStatus: null });
@@ -104,7 +124,7 @@ export default function useRemoteFilesState() {
       ? { ...EMPTY_BROWSER_STATE, storageId, folderId, items: cachedListing.items,
         nextCursor: cachedListing.nextCursor, status: cachedListing.items.length ? 'ready' : 'empty' }
       : EMPTY_BROWSER_STATE, [browserState, storageId, folderId, cachedListing]);
-  currentListingRef.current = { storageId, folderId, isFilesRoute };
+  currentListingRef.current = { storageId, folderId, isFilesRoute, breadcrumbs };
 
   useLayoutEffect(() => {
     const timing = listingTimingRef.current;
@@ -124,7 +144,7 @@ export default function useRemoteFilesState() {
     const nextUserEmail = authStatus === 'authenticated' ? user?.email ?? null : null;
     if (previous.authStatus !== null && (authStatus !== 'authenticated'
       || previous.userEmail !== nextUserEmail
-      || (previous.storageId && storageId && previous.storageId !== storageId))) {
+      || previous.storageId !== storageId)) {
       cacheRef.current.clear();
       setBrowserState(EMPTY_BROWSER_STATE);
     }
@@ -133,6 +153,7 @@ export default function useRemoteFilesState() {
 
   useEffect(() => () => {
     if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current);
+    trashControllerRef.current?.abort();
     previewCoordinatorRef.current.cancel();
     if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
     cacheRef.current.clear();
@@ -362,6 +383,102 @@ export default function useRemoteFilesState() {
     && canUseStorageCapability(capabilities, activeStorage, name),
   ), [storageStatus, activeStorage, capabilities]);
 
+  const canAccessTrash = Boolean(
+    canUseCapability('trash') || canUseCapability('restore') || canUseCapability('permanentDelete')
+    || activeStorage?.readOnly || capabilities?.readOnly,
+  );
+
+  const loadTrashPage = useCallback(async ({ cursor = null, append = false } = {}) => {
+    if (!storageId || storageStatus !== 'ready' || !canAccessTrash) return { error: 'CAPABILITY_UNAVAILABLE' };
+    if (append && (!trashStateRef.current.nextCursor || trashStateRef.current.paginationStatus === 'loading')) return { error: 'INVALID_INPUT' };
+
+    trashControllerRef.current?.abort();
+    const controller = new AbortController();
+    trashControllerRef.current = controller;
+    const generation = ++trashGenerationRef.current;
+    const isCurrent = () => !controller.signal.aborted && generation === trashGenerationRef.current;
+
+    if (append) {
+      setTrashState((current) => current.storageId === storageId
+        ? { ...current, paginationStatus: 'loading', paginationError: null }
+        : current);
+    } else {
+      setTrashState((current) => current.storageId === storageId
+        ? { ...current, status: current.items.length ? 'refreshing' : 'loading', error: null, paginationError: null }
+        : { ...EMPTY_TRASH_STATE, storageId, status: 'loading' });
+    }
+
+    try {
+      const page = await listStorageTrash(storageId, { cursor, limit: 50, signal: controller.signal });
+      if (!isCurrent()) return { error: 'CANCELLED' };
+      setTrashState((current) => {
+        if (current.storageId !== storageId) return current;
+        const items = append ? mergeStorageObjects(current.items, page.items) : page.items;
+        return {
+          ...current,
+          items,
+          nextCursor: page.nextCursor,
+          status: items.length || page.nextCursor ? 'ready' : 'empty',
+          error: null,
+          paginationStatus: 'idle',
+          paginationError: null,
+        };
+      });
+      return { ok: true };
+    } catch (error) {
+      if (controller.signal.aborted || error?.name === 'AbortError') return { error: 'CANCELLED' };
+      if (error instanceof StorageApiError && error.status === 401) {
+        if (isCurrent()) setTrashState(EMPTY_TRASH_STATE);
+        expireSession();
+        return { error: 'UNAUTHENTICATED' };
+      }
+      if (!isCurrent()) return { error: 'CANCELLED' };
+      const message = error instanceof Error ? error.message : 'Storage is temporarily unavailable. Try again later.';
+      setTrashState((current) => current.storageId === storageId
+        ? append
+          ? { ...current, paginationStatus: 'error', paginationError: message }
+          : { ...current, status: current.items.length ? 'ready' : 'error', error: message }
+        : current);
+      return { error: error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE' };
+    } finally {
+      if (trashControllerRef.current === controller) trashControllerRef.current = null;
+    }
+  }, [storageId, storageStatus, canAccessTrash, expireSession]);
+
+  const refreshTrash = useCallback(() => loadTrashPage(), [loadTrashPage]);
+
+  const loadMoreTrash = useCallback(() => {
+    const current = trashStateRef.current;
+    if (current.storageId !== storageId || !current.nextCursor || current.paginationStatus === 'loading') return Promise.resolve({ error: 'INVALID_INPUT' });
+    return loadTrashPage({ cursor: current.nextCursor, append: true });
+  }, [storageId, loadTrashPage]);
+
+  useEffect(() => {
+    if (location.pathname !== '/trash') {
+      trashControllerRef.current?.abort();
+      trashGenerationRef.current += 1;
+      setTrashState(EMPTY_TRASH_STATE);
+      return undefined;
+    }
+    if (storageStatus !== 'ready' || !storageId) {
+      trashControllerRef.current?.abort();
+      trashGenerationRef.current += 1;
+      setTrashState(EMPTY_TRASH_STATE);
+      return undefined;
+    }
+    if (!canAccessTrash) {
+      trashControllerRef.current?.abort();
+      trashGenerationRef.current += 1;
+      setTrashState({ ...EMPTY_TRASH_STATE, storageId, status: 'unsupported' });
+      return undefined;
+    }
+    void refreshTrash();
+    return () => {
+      trashControllerRef.current?.abort();
+      trashGenerationRef.current += 1;
+    };
+  }, [location.pathname, storageStatus, storageId, canAccessTrash, refreshTrash]);
+
   const uploadFiles = useCallback((files) => {
     if (!canUseCapability('upload')) {
       setOperationFeedback({ type: 'error', message: 'Uploads are unavailable for this storage.' });
@@ -375,7 +492,7 @@ export default function useRemoteFilesState() {
     });
   }, [canUseCapability, addFiles, storageId, folderId, capabilities]);
 
-  const runObjectOperation = useCallback(async ({ file, capability, affectedFolders, successMessage, run, onResult }) => {
+  const runObjectOperation = useCallback(async ({ file, capability, affectedFolders, successMessage, operation, run, onResult }) => {
     if (!canUseCapability(capability)) return { error: 'FORBIDDEN' };
     if (operationControllersRef.current.has(file.objectId)) return { error: 'IN_PROGRESS' };
     const controller = new AbortController();
@@ -399,7 +516,7 @@ export default function useRemoteFilesState() {
       if (controller.signal.aborted || error?.name === 'AbortError') return { error: 'CANCELLED' };
       if (error instanceof StorageApiError && error.status === 401) expireSession();
       const code = error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE';
-      setOperationFeedback({ type: 'error', message: operationErrorMessage(code) });
+      setOperationFeedback({ type: 'error', message: operationErrorMessage(code, operation) });
       return { error: code };
     } finally {
       if (operationControllersRef.current.get(file.objectId) === controller) {
@@ -458,6 +575,70 @@ export default function useRemoteFilesState() {
     run: (signal) => startStorageObjectDownload(storageId, file.objectId, { signal }),
   }), [runObjectOperation, storageId]);
 
+  const trashObject = useCallback((file) => runObjectOperation({
+    file,
+    capability: 'trash',
+    operation: 'trash',
+    affectedFolders: [file.parentId ?? null],
+    successMessage: 'Moved to Trash.',
+    run: (signal) => trashStorageObject(storageId, file.objectId, { signal }),
+    onResult: () => {
+      cacheRef.current.removeObjectMetadata(storageId, file.objectId, { includeDescendants: file.type === 'folder' });
+      setTrashState((current) => current.storageId === storageId
+        ? { ...EMPTY_TRASH_STATE, storageId }
+        : current);
+      if (preview?.file?.objectId === file.objectId) closePreview();
+      if (file.type === 'folder') {
+        const current = currentListingRef.current;
+        const currentBreadcrumbs = current?.storageId === storageId ? current.breadcrumbs ?? [] : [];
+        const ancestorIndex = current?.isFilesRoute
+          ? currentBreadcrumbs.findIndex((item) => item.objectId === file.objectId)
+          : -1;
+        if (ancestorIndex >= 0) {
+          const safeBreadcrumbs = currentBreadcrumbs.slice(0, ancestorIndex);
+          const parentId = safeBreadcrumbs.at(-1)?.objectId ?? null;
+          const message = 'This folder is now in Trash. Showing its nearest available parent.';
+          setNotice(message);
+          setSearchParams(parentId ? { folder: parentId } : {}, {
+            replace: true,
+            state: routeStateFor(storageId, safeBreadcrumbs, message),
+          });
+        }
+      }
+    },
+  }), [runObjectOperation, storageId, preview, closePreview, setSearchParams]);
+
+  const restoreTrashObject = useCallback((file) => runObjectOperation({
+    file,
+    capability: 'restore',
+    operation: 'restore',
+    affectedFolders: [],
+    successMessage: 'Restored successfully.',
+    run: (signal) => restoreStorageObject(storageId, file.objectId, { signal }),
+    onResult: (object) => {
+      cacheRef.current.invalidate(storageId, object.parentId);
+      cacheRef.current.rememberObjects(storageId, [object]);
+      setTrashState((current) => current.storageId === storageId
+          ? { ...current, items: current.items.filter((item) => item.objectId !== file.objectId), status: current.items.length > 1 || current.nextCursor ? 'ready' : 'empty' }
+        : current);
+    },
+  }), [runObjectOperation, storageId]);
+
+  const permanentlyDeleteTrashObject = useCallback((file) => runObjectOperation({
+    file,
+    capability: 'permanentDelete',
+    operation: 'permanentDelete',
+    affectedFolders: [],
+    successMessage: 'Permanently deleted.',
+    run: (signal) => permanentlyDeleteStorageObject(storageId, file.objectId, { signal }),
+    onResult: () => {
+      cacheRef.current.removeObjectMetadata(storageId, file.objectId, { includeDescendants: file.type === 'folder' });
+      setTrashState((current) => current.storageId === storageId
+          ? { ...current, items: current.items.filter((item) => item.objectId !== file.objectId), status: current.items.length > 1 || current.nextCursor ? 'ready' : 'empty' }
+        : current);
+    },
+  }), [runObjectOperation, storageId]);
+
   const operationStorageRef = useRef(storageId);
   const operationAuthRef = useRef({ authStatus, userEmail: user?.email ?? null });
   useEffect(() => {
@@ -465,6 +646,9 @@ export default function useRemoteFilesState() {
     const userEmail = user?.email ?? null;
     if (previousAuth.authStatus === 'authenticated'
       && (authStatus !== 'authenticated' || previousAuth.userEmail !== userEmail)) {
+      trashControllerRef.current?.abort();
+      trashGenerationRef.current += 1;
+      setTrashState(EMPTY_TRASH_STATE);
       cancelAllUploads();
       createControllerRef.current?.abort();
       generationRef.current += 1;
@@ -474,7 +658,10 @@ export default function useRemoteFilesState() {
       closePreview();
     }
     operationAuthRef.current = { authStatus, userEmail };
-    if (operationStorageRef.current && storageId && operationStorageRef.current !== storageId) {
+    if (operationStorageRef.current !== storageId && operationStorageRef.current !== null) {
+      trashControllerRef.current?.abort();
+      trashGenerationRef.current += 1;
+      setTrashState(EMPTY_TRASH_STATE);
       cancelAllUploads();
       cacheRef.current.clear();
       closePreview();
@@ -612,6 +799,10 @@ export default function useRemoteFilesState() {
     canCreateFolder: canUseCapability('createFolder'),
     canUpload: canUseCapability('upload'),
     canDownload: canUseCapability('download'),
+    canTrash: canUseCapability('trash'),
+    canRestore: canUseCapability('restore'),
+    canPermanentDelete: canUseCapability('permanentDelete'),
+    readOnly: Boolean(activeStorage?.readOnly || capabilities?.readOnly),
     preview,
     canPreviewFile: (file) => Boolean(canUseCapability('download') && getStoragePreviewSpec(file)),
     openPreview,
@@ -620,6 +811,16 @@ export default function useRemoteFilesState() {
     canRename: canUseCapability('rename'),
     canMove: canUseCapability('move'),
     canCopy: canUseCapability('copy'),
+    trashItems: trashState.storageId === storageId ? trashState.items : [],
+    trashNextCursor: trashState.storageId === storageId ? trashState.nextCursor : null,
+    trashStatus: storageStatus === 'loading' ? 'loading'
+      : storageStatus === 'empty' ? 'no-storage'
+        : storageStatus === 'unavailable' ? 'unavailable'
+          : !canAccessTrash ? 'unsupported'
+            : trashState.storageId === storageId && trashState.status !== 'idle' ? trashState.status : 'loading',
+    trashError: trashState.storageId === storageId ? trashState.error : null,
+    trashPaginationStatus: trashState.storageId === storageId ? trashState.paginationStatus : 'idle',
+    trashPaginationError: trashState.storageId === storageId ? trashState.paginationError : null,
     isCreatingFolder,
     mutatingIds,
     operationFeedback,
@@ -632,18 +833,23 @@ export default function useRemoteFilesState() {
     moveObject,
     copyObject,
     downloadObject,
+    trashObject,
+    restoreTrashObject,
+    permanentlyDeleteTrashObject,
+    refreshTrash,
+    loadMoreTrash,
     openFolder,
     navigateToBreadcrumb,
     navigateRoot,
     refreshCurrentFolder,
     loadMore,
     createFolder,
-  }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice,
+  }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice, activeStorage, capabilities,
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
     operationFeedback, uploadQueue, uploadFiles, cancelUpload, retryUpload, clearFinishedUploads,
-    renameObject, moveObject, copyObject, downloadObject,
+    renameObject, moveObject, copyObject, downloadObject, trashObject, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
-    preview, openPreview, closePreview]);
+    preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash]);
 
   return value;
 }

@@ -8,21 +8,21 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/App.jsx` defines routes; `src/layouts/AppLayout.jsx` keeps a shared `AppShell` around the route outlet.
 - `src/components/layout/` contains responsive navigation, header, and app shell. `src/components/files/` contains file browser UI. `src/hooks/` owns reusable state. `src/services/` is the intended location for domain API clients as integrations are added.
 - `src/index.css` owns design tokens and Liquid Glass primitives. Base UI/shadcn wrappers live in `src/components/ui/`.
-- `src/data/files.js` is demo data for Dashboard and other workspace views. `FilesProvider` keeps demo file state, favorites, recents, and Trash in memory across routes; these demo changes reset when the tab is refreshed. Phase 9.2 File Browser listing/navigation/folder creation and Phase 9.3 upload/download/rename/move/copy use logical object metadata through the authenticated Nexora Storage API.
+- `src/data/files.js` is demo data for Dashboard, Favorites, Recent and Shared views; those changes reset when the tab is refreshed. Phase 9.2 File Browser listing/navigation/folder creation, Phase 9.3 upload/download/rename/move/copy, and Phase 9.4 Trash/restore/permanent delete use logical object metadata through the authenticated Nexora Storage API.
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
-- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory metadata-only listing cache; Phase 9.3.2 adds on-demand safe inline preview through the authenticated download path and fixes exact-ancestor breadcrumb navigation. Dashboard, Recent, Favorites, Shared, Trash and their fixtures remain demo-only.
+- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory metadata-only listing cache; Phase 9.3.2 adds on-demand safe inline preview through the authenticated download path and fixes exact-ancestor breadcrumb navigation; Phase 9.4 connects Move to Trash, Trash listing, restore, and permanent delete. Dashboard, Recent, Favorites, and Shared remain demo-only.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
 
 - `src/App.jsx`, `src/layouts/`: routing and persistent shared shell.
 - `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: same-origin auth requests, session bootstrap, login/logout, and public user state.
-- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated same-origin storage mount discovery, public capabilities, optional usage, object listing/pagination and folder creation.
+- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated same-origin storage mount discovery, public capabilities, optional usage, object listing/pagination, folder creation, and Trash lifecycle requests.
 - `src/components/auth/`, `src/pages/Login.jsx`: loading/error gates, protected-route handling, and sign-in page.
 - `src/context/FilesProvider.jsx`, `src/context/files-context.js`: in-memory demo state plus remote File Browser state context.
-- `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, and Settings route views.
+- `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, connected Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
 - `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`, `src/utils/remote-files-cache.js`: remote File Browser list/navigation/create-folder UI, bounded session cache and isolated demo domain state for other workspace views.
 - `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, and value-free capability/Copy-upstream diagnostics with manual trusted-origin redirect policy.
@@ -46,6 +46,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/PHASE_9_3.md`: real file operations, current Copy production incident, safe diagnostics, validation, and deployment smoke checklist.
 - `docs/PHASE_9_3_1.md`: source-derived listing latency path, in-memory cache policy, invalidation, tests, and browser/production QA checklist.
 - `docs/PHASE_9_3_2.md`: exact breadcrumb navigation, safe on-demand inline preview, size/MIME policy, request lifecycle, and validation boundary.
+- `docs/PHASE_9_4.md`: connected Trash lifecycle, capability checks, cache invalidation, safe confirmation, local validation, and production QA checklist.
 - `docs/PHASE_9_2.md`: real File Browser listing, folder navigation, create-folder scope, local validation, QA and production boundary.
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
 - `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: Shared Storage implementation in the separate IssueDesk checkout. The historical S2 report predates the Phase 9.1 brief's operator-reported production deployment; Nexora must not infer live state from source docs.
@@ -85,16 +86,17 @@ Check this map against actual files when changing the architecture; update READM
 ## File Browser behavior
 
 - Fixture IDs and object URLs are not stable server file IDs. File Browser uses only public logical object IDs returned by Nexora APIs; never accept a provider project ID or physical reference from the browser.
-- `FilesProvider` demo state backs Dashboard, Recent, Favorites, Shared and Trash. The File Browser has separate remote listing/navigation state; do not make those demo mutations appear to update the connected mount.
-- The connected File Browser upload queue sends bytes through the Nexora API with at most two concurrent uploads; do not invent byte progress. Download remains streamed through the same-origin API. Rename/move retain IDs and copy creates new IDs. Preview, delete/Trash, restore, and permanent delete are not connected to the mount.
+- `FilesProvider` demo state backs Dashboard, Recent, Favorites, and Shared. Connected Trash has separate mount-scoped remote state; do not make demo mutations appear to update the connected mount.
+- The connected File Browser upload queue sends bytes through the Nexora API with at most two concurrent uploads; do not invent byte progress. Download remains streamed through the same-origin API. Rename/move retain IDs and copy creates new IDs. Preview is on-demand through the authenticated inline route. Normal Delete means Move to Trash; restore and permanent delete use separate Trash-only actions.
 - Folder navigation uses the `folder` query parameter on `/files`; validate logical IDs and breadcrumb history state, and safely return to root for unverified or deleted folders.
 - Keep folder navigation and breadcrumbs consistent. Use backend cursors and merge pages by logical object ID; root requests omit `parentId`. Search/sort apply only to loaded items and use normalized fields (name, `modifiedAt`, `sizeBytes`), never display strings such as `"2.4 MB"` as numeric sizes.
 - Preserve selection across supported view changes; clear or reconcile it on storage/folder changes and filtering where appropriate.
 - Revoke object URLs and release upload references when previews or local queue items are removed.
-- Trash restore/permanent delete in the workspace remain local demo operations; label them clearly and confirm permanent deletion. Connected File Browser delete/Trash is not implemented.
+- Trash listing and lifecycle operations are mount-scoped and capability-gated. Server mutations also check mount ownership, capability, and read-only policy. Permanent Delete is available only from Trash and requires an explicit irreversible confirmation.
 - Shared entries are illustrative fixture metadata. Do not claim that Nexora creates shares, permissions, or access links until a reviewed server API exists.
 - Storage status comes from the authenticated Nexora storage API; usage/capacity must say unavailable or not reported unless authoritative metrics are returned. Never present fixture totals as live provider usage.
 - File Browser listing cache is session-scoped in memory, keyed by storage plus logical parent (with an explicit root identity), bounded to 60 folders, and stale after 20 seconds. Keep request dedupe cursor-specific, clear on auth/storage scope changes, and selectively invalidate affected parents after mutations. Never cache bytes or provider internals.
+- Trash uses a separate cursor-paginated in-memory collection, deduplicated by logical object ID. Move to Trash invalidates its source folder and removes cached subtree metadata/listings; restore removes the Trash row and invalidates only the response's authoritative parent; permanent delete removes the Trash row and safe subtree metadata. Do not clear unrelated folder listings.
 - Connected File Browser preview is an app-level feature backed by the authenticated `download` capability; it does not assert provider `preview` support. Only allowlisted image/PDF/text content may preview, text is capped at 1 MiB, and preview bytes are fetched only after the user selects Preview. Listing cache remains metadata-only. Demo entries still have no source bytes.
 
 ## Dependencies and commands

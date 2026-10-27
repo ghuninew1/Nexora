@@ -9,17 +9,12 @@ export function useDemoFiles() {
     createFolder: createFolderData,
     addUploadedFile,
     rename: renameData,
-    trash,
-    restore,
-    permanentlyDelete,
     favorites,
     recent,
     toggleFavorite,
     recordAccess,
   } = useFilesData();
-  const activeFiles = useMemo(() => allFiles.filter((file) => !file.trashedAt), [allFiles]);
-  const trashFiles = useMemo(() => allFiles.filter((file) => file.trashedAt), [allFiles]);
-  const files = activeFiles;
+  const files = allFiles;
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedFolderId = searchParams.get("folder");
   const currentFolderId = files.some((file) => file.id === requestedFolderId && file.type === "folder")
@@ -90,16 +85,10 @@ export function useDemoFiles() {
     renameData(id, trimmed);
     return true;
   }, [renameData, files]);
-  const remove = useCallback((ids) => {
-    trash(ids);
-    setSelection((current) => ({ ...current, ids: current.ids.filter((id) => !ids.includes(id)) }));
-    if (ids.includes(currentFolderId)) navigateFolder(null);
-  }, [trash, currentFolderId, navigateFolder]);
+  const recentFiles = useMemo(() => recent.map((entry) => ({ ...files.find((file) => file.id === entry.id), accessedAt: entry.accessedAt })).filter((file) => file.id), [recent, files]);
+  const favoriteFiles = useMemo(() => files.filter((file) => favorites.includes(file.id)), [files, favorites]);
 
-  const recentFiles = useMemo(() => recent.map((entry) => ({ ...activeFiles.find((file) => file.id === entry.id), accessedAt: entry.accessedAt })).filter((file) => file.id), [recent, activeFiles]);
-  const favoriteFiles = useMemo(() => activeFiles.filter((file) => favorites.includes(file.id)), [activeFiles, favorites]);
-
-  return { files, allFiles, trashFiles, currentFolderId, currentFiles, breadcrumbs, selectedIds, query, setQuery, sortBy, setSortBy, sortDirection, setSortDirection, view, setView, favorites, favoriteFiles, recent, recentFiles, toggleFavorite, recordAccess, restore, permanentlyDelete, navigateFolder, toggleSelect, selectAll, createFolder, addUploadedFile, rename, remove, clearSelection: () => setSelection({ folderId: currentFolderId, ids: [] }) };
+  return { files, currentFolderId, currentFiles, breadcrumbs, selectedIds, query, setQuery, sortBy, setSortBy, sortDirection, setSortDirection, view, setView, favorites, favoriteFiles, recent, recentFiles, toggleFavorite, recordAccess, navigateFolder, toggleSelect, selectAll, createFolder, addUploadedFile, rename, clearSelection: () => setSelection({ folderId: currentFolderId, ids: [] }) };
 }
 
 function formatBytes(bytes) {

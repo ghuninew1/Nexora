@@ -5,7 +5,7 @@ const SAFE_MESSAGES = {
   UNAUTHENTICATED: 'Your session has expired. Sign in again to continue.',
   FORBIDDEN: 'You do not have access to this storage.',
   NOT_FOUND: 'This storage is no longer available.',
-  NAME_CONFLICT: 'A folder with that name already exists here.',
+  NAME_CONFLICT: 'An item with this name already exists.',
   INVALID_INPUT: 'Check the folder name and try again.',
   UPLOAD_TOO_LARGE: 'This file is too large for the connected storage.',
   CAPABILITY_UNAVAILABLE: 'This operation is unavailable for this storage.',
@@ -166,6 +166,10 @@ export function normalizeStorageObject(value) {
   };
 }
 
+function normalizeTrashObject(value) {
+  return { ...normalizeStorageObject(value), deletedAt: typeof value.deletedAt === 'string' ? value.deletedAt : null };
+}
+
 export function mergeStorageObjects(current, incoming) {
   const byId = new Map(current.map((item) => [item.objectId, item]));
   incoming.forEach((item) => byId.set(item.objectId, item));
@@ -185,6 +189,17 @@ export async function listStorageObjects(storageId, { parentId = null, cursor = 
     items: data.items.map(normalizeStorageObject),
     nextCursor: data.nextCursor,
   };
+}
+
+export async function listStorageTrash(storageId, { cursor = null, limit = 50, ...options } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new StorageApiError('INVALID_INPUT', 400);
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor !== null) query.set('cursor', cursor);
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/trash?${query}`, options);
+  if (!Array.isArray(data.items) || (data.nextCursor !== null && typeof data.nextCursor !== 'string')) {
+    throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  }
+  return { items: data.items.map(normalizeTrashObject), nextCursor: data.nextCursor };
 }
 
 export async function createStorageFolder(storageId, { name, parentId = null }, options = {}) {
@@ -256,6 +271,36 @@ export async function copyStorageObject(storageId, objectId, parentId, options =
   const object = normalizeStorageObject(data.object);
   if (object.objectId === objectId) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
   return { object, operationId: typeof data.operationId === 'string' ? data.operationId : null };
+}
+
+export async function trashStorageObject(storageId, objectId, options = {}) {
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}`, {
+    ...options,
+    method: 'DELETE',
+  });
+  const object = normalizeStorageObject(data.object);
+  if (object.objectId !== objectId) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return object;
+}
+
+export async function restoreStorageObject(storageId, objectId, options = {}) {
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/trash/${encodeURIComponent(objectId)}/restore`, {
+    ...options,
+    method: 'POST',
+    body: {},
+  });
+  const object = normalizeStorageObject(data.object);
+  if (object.objectId !== objectId) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return object;
+}
+
+export async function permanentlyDeleteStorageObject(storageId, objectId, options = {}) {
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/trash/${encodeURIComponent(objectId)}/permanent`, {
+    ...options,
+    method: 'DELETE',
+  });
+  if (data.deleted !== true) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return { deleted: true, operationId: typeof data.operationId === 'string' ? data.operationId : null };
 }
 
 export function storageObjectDownloadUrl(storageId, objectId) {

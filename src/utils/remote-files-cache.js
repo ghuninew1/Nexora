@@ -89,6 +89,39 @@ export class RemoteFilesCache {
     while (values.size > MAX_OBJECT_METADATA_ENTRIES) values.delete(values.keys().next().value);
   }
 
+  removeObjectMetadata(storageId, objectId, { includeDescendants = false } = {}) {
+    const values = this.metadata.get(storageId);
+    const removedIds = new Set([objectId]);
+    if (includeDescendants && values) {
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const [candidateId, metadata] of values) {
+          if (!removedIds.has(candidateId) && removedIds.has(metadata.parentId)) {
+            removedIds.add(candidateId);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    for (const id of removedIds) this.entries.delete(folderKey(storageId, id));
+    for (const [key, request] of this.inFlight) {
+      try {
+        const [requestStorageId, parentId] = JSON.parse(key);
+        if (requestStorageId === storageId && removedIds.has(parentId)) {
+          request.controller.abort();
+          this.inFlight.delete(key);
+        }
+      } catch { /* only keys created by this cache are present */ }
+    }
+    if (values) {
+      for (const id of removedIds) values.delete(id);
+      if (values.size === 0) this.metadata.delete(storageId);
+    }
+    return removedIds;
+  }
+
   getBreadcrumbs(storageId, folderId, root) {
     const values = this.metadata.get(storageId);
     if (!values) return null;
