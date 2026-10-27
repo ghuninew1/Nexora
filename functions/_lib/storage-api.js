@@ -53,6 +53,11 @@ async function callJson(client, request, mount, path, options = {}) {
   return upstreamPayload(payload);
 }
 
+async function requireCapability(client, request, mount, capability) {
+  const payload = await callJson(client, request, mount, '/capabilities');
+  if (payload?.capabilities?.[capability] !== true) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
+}
+
 async function recordRecent(db, user, mount, objectId, now = Date.now()) {
   const existing = await db.prepare('SELECT accessed_at FROM recent_access WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?')
     .bind(user.id, mount.id, objectId).first();
@@ -181,6 +186,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const name = validateName(body.name);
     const parentId = body.parentId ?? null;
     if (parentId !== null) requireObjectId(parentId);
+    await requireCapability(client, request, writable, 'createFolder');
     const payload = await callJson(client, request, writable, '/objects/folders', { method: 'POST', body: JSON.stringify({ name, parentId }), contentType: 'application/json' });
     const object = normalizeObject(payload?.object);
     if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
@@ -194,6 +200,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const safeMaximum = Number.isSafeInteger(maxUploadBytes) && maxUploadBytes > 0 ? Math.min(maxUploadBytes, MAX_UPLOAD_BYTES) : MAX_UPLOAD_BYTES;
     const contentLength = Number(request.headers.get('Content-Length'));
     if (Number.isFinite(contentLength) && contentLength > safeMaximum + MAX_MULTIPART_OVERHEAD) throw new ApiError('UPLOAD_TOO_LARGE', 413);
+    await requireCapability(client, request, writable, 'upload');
     const payload = await callJson(client, request, writable, '/files', { method: 'POST', body: limitStream(request.body, safeMaximum + MAX_MULTIPART_OVERHEAD), contentType });
     const object = normalizeObject(payload?.object);
     if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
@@ -201,6 +208,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
   }
   if (route === 'files' && restTail.length === 2 && restTail[1] === 'download' && method === 'GET') {
     const objectId = requireObjectId(restTail[0]);
+    await requireCapability(client, request, mount, 'download');
     const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download` });
     if (!result.response.ok) {
       const payload = await readBoundedJson(result.response);
@@ -218,12 +226,14 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     if (suffix.length === 0 && method === 'PATCH') {
       const body = await readJson(request);
       const name = validateName(body.name);
+      await requireCapability(client, request, writable, 'rename');
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}`, { method: 'PATCH', body: JSON.stringify({ name }), contentType: 'application/json' });
       const object = normalizeObject(payload?.object);
       if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
       return json({ object });
     }
     if (suffix[0] === 'download' && suffix.length === 1 && method === 'GET') {
+      await requireCapability(client, request, mount, 'download');
       const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download` });
       if (!result.response.ok) {
         const payload = await readBoundedJson(result.response);
@@ -239,6 +249,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       if (body.targetStorageId !== undefined && body.targetStorageId !== mount.id) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
       if (!Object.hasOwn(body, 'parentId') || (body.parentId !== null && typeof body.parentId !== 'string')) throw new ApiError('INVALID_INPUT', 400);
       if (body.parentId) requireObjectId(body.parentId);
+      await requireCapability(client, request, writable, 'move');
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}/move`, { method: 'POST', body: JSON.stringify({ parentId: body.parentId }), contentType: 'application/json' });
       const object = normalizeObject(payload?.object);
       if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
@@ -249,6 +260,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       if (body.targetStorageId !== undefined && body.targetStorageId !== mount.id) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
       const parentId = body.parentId ?? null;
       if (parentId !== null) requireObjectId(parentId);
+      await requireCapability(client, request, writable, 'copy');
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}/copy`, { method: 'POST', body: JSON.stringify({ parentId }), contentType: 'application/json' });
       const object = normalizeObject(payload?.object);
       if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);

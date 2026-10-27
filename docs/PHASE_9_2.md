@@ -1,6 +1,6 @@
 # Nexora — Phase 9.2: Real File Listing + Folder Navigation
 
-สถานะ: implementation พร้อม local validation; production smoke test ถูกบล็อกด้วย `PROVIDER_UNAVAILABLE` จาก capabilities endpoint. เพิ่ม safe server-side diagnostics สำหรับ request ถัดไปแล้ว แต่ยังไม่ได้ deploy diagnostics หรือพิสูจน์ production root cause. Phase 9.3 ยังไม่เริ่ม.
+สถานะ: implementation และ production smoke test ผ่านตามที่ผู้ใช้ยืนยันหลัง deploy การแก้ `redirect: 'manual'`; Nexora ได้รับ capabilities จาก Shared Storage แล้ว. Phase 9.3 แยกเป็นงานถัดไป.
 
 ## ขอบเขตที่ทำ
 

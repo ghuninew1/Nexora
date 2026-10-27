@@ -7,6 +7,7 @@ const messages = {
   CAPABILITY_UNAVAILABLE: 'This operation is unavailable for this storage.',
   QUOTA_EXCEEDED: 'The storage quota has been reached.',
   UPLOAD_TOO_LARGE: 'The upload exceeds the configured limit.',
+  OPERATION_TOO_LARGE: 'This operation exceeds the supported synchronous size.',
   PROVIDER_UNAVAILABLE: 'Storage is temporarily unavailable.',
   TRANSFER_INCOMPLETE: 'The storage transfer did not complete.',
   RATE_LIMITED: 'Too many attempts. Try again later.',
@@ -38,7 +39,7 @@ export function fail(code, status) {
 
 export function statusFor(code) {
   return ({ UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, INVALID_INPUT: 400, NAME_CONFLICT: 409,
-    CAPABILITY_UNAVAILABLE: 422, QUOTA_EXCEEDED: 429, UPLOAD_TOO_LARGE: 413, PROVIDER_UNAVAILABLE: 503,
+    CAPABILITY_UNAVAILABLE: 422, QUOTA_EXCEEDED: 429, UPLOAD_TOO_LARGE: 413, OPERATION_TOO_LARGE: 413, PROVIDER_UNAVAILABLE: 503,
     TRANSFER_INCOMPLETE: 502, RATE_LIMITED: 429, INTERNAL_ERROR: 500 })[code] || 500;
 }
 
@@ -94,9 +95,8 @@ export function decodePath(pathname) {
 }
 
 export function normalizeUpstreamError(payload, status) {
-  const allowed = new Set(['NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT', 'CAPABILITY_UNAVAILABLE', 'UPLOAD_TOO_LARGE', 'QUOTA_EXCEEDED', 'TRANSFER_INCOMPLETE']);
+  const allowed = new Set(['NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT', 'CAPABILITY_UNAVAILABLE', 'UPLOAD_TOO_LARGE', 'OPERATION_TOO_LARGE', 'QUOTA_EXCEEDED', 'TRANSFER_INCOMPLETE']);
   const code = payload?.error?.code;
-  if (code === 'OPERATION_TOO_LARGE') return 'CAPABILITY_UNAVAILABLE';
   if (allowed.has(code)) return code;
   if (status === 404) return 'NOT_FOUND';
   if (status === 413) return 'UPLOAD_TOO_LARGE';

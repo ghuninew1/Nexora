@@ -1,13 +1,17 @@
-import { File, FileCode2, FileText, Folder, MoreHorizontal, Download, Eye, Pencil, Star, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Copy, File, FileCode2, FileText, Folder, MoreHorizontal, Download, Eye, Pencil, Star, Trash2 } from "lucide-react";
 import { cx } from "../../utils/cx";
 import { Button } from "../ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 
 const fileIcons = { md: FileCode2, pdf: FileText };
 
-function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false }) {
+function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onRename, onDownload, onMove, onCopy }) {
   const Icon = file.type === "folder" ? Folder : fileIcons[file.extension] ?? File;
   const isFolder = file.type === "folder";
+  const canRename = Boolean(capabilities.rename && !readOnly && !busy);
+  const canMove = Boolean(capabilities.move && !readOnly && !busy);
+  const canCopy = Boolean(capabilities.copy && !readOnly && !busy);
+  const canDownload = Boolean(!isFolder && capabilities.download && !busy);
   const handleOpen = () => {
     if (isFolder) onOpenFolder(file.id);
   };
@@ -34,7 +38,7 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
         >
           <Star className={cx(favorite && "fill-amber-400 text-amber-500")} aria-hidden="true" />
         </Button>}
-        <button type="button" onClick={handleOpen} disabled={!isFolder} aria-label={isFolder ? `Open folder ${file.name}` : `${file.name}; file actions are not available yet`} className={cx("flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default", view === "grid" && "min-h-16")}>
+        <button type="button" onClick={handleOpen} disabled={!isFolder} aria-label={isFolder ? `Open folder ${file.name}` : file.name} className={cx("flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default", view === "grid" && "min-h-16")}>
           <span className={cx("flex size-10 shrink-0 items-center justify-center rounded-xl", isFolder ? "bg-amber-500/10 text-amber-600" : "bg-primary/10 text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
           <span className={cx("min-w-0 flex-1")}>
             <span className={cx("block truncate text-sm font-medium text-foreground")}>{file.name}</span>
@@ -48,9 +52,11 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
         <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={cx(view === "grid" ? "absolute right-2 top-2" : "absolute right-2 top-2 sm:static")} aria-label={`Actions for ${file.name}`}><MoreHorizontal /></Button>} />
         <DropdownMenuContent align="end" className={cx("w-auto")}>
           {!isFolder && <DropdownMenuItem disabled><Eye />Preview</DropdownMenuItem>}
-          {!isFolder && <DropdownMenuItem disabled><Download />Download</DropdownMenuItem>}
+          {!isFolder && <DropdownMenuItem disabled={!canDownload} onClick={() => onDownload?.(file)}><Download />Download</DropdownMenuItem>}
           {allowFavorites && <DropdownMenuItem onClick={() => onToggleFavorite(file.id)}><Star />{favorite ? "Remove favorites" : "Add favorites"}</DropdownMenuItem>}
-          <DropdownMenuItem disabled><Pencil />Rename</DropdownMenuItem>
+          <DropdownMenuItem disabled={!canRename} onClick={() => onRename?.(file)}><Pencil />Rename</DropdownMenuItem>
+          <DropdownMenuItem disabled={!canMove} onClick={() => onMove?.(file)}><ArrowRightLeft />Move</DropdownMenuItem>
+          <DropdownMenuItem disabled={!canCopy} onClick={() => onCopy?.(file)}><Copy />Copy</DropdownMenuItem>
           <DropdownMenuItem disabled variant="destructive"><Trash2 />Delete</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

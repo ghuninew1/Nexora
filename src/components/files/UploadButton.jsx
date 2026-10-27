@@ -1,9 +1,9 @@
 import { useRef } from "react";
 import { Upload } from "lucide-react";
-
+import { cx } from "../../utils/cx";
 import { Button } from "../ui/button";
 
-function UploadButton({ onFilesSelected }) {
+function UploadButton({ onFilesSelected, disabled = false }) {
   const inputRef = useRef(null);
 
   function handleChange(event) {
@@ -27,6 +27,7 @@ function UploadButton({ onFilesSelected }) {
         type="button"
         variant="outline"
         onClick={handleClick}
+        disabled={disabled}
       >
         <Upload />
         Upload
@@ -36,7 +37,8 @@ function UploadButton({ onFilesSelected }) {
         ref={inputRef}
         type="file"
         multiple
-        className="hidden"
+        className={cx("hidden")}
+        disabled={disabled}
         onChange={handleChange}
       />
     </>

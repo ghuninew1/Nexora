@@ -31,3 +31,9 @@ export function appendBreadcrumb(breadcrumbs, folder) {
 export function isValidObjectId(value) {
   return typeof value === 'string' && OBJECT_ID_PATTERN.test(value);
 }
+
+export function isFolderDestinationInvalid(action, source, parentId, breadcrumbs) {
+  if (action !== 'move' || source?.type !== 'folder') return false;
+  if (parentId === source.parentId) return true;
+  return breadcrumbs.some((item) => item.objectId === source.objectId);
+}

@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-27
 
-เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.2; แยกผล local validation ออกจากสถานะ remote ที่ operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.3; แยกผล local validation ออกจากสถานะ remote ที่ operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
@@ -72,7 +72,13 @@ See [Phase 8 report](docs/PHASE_8.md), [production provisioning guide](docs/PROD
 
 `src/services/storage.js` เรียก `GET /api/storage/v1/storages/:storageId/objects` โดย root omit `parentId`; ส่ง `cursor`/`limit` สำหรับหน้าถัดไปและ normalize เฉพาะ public object fields. `POST /api/storage/v1/storages/:storageId/folders` ส่ง `{name,parentId}` และ server ตัดสิน authorization/capability/duplicate policy. `useRemoteFilesState` จัดการ abort/stale responses, storage/folder-scoped selection, breadcrumb route state, refresh, pagination และ root fallback สำหรับ unverified/404 folders. File Browser search/sort ใช้เฉพาะ loaded page set; upload/download/preview/file mutations remain unavailable.
 
-Dashboard, Recent, Favorites, Shared, Trash และ local demo operations remain separate from connected mount state. Local code does not call Shared Storage directly, send file bytes, or expose provider project references. รายละเอียด API, validation, UI QA, phase boundary และ production smoke checklist อยู่ใน [docs/PHASE_9_2.md](docs/PHASE_9_2.md). Phase 9.3 ยังไม่เริ่ม.
+Dashboard, Recent, Favorites, Shared, Trash และ local demo operations remain separate from connected mount state. ผู้ใช้ยืนยัน production smoke test ผ่านหลัง deploy fix `redirect: 'manual'`; รายงานและ trace อยู่ใน [docs/PHASE_9_2.md](docs/PHASE_9_2.md).
+
+## Phase 9.3 — Real File Operations
+
+File Browser adds capability-gated upload, streamed download, rename, move and copy through `/api/storage/v1/*`. The client sends only Nexora mount and logical object IDs; server derives the owner-scoped Shared Storage project and checks capabilities/readOnly before mutations. Upload queue runs at most two real transfers and reports state without fabricated byte progress. Rename/move retain IDs; copy returns new IDs and finishes synchronously under the Shared Storage S2 100-object limit. Folder destinations load lazily. Delete/Trash/restore/permanent delete, preview, bulk operations, SMB and Phase 9.4 are out of scope.
+
+Local validation: `pnpm lint`, `pnpm test` (68/68), `pnpm build`, and `git diff --check` passed. A `/private/tmp` mock Pages runtime was isolated from project `.dev.vars`; mock/temporary D1 provisioning succeeded, but browser sign-in returned HTTP 500, so end-to-end browser QA is not claimed. No production deployment or data changes occurred. See [docs/PHASE_9_3.md](docs/PHASE_9_3.md) for production smoke steps and QA limitations.
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -108,7 +114,7 @@ Dashboard, Recent, Favorites, Shared, Trash และ local demo operations rema
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md` และตรวจ `git status --short`; Phase 9.2 File Browser listing/navigation เสร็จใน local source. Phase ถัดไปยังต้องยึด brief และทำ acceptance/security review ก่อนเปิด operation เพิ่ม. ห้ามอนุมาน production state จาก source หรือเอกสาร
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md` และ `docs/PHASE_9_3.md`, จากนั้นตรวจ `git status --short`. Phase 9.3 source เสร็จและ local lint/test/build ผ่าน แต่ browser sign-in mock QA และ production operations ยังไม่ได้ยืนยัน. ห้ามเริ่ม Phase 9.4 หรืออนุมาน production state จาก source.
 
 ## กติกาการดูแลเอกสาร
 

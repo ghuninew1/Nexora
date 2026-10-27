@@ -502,11 +502,18 @@ test('folder create, rename, move, copy, Trash, restore, permanent delete, and o
   assert.equal(folder.status, 201);
   assert.equal((await folder.json()).data.folder.type, 'folder');
   const rename = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'PATCH', headers: jsonHeaders, body: JSON.stringify({ name: 'renamed.txt' }) });
-  assert.equal((await rename.json()).data.object.name, 'renamed.txt');
+  const renamed = (await rename.json()).data.object;
+  assert.equal(renamed.name, 'renamed.txt');
+  assert.equal(renamed.objectId, objectId);
   const move = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/move`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ parentId: 'folder_parent' }) });
-  assert.equal((await move.json()).data.object.parentId, 'folder_parent');
+  const moved = (await move.json()).data.object;
+  assert.equal(moved.parentId, 'folder_parent');
+  assert.equal(moved.objectId, objectId);
   const copied = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ parentId: null }) });
-  assert.equal((await copied.json()).data.operationId, 'operation_copy');
+  const copyPayload = (await copied.json()).data;
+  assert.equal(copyPayload.operationId, 'operation_copy');
+  assert.equal(copyPayload.object.objectId, 'object_copy');
+  assert.notEqual(copyPayload.object.objectId, objectId);
   assert.equal((await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'DELETE', headers: { Origin: origin } })).status, 200);
   assert.equal((await request(`/api/storage/v1/storages/${storageId}/trash`)).status, 200);
   const restored = await request(`/api/storage/v1/storages/${storageId}/trash/object_trashed/restore`, { method: 'POST', headers: jsonHeaders, body: '{}' });
@@ -527,10 +534,29 @@ test('normal delete and permanent delete use separate upstream routes', async ()
   assert.ok(requests.some((entry) => entry.url.endsWith(`/trash/${objectId}/permanent`) && entry.init.method === 'DELETE'));
 });
 
+test('file operations enforce Shared Storage capabilities server-side before mutation requests', async () => {
+  const calls = [];
+  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentId: null }),
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), init });
+      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: false } });
+      return Response.json({ success: true, object: object('object_copy') }, { status: 201 });
+    },
+  });
+  assert.equal(response.status, 422);
+  assert.match(await response.text(), /CAPABILITY_UNAVAILABLE/u);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].url.endsWith('/capabilities'));
+});
+
 test('upload forwards a bounded stream without materializing file bytes in Nexora', async () => {
   const boundary = 'nexora-test-boundary';
   let upstreamBody;
   const fetchImpl = async (url, init) => {
+    if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { upload: true } });
     upstreamBody = init.body;
     assert.equal(init.headers.get('Content-Type'), `multipart/form-data; boundary=${boundary}`);
     assert.ok(init.body instanceof ReadableStream);
@@ -556,7 +582,11 @@ test('chunked upload limit is enforced while streaming and malformed JSON is rej
   const body = new ReadableStream({ start(controller) { chunks.forEach((chunk) => controller.enqueue(chunk)); controller.close(); } });
   const response = await request(`/api/storage/v1/storages/${storageId}/files`, {
     method: 'POST', headers: { Origin: origin, 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body,
-    fetchImpl: async (_url, init) => { await new Response(init.body).text(); return Response.json({ success: true, object: object('never') }); },
+    fetchImpl: async (url, init) => {
+      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { upload: true } });
+      await new Response(init.body).text();
+      return Response.json({ success: true, object: object('never') });
+    },
   });
   assert.equal(response.status, 413);
   delete env.STORAGE_MAX_UPLOAD_BYTES;
@@ -624,7 +654,35 @@ test('D1 capabilities do not invent provider usage and mount read-only policy re
   sqlite.prepare('UPDATE storage_mounts SET read_only = 1 WHERE id = ?').run(storageId);
   const response = await request(`/api/storage/v1/storages/${storageId}/folders`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Denied' }) });
   assert.equal(response.status, 403);
+  let upstreamCalls = 0;
+  const deniedMutations = [
+    request(`/api/storage/v1/storages/${storageId}/files`, { method: 'POST', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'multipart/form-data; boundary=test' }, body: new ReadableStream({ start(controller) { controller.close(); } }) }),
+    request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'PATCH', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Denied' }) }),
+    request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/move`, { method: 'POST', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }) }),
+    request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, { method: 'POST', fetchImpl: async () => { upstreamCalls += 1; }, headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }) }),
+  ];
+  for (const denied of await Promise.all(deniedMutations)) assert.equal(denied.status, 403);
+  assert.equal(upstreamCalls, 0);
   sqlite.prepare('UPDATE storage_mounts SET read_only = 0 WHERE id = ?').run(storageId);
+});
+
+test('copy size errors retain their safe operation-specific meaning', async () => {
+  let calls = 0;
+  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentId: null }),
+    fetchImpl: async (url) => {
+      calls += 1;
+      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      return Response.json({ success: false, error: { code: 'OPERATION_TOO_LARGE', message: 'private tree details' } }, { status: 413 });
+    },
+  });
+  assert.equal(calls, 2);
+  assert.equal(response.status, 413);
+  const text = await response.text();
+  assert.match(text, /OPERATION_TOO_LARGE/u);
+  assert.doesNotMatch(text, /private tree details/u);
 });
 
 test('session values are cryptographically random and owner sessions can be revoked', () => {

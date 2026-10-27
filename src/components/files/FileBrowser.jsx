@@ -8,6 +8,9 @@ import FileBreadcrumbs from "./FileBreadcrumbs";
 import FileToolbar from "./FileToolbar";
 import FileList from "./FileList";
 import NewFolderDialog from "./NewFolderDialog";
+import RenameDialog from "./RenameDialog";
+import FolderDestinationDialog from "./FolderDestinationDialog";
+import UploadQueue from "./UploadQueue";
 
 function FileListLoading() {
   return <div className={cx("overflow-hidden rounded-xl border border-border bg-card")} role="status" aria-live="polite" aria-busy="true" aria-label="Loading files">
@@ -24,6 +27,8 @@ function FileBrowser() {
   const browser = useFiles();
   const navigate = useNavigate();
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [renameFile, setRenameFile] = useState(null);
+  const [destinationAction, setDestinationAction] = useState(null);
   const selectedCount = browser.selectedIds.length;
   const isLoading = browser.status === "loading";
   const isRefreshing = browser.status === "refreshing";
@@ -35,13 +40,31 @@ function FileBrowser() {
     return result;
   }
 
+  async function handleRename(file, name) {
+    const result = await browser.renameObject(file, name);
+    if (result.ok) setRenameFile(null);
+    return result;
+  }
+
+  async function handleDestination(parentId) {
+    if (!destinationAction) return { error: "INVALID_INPUT" };
+    const result = destinationAction.action === "move"
+      ? await browser.moveObject(destinationAction.file, parentId)
+      : await browser.copyObject(destinationAction.file, parentId);
+    if (result.ok) {
+      if (destinationAction.action === "move") browser.clearSelection();
+      setDestinationAction(null);
+    }
+    return result;
+  }
+
   return (
     <div className={cx("relative")}>
       <section className={cx("flex min-w-0 flex-col gap-5")}>
         <h1 className={cx("sr-only")}>My Files</h1>
         <div className={cx("flex flex-wrap items-center justify-between gap-3")}>
           <FileBreadcrumbs items={browser.breadcrumbs.map((item) => ({ id: item.objectId, label: item.label }))} onNavigate={browser.navigateToBreadcrumb} />
-          <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Nexora storage · file actions are limited in this phase</span>
+          <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Trash and preview are unavailable</span>
         </div>
         {browser.notice && <p className={cx("rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite">{browser.notice}</p>}
         <FileToolbar
@@ -49,6 +72,8 @@ function FileBrowser() {
           onNewFolder={() => setNewFolderOpen(true)}
           canCreateFolder={browser.canCreateFolder}
           isCreatingFolder={browser.isCreatingFolder}
+          canUpload={browser.canUpload}
+          onUploadFiles={browser.uploadFiles}
           onRefresh={browser.refreshCurrentFolder}
           isRefreshing={isRefreshing}
           onClearSelection={browser.clearSelection}
@@ -58,6 +83,8 @@ function FileBrowser() {
           view={browser.view} onViewChange={browser.setView}
         />
         <p className={cx("-mt-3 text-xs text-muted-foreground")}>Search and sorting apply to the items loaded in this folder.</p>
+        {browser.operationFeedback && <p className={cx("rounded-lg border px-3 py-2 text-sm", browser.operationFeedback.type === "error" ? "border-destructive/30 text-destructive" : "border-primary/30 text-foreground")} role={browser.operationFeedback.type === "error" ? "alert" : "status"} aria-live="polite">{browser.operationFeedback.message}</p>}
+        <UploadQueue items={browser.uploadQueue.items} concurrency={browser.uploadQueue.concurrency} onCancel={browser.cancelUpload} onRetry={browser.retryUpload} onClearFinished={browser.clearFinishedUploads} />
 
         {isLoading && <FileListLoading />}
         {browser.status === "unavailable" && <div className={cx("glass-surface flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between")} role="alert"><div className={cx("flex items-start gap-3")}><AlertCircle className={cx("mt-0.5 size-5 shrink-0 text-destructive")} aria-hidden="true" /><div><h2 className={cx("text-sm font-semibold")}>Storage is not ready</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>{browser.error || "No active storage is available for this account."}</p></div></div><Button variant="outline" onClick={() => navigate("/storage")}>View storage</Button></div>}
@@ -74,10 +101,14 @@ function FileBrowser() {
             onSelectAll={browser.selectAll}
             onOpenFolder={browser.openFolder}
             onPreview={() => {}}
-            onRename={() => {}}
+            onRename={setRenameFile}
             onDelete={() => {}}
-            onDownload={() => {}}
+            onDownload={(file) => void browser.downloadObject(file)}
+            onMove={(file) => setDestinationAction({ action: "move", file, key: crypto.randomUUID() })}
+            onCopy={(file) => setDestinationAction({ action: "copy", file, key: crypto.randomUUID() })}
             onToggleFavorite={() => {}}
+            capabilities={{ download: browser.canDownload, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy }}
+            mutatingIds={browser.mutatingIds}
             canCreateFolder={browser.canCreateFolder}
             onCreateFolder={() => setNewFolderOpen(true)}
           />
@@ -87,6 +118,17 @@ function FileBrowser() {
         </>}
       </section>
       <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} onCreate={handleCreateFolder} />
+      <RenameDialog open={Boolean(renameFile)} onOpenChange={(open) => { if (!open) setRenameFile(null); }} file={renameFile} onRename={handleRename} />
+      <FolderDestinationDialog
+        key={destinationAction?.key}
+        open={Boolean(destinationAction)}
+        onOpenChange={(open) => { if (!open) setDestinationAction(null); }}
+        storageId={browser.storageId}
+        source={destinationAction?.file}
+        action={destinationAction?.action}
+        isAllowed={destinationAction?.action === "move" ? browser.canMove : browser.canCopy}
+        onConfirm={handleDestination}
+      />
     </div>
   );
 }

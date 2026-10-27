@@ -1,9 +1,16 @@
+import { getCurrentUser } from './auth.js';
+
 const SAFE_MESSAGES = {
   UNAUTHENTICATED: 'Your session has expired. Sign in again to continue.',
   FORBIDDEN: 'You do not have access to this storage.',
   NOT_FOUND: 'This storage is no longer available.',
   NAME_CONFLICT: 'A folder with that name already exists here.',
   INVALID_INPUT: 'Check the folder name and try again.',
+  UPLOAD_TOO_LARGE: 'This file is too large for the connected storage.',
+  CAPABILITY_UNAVAILABLE: 'This operation is unavailable for this storage.',
+  OPERATION_TOO_LARGE: 'This folder contains too many items for a synchronous copy.',
+  QUOTA_EXCEEDED: 'The storage limit has been reached.',
+  TRANSFER_INCOMPLETE: 'The transfer did not complete. Try again.',
   RATE_LIMITED: 'Storage is temporarily busy. Try again shortly.',
   PROVIDER_UNAVAILABLE: 'Storage is temporarily unavailable. Try again later.',
   INTERNAL_ERROR: 'Storage could not be reached. Try again later.',
@@ -23,21 +30,27 @@ function safeErrorCode(body, status) {
   if (status === 403) return 'FORBIDDEN';
   if (status === 404) return 'NOT_FOUND';
   if (status === 409) return 'NAME_CONFLICT';
-  if (status === 429) return 'RATE_LIMITED';
+  if (status === 413) return body?.error?.code === 'OPERATION_TOO_LARGE' ? 'OPERATION_TOO_LARGE' : 'UPLOAD_TOO_LARGE';
+  if (status === 422) return 'CAPABILITY_UNAVAILABLE';
+  if (status === 429) return body?.error?.code === 'QUOTA_EXCEEDED' ? 'QUOTA_EXCEEDED' : 'RATE_LIMITED';
   if (status >= 500 || status === 0) return 'PROVIDER_UNAVAILABLE';
-  return SAFE_MESSAGES[body?.error?.code] ? body.error.code : 'INTERNAL_ERROR';
+  if (status === 400) return 'INVALID_INPUT';
+  const bodyCode = body?.error?.code;
+  if (SAFE_MESSAGES[bodyCode]) return bodyCode;
+  return 'INTERNAL_ERROR';
 }
 
 async function request(path, { fetchImpl = fetch, signal, method = 'GET', body: requestBody } = {}) {
   const headers = { Accept: 'application/json' };
-  if (requestBody !== undefined) headers['Content-Type'] = 'application/json';
+  const isFormData = typeof FormData !== 'undefined' && requestBody instanceof FormData;
+  if (requestBody !== undefined && !isFormData) headers['Content-Type'] = 'application/json';
   let response;
   try {
     response = await fetchImpl(path, {
       method,
       credentials: 'same-origin',
       headers,
-      ...(requestBody !== undefined ? { body: JSON.stringify(requestBody) } : {}),
+      ...(requestBody !== undefined ? { body: isFormData ? requestBody : JSON.stringify(requestBody) } : {}),
       signal,
     });
   } catch (error) {
@@ -86,6 +99,10 @@ export function normalizeStorageCapabilities(value) {
     capabilities.maxUploadBytes = value.maxUploadBytes;
   }
   return capabilities;
+}
+
+export function canUseStorageCapability(capabilities, storage, capability) {
+  return Boolean(capabilities?.[capability] && storage && !storage.readOnly && !capabilities.readOnly);
 }
 
 export function normalizeStorageUsage(value) {
@@ -170,4 +187,78 @@ export async function createStorageFolder(storageId, { name, parentId = null }, 
     body: { name, parentId },
   });
   return normalizeStorageObject(data.folder);
+}
+
+export function validateStorageObjectName(value) {
+  if (typeof value !== 'string' || !value.trim() || new TextEncoder().encode(value).length > 255) return false;
+  return ![...value].some((character) => {
+    const code = character.codePointAt(0);
+    return code <= 31 || (code >= 127 && code <= 159) || character === '/' || character === '\\';
+  });
+}
+
+export async function uploadStorageFile(storageId, file, parentId, { maxUploadBytes = null, ...options } = {}) {
+  if (!file || typeof file.name !== 'string' || !Number.isSafeInteger(file.size) || file.size <= 0) {
+    throw new StorageApiError('INVALID_INPUT', 400);
+  }
+  if (Number.isSafeInteger(maxUploadBytes) && maxUploadBytes >= 0 && file.size > maxUploadBytes) {
+    throw new StorageApiError('UPLOAD_TOO_LARGE', 413);
+  }
+  const form = new FormData();
+  form.append('file', file, file.name);
+  if (parentId !== null && parentId !== undefined) form.append('parentId', parentId);
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/files`, {
+    ...options,
+    method: 'POST',
+    body: form,
+  });
+  const uploaded = normalizeStorageObject(data.file);
+  if (uploaded.type !== 'file') throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return { file: uploaded, operationId: typeof data.operationId === 'string' ? data.operationId : null };
+}
+
+export async function renameStorageObject(storageId, objectId, name, options = {}) {
+  if (!validateStorageObjectName(name)) throw new StorageApiError('INVALID_INPUT', 400);
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}`, {
+    ...options,
+    method: 'PATCH',
+    body: { name: name.trim() },
+  });
+  const object = normalizeStorageObject(data.object);
+  if (object.objectId !== objectId) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return object;
+}
+
+export async function moveStorageObject(storageId, objectId, parentId, options = {}) {
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}/move`, {
+    ...options,
+    method: 'POST',
+    body: { parentId },
+  });
+  const object = normalizeStorageObject(data.object);
+  if (object.objectId !== objectId) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return object;
+}
+
+export async function copyStorageObject(storageId, objectId, parentId, options = {}) {
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}/copy`, {
+    ...options,
+    method: 'POST',
+    body: { parentId },
+  });
+  const object = normalizeStorageObject(data.object);
+  if (object.objectId === objectId) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return { object, operationId: typeof data.operationId === 'string' ? data.operationId : null };
+}
+
+export function storageObjectDownloadUrl(storageId, objectId) {
+  return `/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}/download`;
+}
+
+export async function startStorageObjectDownload(storageId, objectId, { fetchImpl = fetch, signal, navigate = (url) => window.location.assign(url) } = {}) {
+  const user = await getCurrentUser({ fetchImpl, signal });
+  if (!user) throw new StorageApiError('UNAUTHENTICATED', 401);
+  const url = storageObjectDownloadUrl(storageId, objectId);
+  navigate(url);
+  return url;
 }

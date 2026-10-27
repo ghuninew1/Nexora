@@ -1,14 +1,15 @@
 import {
-  ChevronDown, Download, FolderPlus, Grid2X2, List, Pencil, Plus, RefreshCw,
-  Search, Share2, Trash2, ArrowUpDown, Upload,
+  ChevronDown, FolderPlus, Grid2X2, List, Plus, RefreshCw,
+  Search, Trash2, ArrowUpDown,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { cx } from "../../utils/cx";
+import UploadButton from "./UploadButton";
 
-function FileToolbar({ selectedCount, onNewFolder, canCreateFolder, isCreatingFolder, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange, onClearSelection }) {
+function FileToolbar({ selectedCount, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange, onClearSelection }) {
   const hasSelection = selectedCount > 0;
   const isBusy = isRefreshing || isCreatingFolder;
   return (
@@ -16,10 +17,8 @@ function FileToolbar({ selectedCount, onNewFolder, canCreateFolder, isCreatingFo
       <div className={cx("flex min-w-0 items-center gap-2 overflow-x-auto")}>
         {hasSelection ? <>
           <span className={cx("shrink-0 text-sm font-medium text-foreground")}>{selectedCount} selected</span>
-          <Button variant="outline" size="sm" disabled title="Downloads will be available in a later phase"><Download />Download</Button>
-          <Button variant="outline" size="sm" disabled title="Sharing is not connected"><Share2 />Share</Button>
-          {selectedCount === 1 && <Button variant="outline" size="sm" disabled title="Renaming will be available in a later phase"><Pencil />Rename</Button>}
-          <Button variant="outline" size="sm" disabled title="Delete and Trash actions will be available in a later phase"><Trash2 />Delete</Button>
+          <span className={cx("shrink-0 text-xs text-muted-foreground")}>Use each item’s menu for file actions.</span>
+          <Button variant="outline" size="sm" disabled title="Delete and Trash actions are not available yet"><Trash2 />Delete</Button>
           <Button variant="ghost" size="sm" onClick={onClearSelection}>Clear selection</Button>
         </> : <>
           <DropdownMenu>
@@ -28,7 +27,7 @@ function FileToolbar({ selectedCount, onNewFolder, canCreateFolder, isCreatingFo
               <DropdownMenuItem disabled={!canCreateFolder || isBusy} onClick={onNewFolder}><FolderPlus />Folder</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" disabled title="Uploads will be available in a later phase"><Upload />Upload</Button>
+          <UploadButton onFilesSelected={onUploadFiles} disabled={!canUpload || isBusy} />
         </>}
       </div>
       <div className={cx("flex min-w-0 items-center gap-2")}>

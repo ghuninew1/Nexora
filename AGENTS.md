@@ -8,11 +8,11 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/App.jsx` defines routes; `src/layouts/AppLayout.jsx` keeps a shared `AppShell` around the route outlet.
 - `src/components/layout/` contains responsive navigation, header, and app shell. `src/components/files/` contains file browser UI. `src/hooks/` owns reusable state. `src/services/` is the intended location for domain API clients as integrations are added.
 - `src/index.css` owns design tokens and Liquid Glass primitives. Base UI/shadcn wrappers live in `src/components/ui/`.
-- `src/data/files.js` is demo data for Dashboard and other workspace views. `FilesProvider` keeps demo file state, favorites, recents, and Trash in memory across routes; these demo changes reset when the tab is refreshed. Phase 9.2 File Browser listing/navigation/folder creation use logical object metadata from the authenticated Nexora Storage API. Upload remains unavailable in that browser.
+- `src/data/files.js` is demo data for Dashboard and other workspace views. `FilesProvider` keeps demo file state, favorites, recents, and Trash in memory across routes; these demo changes reset when the tab is refreshed. Phase 9.2 File Browser listing/navigation/folder creation and Phase 9.3 upload/download/rename/move/copy use logical object metadata through the authenticated Nexora Storage API.
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
-- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Dashboard, Recent, Favorites, Shared, Trash and their fixtures remain demo-only.
+- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy. Dashboard, Recent, Favorites, Shared, Trash and their fixtures remain demo-only.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
@@ -31,7 +31,8 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `scripts/create-admin-remote.mjs`, `scripts/create-storage-mount-remote.mjs`: explicit production-only provisioning commands; both target `nexora-db` using Wrangler `--remote`.
 - `scripts/lib/production-provisioning.js`: private SQL-file runner and SQL builders for the production provisioning commands.
 - `tests/backend.test.js`: Node tests using in-memory SQLite and mocked Shared Storage.
-- `src/hooks/useUploadQueue.js`: current local demo upload queue; it is not a network uploader.
+- `src/hooks/useUploadQueue.js`: real File Browser upload queue with bounded concurrency, cancellation, retry, and status-only progress reporting.
+- `src/components/files/FolderDestinationDialog.jsx`: lazy folder-only destination picker for move/copy.
 - `src/data/files.js`: fixture entries.
 - `src/components/ui/`, `src/utils/cx.js`, `src/utils/glass.js`, `src/index.css`: shared controls, classes, glass interactions, and tokens.
 - `README.md` and `docs/DESIGN_SYSTEM.md`: current user-facing project status and design usage.
@@ -78,9 +79,9 @@ Check this map against actual files when changing the architecture; update READM
 
 ## File Browser behavior
 
-- Fixture IDs and object URLs are not stable server file IDs. Phase 9.2 File Browser uses only public logical object IDs returned by Nexora APIs; never accept a provider project ID or physical reference from the browser.
+- Fixture IDs and object URLs are not stable server file IDs. File Browser uses only public logical object IDs returned by Nexora APIs; never accept a provider project ID or physical reference from the browser.
 - `FilesProvider` demo state backs Dashboard, Recent, Favorites, Shared and Trash. The File Browser has separate remote listing/navigation state; do not make those demo mutations appear to update the connected mount.
-- The upload queue simulates progress and does not send bytes. Upload/download/preview and file mutations other than folder creation are unavailable in the connected File Browser.
+- The connected File Browser upload queue sends bytes through the Nexora API with at most two concurrent uploads; do not invent byte progress. Download remains streamed through the same-origin API. Rename/move retain IDs and copy creates new IDs. Preview, delete/Trash, restore, and permanent delete are not connected to the mount.
 - Folder navigation uses the `folder` query parameter on `/files`; validate logical IDs and breadcrumb history state, and safely return to root for unverified or deleted folders.
 - Keep folder navigation and breadcrumbs consistent. Use backend cursors and merge pages by logical object ID; root requests omit `parentId`. Search/sort apply only to loaded items and use normalized fields (name, `modifiedAt`, `sizeBytes`), never display strings such as `"2.4 MB"` as numeric sizes.
 - Preserve selection across supported view changes; clear or reconcile it on storage/folder changes and filtering where appropriate.
@@ -88,7 +89,7 @@ Check this map against actual files when changing the architecture; update READM
 - Trash restore/permanent delete in the workspace remain local demo operations; label them clearly and confirm permanent deletion. Connected File Browser delete/Trash is not implemented.
 - Shared entries are illustrative fixture metadata. Do not claim that Nexora creates shares, permissions, or access links until a reviewed server API exists.
 - Storage status comes from the authenticated Nexora storage API; usage/capacity must say unavailable or not reported unless authoritative metrics are returned. Never present fixture totals as live provider usage.
-- Do not claim preview or download is available in the connected File Browser or for entries without source bytes. Uploaded browser `File` objects can support session-only local preview/download only in demo flows that explicitly expose them.
+- Do not claim preview is available in the connected File Browser or for entries without source bytes. Upload/download are available only through capability-gated connected Storage operations; demo entries still have no source bytes.
 
 ## Dependencies and commands
 

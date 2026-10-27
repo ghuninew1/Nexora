@@ -1,210 +1,166 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-function useUploadQueue({ onComplete } = {}) {
-    const [items, setItems] = useState([]);
-    const [elapsed, setElapsed] = useState(0);
-    const [speed, setSpeed] = useState(0);
+const MAX_UPLOAD_CONCURRENCY = 2;
 
-    const startedAtRef = useRef(null);
-    const completedIdsRef = useRef(new Set());
-    const previousProgressRef = useRef({
-        bytes: 0,
-        time: null,
-    });
-
-    const uploadingId = useMemo(() => items.find((item) => item.status === "uploading")?.id ?? null, [items]);
-
-    const totalBytes = useMemo(() => items.reduce((total, item) => total + item.file.size, 0), [items]);
-
-    const uploadedBytes = useMemo(
-        () => items.reduce((total, item) => total + (item.file.size * item.progress) / 100, 0),
-        [items],
-    );
-
-    const progress = totalBytes > 0 ? Math.round((uploadedBytes / totalBytes) * 100) : 0;
-
-    const completedFiles = useMemo(() => items.filter((item) => item.status === "completed").length, [items]);
-
-    const totalFiles = items.length;
-
-    const addFiles = useCallback((files, { parentId } = {}) => {
-        const newItems = files.map((file) => ({
-            id: crypto.randomUUID(),
-            file,
-            name: file.name,
-            parentId,
-            status: "pending",
-            progress: 0,
-        }));
-
-        setItems((current) => {
-            const hasUploading = current.some((item) => item.status === "uploading");
-
-            if (!startedAtRef.current) {
-                startedAtRef.current = Date.now();
-            }
-
-            return [
-                ...current,
-                ...newItems.map((item, index) => ({
-                    ...item,
-                    status: !hasUploading && index === 0 ? "uploading" : "pending",
-                })),
-            ];
-        });
-    }, []);
-
-    const isCompleted = items.length > 0 && items.every((item) => item.status === "completed");
-
-    useEffect(() => {
-        if (!isCompleted) {
-            return undefined;
-        }
-
-        const timer = setTimeout(() => {
-            setItems([]);
-            setElapsed(0);
-            setSpeed(0);
-            startedAtRef.current = null;
-            completedIdsRef.current.clear();
-            previousProgressRef.current = {
-                bytes: 0,
-                time: null,
-            };
-        }, 1000);
-
-        return () => {
-            clearTimeout(timer);
-        };
-    }, [isCompleted]);
-
-    useEffect(() => {
-        if (!startedAtRef.current || items.length === 0) {
-            return undefined;
-        }
-
-        const timer = setInterval(() => {
-            const currentElapsed = Date.now() - startedAtRef.current;
-
-            setElapsed(currentElapsed);
-        }, 100);
-
-        return () => {
-            clearInterval(timer);
-        };
-    }, [items.length]);
-
-    useEffect(() => {
-        if (!uploadingId) {
-            return undefined;
-        }
-
-        const timer = setInterval(() => {
-            setItems((current) => {
-                const uploadingItem = current.find((item) => item.id === uploadingId);
-
-                if (!uploadingItem) {
-                    return current;
-                }
-
-                const nextProgress = Math.min(uploadingItem.progress + 10, 100);
-
-                if (nextProgress < 100) {
-                    return current.map((item) =>
-                        item.id === uploadingId
-                            ? {
-                                  ...item,
-                                  progress: nextProgress,
-                              }
-                            : item,
-                    );
-                }
-
-                let nextStarted = false;
-
-                return current.map((item) => {
-                    if (item.id === uploadingId) {
-                        return {
-                            ...item,
-                            progress: 100,
-                            status: "completed",
-                        };
-                    }
-
-                    if (!nextStarted && item.status === "pending") {
-                        nextStarted = true;
-
-                        return {
-                            ...item,
-                            status: "uploading",
-                        };
-                    }
-
-                    return item;
-                });
-            });
-        }, 300);
-
-        return () => {
-            clearInterval(timer);
-        };
-    }, [uploadingId]);
-
-    useEffect(() => {
-        if (!onComplete) {
-            return;
-        }
-
-        items.forEach((item) => {
-            if (item.status === "completed" && !completedIdsRef.current.has(item.id)) {
-                completedIdsRef.current.add(item.id);
-                onComplete(item);
-            }
-        });
-    }, [items, onComplete]);
-
-    useEffect(() => {
-        const now = Date.now();
-        const previous = previousProgressRef.current;
-
-        if (previous.time === null) {
-            previousProgressRef.current = {
-                bytes: uploadedBytes,
-                time: now,
-            };
-
-            return;
-        }
-
-        const elapsedSeconds = (now - previous.time) / 1000;
-
-        if (elapsedSeconds <= 0) {
-            return;
-        }
-
-        const bytesUploaded = uploadedBytes - previous.bytes;
-        const bytesPerSecond = bytesUploaded / elapsedSeconds;
-
-        setSpeed(Math.max(0, bytesPerSecond));
-
-        previousProgressRef.current = {
-            bytes: uploadedBytes,
-            time: now,
-        };
-    }, [uploadedBytes]);
-
-    return {
-        items,
-        totalFiles,
-        completedFiles,
-        totalBytes,
-        uploadedBytes,
-        progress,
-        speed,
-        elapsed,
-        isCompleted,
-        addFiles,
-    };
+function errorMessage(error) {
+  if (error?.code === 'NAME_CONFLICT') return 'A file or folder with this name already exists here.';
+  if (error?.code === 'UPLOAD_TOO_LARGE') return 'This file is too large for the connected storage.';
+  if (error?.code === 'INVALID_INPUT') return 'This file could not be uploaded. Check its name and size.';
+  if (error?.code === 'FORBIDDEN' || error?.code === 'CAPABILITY_UNAVAILABLE') return 'Uploads are unavailable for this storage.';
+  if (error?.code === 'NOT_FOUND') return 'The destination folder no longer exists.';
+  if (error?.code === 'RATE_LIMITED') return 'Storage is temporarily busy. Try again shortly.';
+  if (error?.code === 'QUOTA_EXCEEDED') return 'The storage limit has been reached.';
+  if (error?.code === 'UNAUTHENTICATED') return 'Your session has expired. Sign in again to continue.';
+  if (error?.code === 'TRANSFER_INCOMPLETE') return 'The upload did not complete. Try again.';
+  return 'Upload failed. Try again later.';
 }
 
-export default useUploadQueue;
+export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, maxConcurrency = MAX_UPLOAD_CONCURRENCY } = {}) {
+  const [items, setItems] = useState([]);
+  const tasksRef = useRef(new Map());
+  const pendingRef = useRef([]);
+  const activeRef = useRef(new Map());
+  const mountedRef = useRef(true);
+  const uploadFileRef = useRef(uploadFile);
+  const onCompleteRef = useRef(onComplete);
+  const onUnauthorizedRef = useRef(onUnauthorized);
+  const processQueueRef = useRef(null);
+
+  useEffect(() => { uploadFileRef.current = uploadFile; }, [uploadFile]);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+  useEffect(() => { onUnauthorizedRef.current = onUnauthorized; }, [onUnauthorized]);
+
+  const updateItem = useCallback((id, changes) => {
+    if (!mountedRef.current) return;
+    setItems((current) => current.map((item) => item.id === id ? { ...item, ...changes } : item));
+  }, []);
+
+  const processQueue = useCallback(() => {
+    while (activeRef.current.size < maxConcurrency && pendingRef.current.length > 0) {
+      const task = pendingRef.current.shift();
+      if (!task || task.cancelled) continue;
+      const controller = new AbortController();
+      task.controller = controller;
+      activeRef.current.set(task.id, task);
+      updateItem(task.id, { status: 'uploading', error: null });
+
+      Promise.resolve()
+        .then(() => uploadFileRef.current({
+          file: task.file,
+          storageId: task.storageId,
+          parentId: task.parentId,
+          maxUploadBytes: task.maxUploadBytes,
+          signal: controller.signal,
+        }))
+        .then((result) => {
+          if (controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+          updateItem(task.id, { status: 'success', result });
+          try { onCompleteRef.current?.(task, result); } catch { /* refresh errors must not turn a completed upload into a failed transfer */ }
+        })
+        .catch((error) => {
+          const cancelled = controller.signal.aborted || error?.name === 'AbortError';
+          updateItem(task.id, { status: cancelled ? 'cancelled' : 'error', error: cancelled ? null : errorMessage(error) });
+          if (error?.code === 'UNAUTHENTICATED') {
+            onUnauthorizedRef.current?.();
+            const pending = pendingRef.current.splice(0);
+            for (const queued of pending) {
+              queued.cancelled = true;
+              updateItem(queued.id, { status: 'cancelled' });
+            }
+            for (const [id, running] of activeRef.current) {
+              if (id !== task.id) running.controller?.abort();
+            }
+          }
+        })
+        .finally(() => {
+          activeRef.current.delete(task.id);
+          task.controller = null;
+          queueMicrotask(() => processQueueRef.current?.());
+        });
+    }
+  }, [maxConcurrency, updateItem]);
+
+  useEffect(() => { processQueueRef.current = processQueue; }, [processQueue]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const active = activeRef.current;
+    const tasks = tasksRef.current;
+    return () => {
+      mountedRef.current = false;
+      pendingRef.current = [];
+      for (const task of active.values()) task.controller?.abort();
+      active.clear();
+      tasks.clear();
+    };
+  }, []);
+
+  const addFiles = useCallback((files, { storageId, parentId = null, maxUploadBytes = null } = {}) => {
+    const tasks = Array.from(files).map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      storageId,
+      parentId,
+      maxUploadBytes,
+      cancelled: false,
+      controller: null,
+    }));
+    const newItems = tasks.map((task) => {
+      tasksRef.current.set(task.id, task);
+      const tooLarge = Number.isSafeInteger(maxUploadBytes) && maxUploadBytes >= 0 && task.file.size > maxUploadBytes;
+      const invalid = !Number.isSafeInteger(task.file.size) || task.file.size <= 0;
+      return {
+        id: task.id,
+        name: task.file.name,
+        sizeBytes: task.file.size,
+        parentId,
+        status: tooLarge || invalid ? 'error' : 'queued',
+        error: tooLarge ? errorMessage({ code: 'UPLOAD_TOO_LARGE' }) : invalid ? errorMessage({ code: 'INVALID_INPUT' }) : null,
+      };
+    });
+    const validTasks = tasks.filter((task) => task.file.size > 0
+      && !(Number.isSafeInteger(maxUploadBytes) && maxUploadBytes >= 0 && task.file.size > maxUploadBytes));
+    pendingRef.current.push(...validTasks);
+    if (mountedRef.current) setItems((current) => [...current, ...newItems]);
+    queueMicrotask(() => processQueueRef.current?.());
+    return newItems.map(({ id }) => id);
+  }, []);
+
+  const cancelUpload = useCallback((id) => {
+    const task = tasksRef.current.get(id);
+    if (!task) return;
+    if (task.controller) {
+      task.controller.abort();
+      return;
+    }
+    task.cancelled = true;
+    pendingRef.current = pendingRef.current.filter((pending) => pending.id !== id);
+    updateItem(id, { status: 'cancelled', error: null });
+  }, [updateItem]);
+
+  const retryUpload = useCallback((id) => {
+    const task = tasksRef.current.get(id);
+    if (!task || activeRef.current.has(id)) return;
+    task.cancelled = false;
+    pendingRef.current.push(task);
+    updateItem(id, { status: 'queued', error: null });
+    queueMicrotask(() => processQueueRef.current?.());
+  }, [updateItem]);
+
+  const clearFinished = useCallback(() => {
+    const finished = new Set(items.filter((item) => ['success', 'error', 'cancelled'].includes(item.status)).map((item) => item.id));
+    for (const id of finished) tasksRef.current.delete(id);
+    if (mountedRef.current) setItems((current) => current.filter((item) => !finished.has(item.id)));
+  }, [items]);
+
+  const cancelAll = useCallback(() => {
+    const pending = pendingRef.current.splice(0);
+    for (const task of pending) {
+      task.cancelled = true;
+      updateItem(task.id, { status: 'cancelled', error: null });
+    }
+    for (const task of activeRef.current.values()) task.controller?.abort();
+  }, [updateItem]);
+
+  return { items, addFiles, cancelUpload, retryUpload, clearFinished, cancelAll, concurrency: maxConcurrency };
+}
