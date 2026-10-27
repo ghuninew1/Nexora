@@ -2,16 +2,20 @@ import { ArrowRightLeft, Copy, File, FileCode2, FileText, Folder, MoreHorizontal
 import { cx } from "../../utils/cx";
 import { Button } from "../ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { getStoragePreviewSpec } from "../../utils/storage-preview";
 
 const fileIcons = { md: FileCode2, pdf: FileText };
 
-function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onRename, onDownload, onMove, onCopy }) {
+function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy }) {
   const Icon = file.type === "folder" ? Folder : fileIcons[file.extension] ?? File;
   const isFolder = file.type === "folder";
   const canRename = Boolean(capabilities.rename && !readOnly && !busy);
   const canMove = Boolean(capabilities.move && !readOnly && !busy);
   const canCopy = Boolean(capabilities.copy && !readOnly && !busy);
   const canDownload = Boolean(!isFolder && capabilities.download && !busy);
+  const canPreview = Boolean(!isFolder && !busy && (capabilities.preview
+    ? capabilities.preview(file)
+    : canDownload && getStoragePreviewSpec(file)));
   const handleOpen = () => {
     if (isFolder) onOpenFolder(file.id);
   };
@@ -51,7 +55,7 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={cx(view === "grid" ? "absolute right-2 top-2" : "absolute right-2 top-2 sm:static")} aria-label={`Actions for ${file.name}`}><MoreHorizontal /></Button>} />
         <DropdownMenuContent align="end" className={cx("w-auto")}>
-          {!isFolder && <DropdownMenuItem disabled><Eye />Preview</DropdownMenuItem>}
+          {!isFolder && <DropdownMenuItem disabled={!canPreview} onClick={() => onPreview?.(file)}><Eye />Preview</DropdownMenuItem>}
           {!isFolder && <DropdownMenuItem disabled={!canDownload} onClick={() => onDownload?.(file)}><Download />Download</DropdownMenuItem>}
           {allowFavorites && <DropdownMenuItem onClick={() => onToggleFavorite(file.id)}><Star />{favorite ? "Remove favorites" : "Add favorites"}</DropdownMenuItem>}
           <DropdownMenuItem disabled={!canRename} onClick={() => onRename?.(file)}><Pencil />Rename</DropdownMenuItem>

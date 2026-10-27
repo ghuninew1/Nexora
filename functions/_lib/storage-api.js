@@ -3,6 +3,8 @@ import { ApiError, json, normalizeUpstreamError, readJson, statusFor } from './h
 import { createStorageClient, normalizeCapabilities, normalizeObject, readBoundedJson } from './storage-client.js';
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const MAX_TEXT_PREVIEW_BYTES = 1024 * 1024;
+const MAX_MEDIA_PREVIEW_BYTES = 20 * 1024 * 1024;
 const MAX_MULTIPART_OVERHEAD = 1024 * 1024;
 const COPY_DIAGNOSTIC_CODES = new Set([
   'UNAUTHENTICATED', 'FORBIDDEN', 'NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT',
@@ -95,6 +97,46 @@ function safeDisposition(value) {
   return /^attachment;\s*filename\*=UTF-8''[A-Za-z0-9%._~!$&'()+,-]+$/u.test(value) ? value : null;
 }
 
+const SAFE_PREVIEW_MIME_TYPES = new Map([
+  ['image/jpeg', 'image'], ['image/png', 'image'], ['image/webp', 'image'],
+  ['image/gif', 'image'], ['image/avif', 'image'], ['application/pdf', 'pdf'],
+  ['text/plain', 'text'], ['text/markdown', 'text'], ['text/x-markdown', 'text'],
+  ['text/csv', 'text'], ['application/csv', 'text'], ['application/json', 'text'],
+  ['text/json', 'text'], ['application/xml', 'text'], ['text/xml', 'text'],
+  ['text/css', 'text'], ['text/javascript', 'text'], ['application/javascript', 'text'],
+  ['text/typescript', 'text'], ['application/typescript', 'text'],
+  ['text/x-python', 'text'], ['text/x-java-source', 'text'], ['text/x-shellscript', 'text'],
+]);
+
+const SAFE_PREVIEW_EXTENSIONS = new Map([
+  ['jpg', 'image/jpeg'], ['jpeg', 'image/jpeg'], ['png', 'image/png'], ['webp', 'image/webp'],
+  ['gif', 'image/gif'], ['avif', 'image/avif'], ['pdf', 'application/pdf'], ['txt', 'text/plain'],
+  ['md', 'text/markdown'], ['markdown', 'text/markdown'], ['csv', 'text/csv'], ['json', 'application/json'],
+  ['log', 'text/plain'], ['yaml', 'text/plain'], ['yml', 'text/plain'], ['toml', 'text/plain'],
+  ['ini', 'text/plain'], ['env', 'text/plain'], ['js', 'text/javascript'], ['jsx', 'text/javascript'],
+  ['mjs', 'text/javascript'], ['ts', 'text/typescript'], ['tsx', 'text/typescript'], ['css', 'text/css'],
+  ['py', 'text/x-python'], ['sh', 'text/x-shellscript'], ['java', 'text/x-java-source'],
+  ['c', 'text/plain'], ['h', 'text/plain'], ['cpp', 'text/plain'], ['go', 'text/plain'],
+  ['rs', 'text/plain'], ['sql', 'text/plain'],
+]);
+
+function previewSpec(object) {
+  const mimeType = typeof object?.mimeType === 'string'
+    ? object.mimeType.split(';', 1)[0].trim().toLowerCase()
+    : '';
+  let safeMime = mimeType;
+  if (!SAFE_PREVIEW_MIME_TYPES.has(safeMime)) {
+    if (safeMime && safeMime !== 'application/octet-stream') return null;
+    const extension = typeof object?.name === 'string' && object.name.includes('.')
+      ? object.name.split('.').pop().toLowerCase()
+      : '';
+    safeMime = SAFE_PREVIEW_EXTENSIONS.get(extension);
+  }
+  const kind = SAFE_PREVIEW_MIME_TYPES.get(safeMime);
+  if (!kind) return null;
+  return { kind, mimeType: safeMime, maxBytes: kind === 'text' ? MAX_TEXT_PREVIEW_BYTES : MAX_MEDIA_PREVIEW_BYTES };
+}
+
 function streamResponse(result) {
   const { response, cleanup, abort, timedOut } = result;
   const reader = response.body?.getReader();
@@ -123,6 +165,41 @@ function streamResponse(result) {
   const disposition = safeDisposition(response.headers.get('Content-Disposition'));
   if (disposition) headers.set('Content-Disposition', disposition);
   return new Response(body, { status: 200, headers });
+}
+
+function streamPreviewResponse(result, { mimeType, maxBytes }) {
+  const { response, cleanup, abort, timedOut } = result;
+  const reader = response.body?.getReader();
+  if (!reader) { cleanup(); throw new ApiError('PROVIDER_UNAVAILABLE', 502); }
+  let totalBytes = 0;
+  const body = new ReadableStream({
+    async pull(controller) {
+      try {
+        if (timedOut()) throw new Error('timeout');
+        const { done, value } = await reader.read();
+        if (done) { cleanup(); controller.close(); return; }
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          await reader.cancel();
+          abort(); cleanup();
+          controller.error(new ApiError('PREVIEW_TOO_LARGE', 413));
+          return;
+        }
+        controller.enqueue(value);
+      } catch {
+        abort(); cleanup();
+        controller.error(new ApiError('TRANSFER_INCOMPLETE', 502));
+      }
+    },
+    async cancel(reason) { try { await reader.cancel(reason); } finally { abort(); cleanup(); } },
+  });
+  return new Response(body, { status: 200, headers: {
+    'Cache-Control': 'private, no-store',
+    'Content-Disposition': 'inline',
+    'Content-Security-Policy': "sandbox; default-src 'none'; img-src 'self' data: blob:",
+    'Content-Type': mimeType,
+    'X-Content-Type-Options': 'nosniff',
+  } });
 }
 
 export async function handleStorageApi({ request, env, user, parts, fetchImpl = fetch, logger = console }) {
@@ -255,6 +332,36 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       }
       await recordRecent(env.DB, user, mount, objectId);
       return streamResponse(result);
+    }
+    if (suffix[0] === 'preview' && suffix.length === 1 && method === 'GET') {
+      await requireCapability(client, request, mount, 'download');
+      const object = await getObject(client, request, mount, objectId);
+      if (!object) throw new ApiError('NOT_FOUND', 404);
+      if (object.type !== 'file') throw new ApiError('PREVIEW_UNSUPPORTED', 415);
+      const spec = previewSpec(object);
+      if (!spec) throw new ApiError('PREVIEW_UNSUPPORTED', 415);
+      if (!Number.isSafeInteger(object.sizeBytes) || object.sizeBytes < 0) throw new ApiError('PREVIEW_UNSUPPORTED', 415);
+      if (object.sizeBytes > spec.maxBytes) throw new ApiError('PREVIEW_TOO_LARGE', 413);
+      const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download` });
+      if (!result.response.ok) {
+        const payload = await readBoundedJson(result.response);
+        result.cleanup();
+        const code = normalizeUpstreamError(payload, result.response.status);
+        throw new ApiError(code, statusFor(code));
+      }
+      const upstreamMimeType = (result.response.headers.get('Content-Type') || '').split(';', 1)[0].trim().toLowerCase();
+      const upstreamKind = SAFE_PREVIEW_MIME_TYPES.get(upstreamMimeType);
+      if (upstreamMimeType && upstreamMimeType !== 'application/octet-stream' && upstreamKind !== spec.kind) {
+        result.cleanup();
+        throw new ApiError('PREVIEW_UNSUPPORTED', 415);
+      }
+      const contentLength = result.response.headers.get('Content-Length');
+      if (contentLength && /^(0|[1-9][0-9]{0,15})$/u.test(contentLength) && Number(contentLength) > spec.maxBytes) {
+        result.cleanup();
+        throw new ApiError('PREVIEW_TOO_LARGE', 413);
+      }
+      await recordRecent(env.DB, user, mount, objectId);
+      return streamPreviewResponse(result, spec);
     }
     if (suffix[0] === 'move' && suffix.length === 1 && method === 'POST') {
       const body = await readJson(request);

@@ -12,7 +12,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
-- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory listing cache. Dashboard, Recent, Favorites, Shared, Trash and their fixtures remain demo-only.
+- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory metadata-only listing cache; Phase 9.3.2 adds on-demand safe inline preview through the authenticated download path and fixes exact-ancestor breadcrumb navigation. Dashboard, Recent, Favorites, Shared, Trash and their fixtures remain demo-only.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
@@ -32,6 +32,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `scripts/lib/production-provisioning.js`: private SQL-file runner and SQL builders for the production provisioning commands.
 - `tests/backend.test.js`: Node tests using in-memory SQLite and mocked Shared Storage.
 - `src/hooks/useUploadQueue.js`: real File Browser upload queue with bounded concurrency, cancellation, retry, and status-only progress reporting.
+- `src/components/files/StorageFilePreviewDialog.jsx`, `src/utils/storage-preview.js`, `src/utils/preview-request.js`: safe on-demand connected-file previews, MIME allowlist, text-size limits, and request cancellation/race control.
 - `src/components/files/FolderDestinationDialog.jsx`: lazy folder-only destination picker for move/copy.
 - `src/data/files.js`: fixture entries.
 - `src/components/ui/`, `src/utils/cx.js`, `src/utils/glass.js`, `src/index.css`: shared controls, classes, glass interactions, and tokens.
@@ -44,6 +45,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/PHASE_9_1.md`: storage client/provider, safe mount bootstrap, capability/usage state, validation, production smoke test, and Phase 9.2 boundary.
 - `docs/PHASE_9_3.md`: real file operations, current Copy production incident, safe diagnostics, validation, and deployment smoke checklist.
 - `docs/PHASE_9_3_1.md`: source-derived listing latency path, in-memory cache policy, invalidation, tests, and browser/production QA checklist.
+- `docs/PHASE_9_3_2.md`: exact breadcrumb navigation, safe on-demand inline preview, size/MIME policy, request lifecycle, and validation boundary.
 - `docs/PHASE_9_2.md`: real File Browser listing, folder navigation, create-folder scope, local validation, QA and production boundary.
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
 - `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: Shared Storage implementation in the separate IssueDesk checkout. The historical S2 report predates the Phase 9.1 brief's operator-reported production deployment; Nexora must not infer live state from source docs.
@@ -93,7 +95,7 @@ Check this map against actual files when changing the architecture; update READM
 - Shared entries are illustrative fixture metadata. Do not claim that Nexora creates shares, permissions, or access links until a reviewed server API exists.
 - Storage status comes from the authenticated Nexora storage API; usage/capacity must say unavailable or not reported unless authoritative metrics are returned. Never present fixture totals as live provider usage.
 - File Browser listing cache is session-scoped in memory, keyed by storage plus logical parent (with an explicit root identity), bounded to 60 folders, and stale after 20 seconds. Keep request dedupe cursor-specific, clear on auth/storage scope changes, and selectively invalidate affected parents after mutations. Never cache bytes or provider internals.
-- Do not claim preview is available in the connected File Browser or for entries without source bytes. Upload/download are available only through capability-gated connected Storage operations; demo entries still have no source bytes.
+- Connected File Browser preview is an app-level feature backed by the authenticated `download` capability; it does not assert provider `preview` support. Only allowlisted image/PDF/text content may preview, text is capped at 1 MiB, and preview bytes are fetched only after the user selects Preview. Listing cache remains metadata-only. Demo entries still have no source bytes.
 
 ## Dependencies and commands
 

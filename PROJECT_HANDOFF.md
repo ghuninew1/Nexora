@@ -1,8 +1,8 @@
 # Nexora — Project Handoff
 
-อัปเดตล่าสุด: 2026-10-27
+อัปเดตล่าสุด: 2026-10-28
 
-เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.3.1; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.3.2; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
@@ -10,6 +10,7 @@
 - Phase 9.3 production operations และ Copy fix ผ่านตามที่ผู้ใช้ยืนยันใน brief วันที่ 2026-10-27; ไม่ได้ deploy หรือทดสอบ production ซ้ำใน Phase 9.3.1
 - Codex workflow: [Nexora project skill](.agents/skills/nexora-project/SKILL.md); `AGENTS.md` remains the detailed source for repository rules.
 - Phase 9.3.1 เพิ่ม bounded in-memory listing cache, stale-while-revalidate, cursor-aware dedupe, metadata breadcrumbs และ selective mutation invalidation. Final validation: `pnpm lint` passed; `pnpm test` 81/81; `pnpm build` passed; `git diff --check` passed. Local File Browser rendering was blocked at the auth gate because the local auth API is unavailable; no production endpoint or deploy was used.
+- Phase 9.3.2 adds exact ancestor breadcrumb routing and on-demand safe preview through an authenticated inline endpoint. Local validation: `pnpm lint`, `pnpm test` (88/88), `pnpm build`, and `git diff --check` passed. Browser preview interaction remains unverified: Playwright is not installed, and the local Vite page stopped at the session gate because no local auth service is available. No production endpoint or deployment was used.
 - Phase 6 เพิ่ม labels/focus, keyboard/touch behavior, duplicate-name validation, responsive breadcrumbs, progressbar semantics และ reduced-motion support
 - Phase 7: `pnpm lint` และ `pnpm build` ผ่านหลังแก้ lint errors/warnings ใน preview lifecycle, FilesProvider restore helper และ hook dependencies
 - Browser: ตรวจ route `/dashboard`, `/files`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings` และ unknown route ใน in-app browser ขนาดแคบประมาณ 576 px; ยืนยัน mobile navigation menu, search, list/grid, folder/breadcrumb, create folder, move to Trash, restore, preview sample state, theme Light/Dark/System, Tab focus ring และปิด preview dialog ได้
@@ -20,7 +21,7 @@
 - `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; `wrangler.jsonc` กำหนด D1 `nexora-db` พร้อม database ID
 - Phase 9.1 เพิ่ม storage discovery/capabilities/usage client และ provider ผ่าน same-origin Nexora API; Storage page แสดง safe connection state. Production deploy/connection ยังไม่ได้ตรวจในงานนี้
 - Phase 9.2 เปลี่ยน File Browser เป็น real listing/navigation ผ่าน Nexora API: root/child listing, cursor pagination, logical-ID breadcrumbs, refresh, loaded-item search/sort และ create-folder ตาม capability
-- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Upload/download/preview/rename/move/copy/Trash/Favorites/Share ยังไม่เปิด
+- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Phase 9.3 operations and Phase 9.3.2 preview are connected through Nexora same-origin APIs when authorized; Trash/Favorites/Share remain demo-only or unavailable.
 - `FilesProvider` demo data ยังคงใช้กับ Dashboard, Recent, Favorites, Shared และ Trash; สถานะเหล่านี้อยู่ใน memory และ refresh แล้ว reset
 - Upload queue ที่เหลือใน demo จำลอง progress ใน browser; ไม่ส่ง bytes ไป storage
 - Shared แสดง fixture records และ Share action ยังปิดอยู่. Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
@@ -73,13 +74,13 @@ See [Phase 8 report](docs/PHASE_8.md), [production provisioning guide](docs/PROD
 
 ## Phase 9.2 — Real File Listing + Folder Navigation
 
-`src/services/storage.js` เรียก `GET /api/storage/v1/storages/:storageId/objects` โดย root omit `parentId`; ส่ง `cursor`/`limit` สำหรับหน้าถัดไปและ normalize เฉพาะ public object fields. `POST /api/storage/v1/storages/:storageId/folders` ส่ง `{name,parentId}` และ server ตัดสิน authorization/capability/duplicate policy. `useRemoteFilesState` จัดการ abort/stale responses, storage/folder-scoped selection, breadcrumb route state, refresh, pagination และ root fallback สำหรับ unverified/404 folders. File Browser search/sort ใช้เฉพาะ loaded page set; upload/download/preview/file mutations remain unavailable.
+`src/services/storage.js` เรียก `GET /api/storage/v1/storages/:storageId/objects` โดย root omit `parentId`; ส่ง `cursor`/`limit` สำหรับหน้าถัดไปและ normalize เฉพาะ public object fields. `POST /api/storage/v1/storages/:storageId/folders` ส่ง `{name,parentId}` และ server ตัดสิน authorization/capability/duplicate policy. `useRemoteFilesState` จัดการ abort/stale responses, storage/folder-scoped selection, breadcrumb route state, refresh, pagination และ root fallback สำหรับ unverified/404 folders. File Browser search/sort ใช้เฉพาะ loaded page set; Phase 9.3/9.3.1/9.3.2 add operation endpoints, metadata-only listing cache and safe on-demand preview.
 
 Dashboard, Recent, Favorites, Shared, Trash และ local demo operations remain separate from connected mount state. ผู้ใช้ยืนยัน production smoke test ผ่านหลัง deploy fix `redirect: 'manual'`; รายงานและ trace อยู่ใน [docs/PHASE_9_2.md](docs/PHASE_9_2.md).
 
 ## Phase 9.3 — Real File Operations
 
-File Browser adds capability-gated upload, streamed download, rename, move and copy through `/api/storage/v1/*`. The client sends only Nexora mount and logical object IDs; server derives the owner-scoped Shared Storage project and checks capabilities/readOnly before mutations. Upload queue runs at most two real transfers and reports state without fabricated byte progress. Rename/move retain IDs; copy returns new IDs and finishes synchronously under the Shared Storage S2 100-object limit. Folder destinations load lazily. Delete/Trash/restore/permanent delete, preview, bulk operations, SMB and Phase 9.4 are out of scope.
+File Browser adds capability-gated upload, streamed download, rename, move and copy through `/api/storage/v1/*`. The client sends only Nexora mount and logical object IDs; server derives the owner-scoped Shared Storage project and checks capabilities/readOnly before mutations. Upload queue runs at most two real transfers and reports state without fabricated byte progress. Rename/move retain IDs; copy returns new IDs and finishes synchronously under the Shared Storage S2 100-object limit. Folder destinations load lazily. Delete/Trash/restore/permanent delete, bulk operations, SMB and Phase 9.4 are out of scope.
 
 At the time this phase report was written, production Copy returned `PROVIDER_UNAVAILABLE`; the supplied trace and source audit below describe that historical incident and remediation. A later user-provided brief dated 2026-10-27 confirms the Copy provider issue was fixed and verified in production along with upload/download/rename/move. The later confirmation supersedes the incident status; this checkout did not independently access production.
 
@@ -88,6 +89,10 @@ The Shared Storage S2 source implements copy synchronously: it validates source/
 ## Phase 9.3.1 — File Browser Performance & Caching
 
 `src/utils/remote-files-cache.js` owns session-memory listing and public breadcrumb metadata caches. Keys scope each logical folder by Nexora storage ID; root is explicit. Cache lifetime is 20 seconds, bounded to 60 listing folders with LRU eviction and up to 600 metadata entries per mount. Fresh entries render without network calls; stale entries render immediately and revalidate. First-page revalidation retains loaded cursor pages only if the first cursor remains stable. Request dedupe includes cursor; generation checks keep late results from replacing the active folder while allowing safe results to populate cache. Auth/user/storage changes clear the cache and abort its in-flight requests. Create/upload/rename/move/copy invalidate affected parents; upload refresh is coalesced over 120 ms. No provider data or binary is cached. See [docs/PHASE_9_3_1.md](docs/PHASE_9_3_1.md) for implementation policy and QA status.
+
+## Phase 9.3.2 — On-Demand File Preview + Breadcrumb Navigation
+
+Breadcrumb clicks now resolve the exact clicked ancestor ID and preserve query/history/router state; unknown IDs are ignored, and root returns to the root listing/cache. The preview menu is enabled only for supported formats when the authenticated mount has `download`. Preview bytes load only after a click through a new same-origin `/objects/:objectId/preview` endpoint. The server checks object metadata/MIME, requires download capability, keeps upstream `preview:false` unchanged, returns inline/no-store/nosniff bytes, and enforces 1 MiB text and 20 MiB image/PDF limits. HTML, SVG, office formats, and unknown types are excluded. The UI safely renders text/JSON source, sandboxed PDF, and images; request races, cancellation and object URL cleanup are handled. Listing cache remains metadata-only. Local checks passed (`pnpm lint`, `pnpm test` 88/88, `pnpm build`, `git diff --check`); in-app browser reached the local session gate, so the preview interaction was not rendered or verified. Playwright is not installed and no production endpoint/deploy was used. Details: [docs/PHASE_9_3_2.md](docs/PHASE_9_3_2.md).
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -123,7 +128,7 @@ The Shared Storage S2 source implements copy synchronously: it validates source/
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md`, `docs/PHASE_9_3.md` และ `docs/PHASE_9_3_1.md`, จากนั้นตรวจ `git status --short`. Phase 9.3.1 source และ unit tests เสร็จ; ก่อน release ให้รัน lint/test/build/diff และทำ browser/Network QA ตาม checklist. Phase 9.3 production success เป็นข้อมูลที่ผู้ใช้ยืนยัน; รอบนี้ไม่ได้ deploy. ห้ามเริ่ม Preview, Trash/Restore หรือ Phase 9.4.
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md`, `docs/PHASE_9_3.md`, `docs/PHASE_9_3_1.md` และ `docs/PHASE_9_3_2.md`, จากนั้นตรวจ `git status --short`. Phase 9.3.2 source and automated tests are complete; run rendered preview/Network QA with a local auth and mock storage API before release. Phase 9.3 production success เป็นข้อมูลที่ผู้ใช้ยืนยัน; รอบนี้ไม่ได้ deploy. ห้ามเริ่ม Trash/Restore หรือ Phase 9.4 เว้นแต่มีการสั่งเพิ่ม.
 
 ## กติกาการดูแลเอกสาร
 

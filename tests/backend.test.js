@@ -763,6 +763,76 @@ test('download streams with safe headers and cancels upstream when the browser c
   assert.equal(requests.at(-1).cancelled, true);
 });
 
+test('preview uses download authorization while keeping provider preview false and download attachment unchanged', async () => {
+  requests = [];
+  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(response.headers.get('Content-Type'), 'text/plain');
+  assert.equal(response.headers.get('Content-Disposition'), 'inline');
+  assert.match(response.headers.get('Content-Security-Policy'), /sandbox/u);
+  const previewReader = response.body.getReader();
+  assert.equal(await previewReader.read().then(({ value }) => new TextDecoder().decode(value)), 'streamed');
+  await previewReader.cancel();
+  assert.ok(requests.some(({ url }) => new URL(url).pathname.endsWith('/objects/object_alpha')));
+  assert.ok(requests.some(({ url }) => new URL(url).pathname.endsWith('/objects/object_alpha/download')));
+  const caps = await request(`/api/storage/v1/storages/${storageId}/capabilities`);
+  const capabilityData = (await caps.json()).data.capabilities;
+  assert.equal(capabilityData.download, true);
+  assert.equal(capabilityData.preview, false);
+  const attachment = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/download`);
+  assert.match(attachment.headers.get('Content-Disposition'), /^attachment;/u);
+});
+
+test('preview rejects unsupported content and oversized files before fetching binary bytes', async () => {
+  let downloadCalls = 0;
+  const htmlFetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/objects/object_alpha') && init.method === 'GET') {
+      return Response.json({ success: true, object: { ...object(), name: 'page.html', mimeType: 'text/html' } });
+    }
+    if (path.endsWith('/download')) downloadCalls += 1;
+    return upstreamResponse(url, init);
+  };
+  const unsupported = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`, { fetchImpl: htmlFetch });
+  assert.equal(unsupported.status, 415);
+  assert.match(await unsupported.text(), /PREVIEW_UNSUPPORTED/u);
+  assert.equal(downloadCalls, 0);
+
+  const mismatchedFetch = async (url, init) => {
+    if (new URL(url).pathname.endsWith('/download')) return new Response('<html>', { headers: { 'Content-Type': 'text/html' } });
+    return upstreamResponse(url, init);
+  };
+  const mismatched = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`, { fetchImpl: mismatchedFetch });
+  assert.equal(mismatched.status, 415);
+  assert.match(await mismatched.text(), /PREVIEW_UNSUPPORTED/u);
+
+  const largeFetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/objects/object_alpha') && init.method === 'GET') {
+      return Response.json({ success: true, object: { ...object(), sizeBytes: 1024 * 1024 + 1 } });
+    }
+    if (path.endsWith('/download')) downloadCalls += 1;
+    return upstreamResponse(url, init);
+  };
+  const tooLarge = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`, { fetchImpl: largeFetch });
+  assert.equal(tooLarge.status, 413);
+  assert.match(await tooLarge.text(), /PREVIEW_TOO_LARGE/u);
+  assert.equal(downloadCalls, 0);
+
+  let objectReads = 0;
+  const deniedFetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { download: false } });
+    if (path.endsWith('/objects/object_alpha')) objectReads += 1;
+    return upstreamResponse(url, init);
+  };
+  const denied = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`, { fetchImpl: deniedFetch });
+  assert.equal(denied.status, 422);
+  assert.equal(objectReads, 0);
+});
+
 test('Shared Storage errors are normalized and secrets or provider details are not forwarded', async () => {
   const fetchImpl = async () => Response.json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'SQLite / Garage / Access secret' } }, { status: 500 });
   const response = await request(`/api/storage/v1/storages/${storageId}/objects?limit=10`, { fetchImpl });

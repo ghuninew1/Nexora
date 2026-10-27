@@ -7,6 +7,8 @@ const messages = {
   CAPABILITY_UNAVAILABLE: 'This operation is unavailable for this storage.',
   QUOTA_EXCEEDED: 'The storage quota has been reached.',
   UPLOAD_TOO_LARGE: 'The upload exceeds the configured limit.',
+  PREVIEW_TOO_LARGE: 'The file exceeds the preview limit.',
+  PREVIEW_UNSUPPORTED: 'Preview is not available for this file.',
   OPERATION_TOO_LARGE: 'This operation exceeds the supported synchronous size.',
   PROVIDER_UNAVAILABLE: 'Storage is temporarily unavailable.',
   TRANSFER_INCOMPLETE: 'The storage transfer did not complete.',

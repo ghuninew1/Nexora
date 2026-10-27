@@ -6,6 +6,7 @@ import {
   copyStorageObject,
   canUseStorageCapability,
   createStorageFolder,
+  fetchStorageObjectPreview,
   listStorageObjects,
   mergeStorageObjects,
   moveStorageObject,
@@ -15,9 +16,11 @@ import {
   uploadStorageFile,
   validateStorageObjectName,
 } from '../services/storage';
-import { appendBreadcrumb, isValidObjectId, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../utils/storage-files';
+import { appendBreadcrumb, breadcrumbDestination, isValidObjectId, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../utils/storage-files';
 import useUploadQueue from './useUploadQueue';
 import { RemoteFilesCache } from '../utils/remote-files-cache';
+import { getStoragePreviewSpec, MAX_TEXT_PREVIEW_BYTES } from '../utils/storage-preview';
+import { PreviewRequestCoordinator } from '../utils/preview-request';
 
 const EMPTY_BROWSER_STATE = {
   storageId: null,
@@ -61,6 +64,7 @@ export default function useRemoteFilesState() {
   const [mutatingIds, setMutatingIds] = useState(() => new Set());
   const [operationFeedback, setOperationFeedback] = useState(null);
   const [notice, setNotice] = useState('');
+  const [preview, setPreview] = useState(null);
   const createControllerRef = useRef(null);
   const generationRef = useRef(0);
   const previousStorageIdRef = useRef(null);
@@ -73,6 +77,9 @@ export default function useRemoteFilesState() {
   const currentAuthScopeRef = useRef({ authStatus, userEmail: user?.email ?? null });
   const uploadRefreshTimerRef = useRef(null);
   const listingTimingRef = useRef(null);
+  const previewCoordinatorRef = useRef(null);
+  if (!previewCoordinatorRef.current) previewCoordinatorRef.current = new PreviewRequestCoordinator();
+  const previewObjectUrlRef = useRef(null);
   currentAuthScopeRef.current = { authStatus, userEmail: user?.email ?? null };
   const requestedFolderId = searchParams.get('folder');
   const storageId = activeStorage?.storageId ?? null;
@@ -126,8 +133,99 @@ export default function useRemoteFilesState() {
 
   useEffect(() => () => {
     if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current);
+    previewCoordinatorRef.current.cancel();
+    if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
     cacheRef.current.clear();
   }, []);
+
+  const closePreview = useCallback(() => {
+    previewCoordinatorRef.current.cancel();
+    setPreview(null);
+  }, []);
+
+  const openPreview = useCallback(async (file) => {
+    previewCoordinatorRef.current.cancel();
+    if (!file || file.type === 'folder') return;
+    const spec = getStoragePreviewSpec(file);
+    if (!(storageStatus === 'ready' && activeStorage
+      && canUseStorageCapability(capabilities, activeStorage, 'download'))) {
+      setPreview({ file, status: 'unsupported', message: 'Preview is not available for this file.' });
+      return;
+    }
+    if (!spec) {
+      setPreview({ file, status: 'unsupported', message: 'Preview is not available for this file.' });
+      return;
+    }
+    if (Number.isSafeInteger(file.sizeBytes) && file.sizeBytes > spec.maxBytes) {
+      setPreview({ file, status: 'too-large', kind: spec.kind, message: spec.kind === 'text' ? 'Text previews are limited to 1 MiB.' : 'This file exceeds the preview size limit.' });
+      return;
+    }
+    const request = previewCoordinatorRef.current.begin();
+    setPreview({ file, status: 'loading', kind: spec.kind });
+    try {
+      const result = await fetchStorageObjectPreview(storageId, file, {
+        signal: request.signal,
+        maxBytes: spec.maxBytes,
+        kind: spec.kind,
+      });
+      if (!previewCoordinatorRef.current.isCurrent(request)) return;
+      if (result.blob.size > spec.maxBytes) {
+        setPreview({ file, status: 'too-large', kind: spec.kind, message: spec.kind === 'text' ? 'Text previews are limited to 1 MiB.' : 'This file exceeds the preview size limit.' });
+        return;
+      }
+      if (spec.kind === 'text') {
+        const text = await result.blob.text();
+        if (!previewCoordinatorRef.current.isCurrent(request)) return;
+        let displayText = text;
+        if (result.mimeType === 'application/json') {
+          try { displayText = JSON.stringify(JSON.parse(text), null, 2); } catch { displayText = text; }
+        }
+        setPreview({ file, status: 'ready', kind: 'text', text: displayText, mimeType: result.mimeType });
+        return;
+      }
+      const objectUrl = URL.createObjectURL(result.blob);
+      previewObjectUrlRef.current = objectUrl;
+      setPreview({ file, status: 'ready', kind: spec.kind, objectUrl, mimeType: result.mimeType });
+    } catch (error) {
+      if (!previewCoordinatorRef.current.isCurrent(request) || error?.name === 'AbortError') return;
+      if (error instanceof StorageApiError && error.status === 401) {
+        closePreview();
+        expireSession();
+        return;
+      }
+      const tooLarge = error instanceof StorageApiError && error.code === 'PREVIEW_TOO_LARGE';
+      const unsupported = error instanceof StorageApiError && error.code === 'PREVIEW_UNSUPPORTED';
+      setPreview({
+        file,
+        status: tooLarge ? 'too-large' : unsupported ? 'unsupported' : 'error',
+        kind: spec.kind,
+        message: tooLarge ? (spec.kind === 'text' ? 'Text previews are limited to 1 MiB.' : 'This file exceeds the preview size limit.')
+          : unsupported ? 'Preview is not available for this file.'
+            : 'Preview failed. Try again.',
+      });
+    }
+  }, [storageId, storageStatus, activeStorage, capabilities, closePreview, expireSession]);
+
+  useEffect(() => {
+    if (!preview?.objectUrl) return undefined;
+    previewObjectUrlRef.current = preview.objectUrl;
+    return () => {
+      URL.revokeObjectURL(preview.objectUrl);
+      if (previewObjectUrlRef.current === preview.objectUrl) previewObjectUrlRef.current = null;
+    };
+  }, [preview?.objectUrl]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') closePreview();
+  }, [authStatus, closePreview]);
+
+  useEffect(() => {
+    if (!isFilesRoute) closePreview();
+  }, [isFilesRoute, closePreview]);
+
+  useEffect(() => {
+    closePreview();
+  }, [storageId, folderId, closePreview]);
 
   useEffect(() => {
     if (!isFilesRoute || storageStatus !== 'ready' || !storageId) return;
@@ -373,17 +471,19 @@ export default function useRemoteFilesState() {
       for (const controller of operationControllersRef.current.values()) controller.abort();
       operationControllersRef.current.clear();
       setMutatingIds(new Set());
+      closePreview();
     }
     operationAuthRef.current = { authStatus, userEmail };
     if (operationStorageRef.current && storageId && operationStorageRef.current !== storageId) {
       cancelAllUploads();
       cacheRef.current.clear();
+      closePreview();
       for (const controller of operationControllersRef.current.values()) controller.abort();
       operationControllersRef.current.clear();
       setMutatingIds(new Set());
     }
     operationStorageRef.current = storageId;
-  }, [storageId, cancelAllUploads, authStatus, user?.email]);
+  }, [storageId, cancelAllUploads, authStatus, user?.email, closePreview]);
 
   useEffect(() => () => {
     for (const controller of operationControllersRef.current.values()) controller.abort();
@@ -407,13 +507,13 @@ export default function useRemoteFilesState() {
     };
   }, [isFilesRoute, storageStatus, storageId, validFolderId, folderId, loadFirstPage]);
 
-  const navigateToBreadcrumb = useCallback((index) => {
+  const navigateToBreadcrumb = useCallback((objectId) => {
     if (!storageId) return;
-    const nextBreadcrumbs = breadcrumbs.slice(0, index + 1);
-    const nextFolderId = nextBreadcrumbs.at(-1)?.objectId ?? null;
+    const destination = breadcrumbDestination(storageId, breadcrumbs, objectId);
+    if (!destination) return;
     setNotice('');
-    setSearchParams(nextFolderId ? { folder: nextFolderId } : {}, {
-      state: routeStateFor(storageId, nextBreadcrumbs),
+    setSearchParams(destination.folderId ? { folder: destination.folderId } : {}, {
+      state: destination.state,
     });
   }, [storageId, breadcrumbs, setSearchParams]);
 
@@ -512,6 +612,11 @@ export default function useRemoteFilesState() {
     canCreateFolder: canUseCapability('createFolder'),
     canUpload: canUseCapability('upload'),
     canDownload: canUseCapability('download'),
+    preview,
+    canPreviewFile: (file) => Boolean(canUseCapability('download') && getStoragePreviewSpec(file)),
+    openPreview,
+    closePreview,
+    maxTextPreviewBytes: MAX_TEXT_PREVIEW_BYTES,
     canRename: canUseCapability('rename'),
     canMove: canUseCapability('move'),
     canCopy: canUseCapability('copy'),
@@ -537,7 +642,8 @@ export default function useRemoteFilesState() {
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
     operationFeedback, uploadQueue, uploadFiles, cancelUpload, retryUpload, clearFinishedUploads,
     renameObject, moveObject, copyObject, downloadObject,
-    openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder]);
+    openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
+    preview, openPreview, closePreview]);
 
   return value;
 }

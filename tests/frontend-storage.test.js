@@ -16,12 +16,16 @@ import {
   renameStorageObject,
   startStorageObjectDownload,
   storageObjectDownloadUrl,
+  fetchStorageObjectPreview,
+  storageObjectPreviewUrl,
   uploadStorageFile,
   validateStorageObjectName,
   StorageApiError,
 } from '../src/services/storage.js';
-import { appendBreadcrumb, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../src/utils/storage-files.js';
+import { appendBreadcrumb, breadcrumbDestination, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../src/utils/storage-files.js';
 import { FOLDER_LIST_CACHE_TTL_MS, MAX_FOLDER_CACHE_ENTRIES, RemoteFilesCache } from '../src/utils/remote-files-cache.js';
+import { getStoragePreviewSpec, MAX_TEXT_PREVIEW_BYTES, MAX_MEDIA_PREVIEW_BYTES } from '../src/utils/storage-preview.js';
+import { PreviewRequestCoordinator } from '../src/utils/preview-request.js';
 
 const mount = {
   storageId: 'mount_123',
@@ -347,6 +351,93 @@ test('folder breadcrumbs use logical IDs and reject route state from another sto
   assert.equal(normalizeFileBrowserRouteState(routeState, 'mount_other', 'folder_b'), null);
   assert.equal(normalizeFileBrowserRouteState(routeState, 'mount_123', 'folder_c'), null);
   assert.equal(normalizeFileBrowserRouteState({ ...routeState, breadcrumbs: [...nestedPath, nestedPath[1]] }, 'mount_123', 'folder_a'), null);
+});
+
+test('breadcrumb destinations resolve exact ancestors and preserve verified route state', () => {
+  const path = [
+    ...rootBreadcrumbs(),
+    { objectId: 'folder_a', label: 'A' },
+    { objectId: 'folder_b', label: 'B' },
+    { objectId: 'folder_c', label: 'C' },
+  ];
+  const destinationB = breadcrumbDestination('mount_123', path, 'folder_b');
+  assert.equal(destinationB.folderId, 'folder_b');
+  assert.equal(destinationB.search, '?folder=folder_b');
+  assert.deepEqual(destinationB.state.fileBrowser.breadcrumbs, path.slice(0, 3));
+  assert.deepEqual(normalizeFileBrowserRouteState(destinationB.state.fileBrowser, 'mount_123', 'folder_b'), path.slice(0, 3));
+  const destinationA = breadcrumbDestination('mount_123', path, 'folder_a');
+  assert.equal(destinationA.folderId, 'folder_a');
+  assert.deepEqual(destinationA.state.fileBrowser.breadcrumbs, path.slice(0, 2));
+  const root = breadcrumbDestination('mount_123', path, null);
+  assert.equal(root.folderId, null);
+  assert.equal(root.search, '');
+  assert.deepEqual(root.state.fileBrowser.breadcrumbs, rootBreadcrumbs());
+  assert.equal(breadcrumbDestination('mount_123', path, 'missing_folder'), null);
+  assert.doesNotMatch(JSON.stringify(destinationB), /provider|project|bucket/u);
+});
+
+test('breadcrumb navigation keeps cached folders available and stale cache revalidates', () => {
+  let now = 10_000;
+  const cache = new RemoteFilesCache({ now: () => now });
+  const page = { items: [listingItem('file_b', 'folder_b', 'notes.txt', 'file')], nextCursor: null };
+  cache.setPage('mount_123', 'folder_b', null, page);
+  const destination = breadcrumbDestination('mount_123', [
+    ...rootBreadcrumbs(), { objectId: 'folder_a', label: 'A' }, { objectId: 'folder_b', label: 'B' },
+  ], 'folder_b');
+  assert.equal(destination.folderId, 'folder_b');
+  assert.equal(cache.isFresh(cache.get('mount_123', destination.folderId)), true);
+  now += FOLDER_LIST_CACHE_TTL_MS + 1;
+  assert.equal(cache.isFresh(cache.get('mount_123', destination.folderId)), false);
+});
+
+test('preview type policy allows safe formats and rejects active or unsupported content', () => {
+  assert.deepEqual(getStoragePreviewSpec({ type: 'file', name: 'photo.avif', mimeType: 'image/avif' }), {
+    kind: 'image', mimeType: 'image/avif', maxBytes: MAX_MEDIA_PREVIEW_BYTES,
+  });
+  assert.equal(getStoragePreviewSpec({ type: 'file', name: 'notes.md', mimeType: 'application/octet-stream' }).kind, 'text');
+  assert.equal(getStoragePreviewSpec({ type: 'file', name: 'notes.md', mimeType: 'text/html' }), null);
+  assert.equal(getStoragePreviewSpec({ type: 'file', name: 'vector.svg', mimeType: 'image/svg+xml' }), null);
+  assert.equal(getStoragePreviewSpec({ type: 'file', name: 'script.exe', mimeType: 'application/octet-stream' }), null);
+  assert.equal(getStoragePreviewSpec({ type: 'folder', name: 'folder', mimeType: null }), null);
+  assert.equal(MAX_TEXT_PREVIEW_BYTES, 1024 * 1024);
+});
+
+test('preview requests use the same-origin logical object endpoint and enforce safe response types', async () => {
+  const object = { objectId: 'file_a', name: 'notes.txt' };
+  let call;
+  const result = await fetchStorageObjectPreview('mount_123', object, {
+    kind: 'text', maxBytes: MAX_TEXT_PREVIEW_BYTES,
+    fetchImpl: async (url, options) => {
+      call = { url, options };
+      return new Response('safe text', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    },
+  });
+  assert.equal(call.url, storageObjectPreviewUrl('mount_123', 'file_a'));
+  assert.equal(call.options.credentials, 'same-origin');
+  assert.equal(call.options.headers.Accept, 'application/octet-stream');
+  assert.equal(await result.blob.text(), 'safe text');
+  assert.equal(result.mimeType, 'text/plain');
+  assert.doesNotMatch(call.url, /garage|project|provider/u);
+  await assert.rejects(fetchStorageObjectPreview('mount_123', object, {
+    kind: 'text', maxBytes: MAX_TEXT_PREVIEW_BYTES,
+    fetchImpl: async () => new Response('<script/>', { headers: { 'Content-Type': 'text/html' } }),
+  }), { code: 'PREVIEW_UNSUPPORTED' });
+  await assert.rejects(fetchStorageObjectPreview('mount_123', object, {
+    kind: 'text', maxBytes: 3,
+    fetchImpl: async () => new Response('oversized', { headers: { 'Content-Type': 'text/plain' } }),
+  }), { code: 'PREVIEW_TOO_LARGE' });
+});
+
+test('preview coordinator cancels stale file requests and invalidates on close', () => {
+  const coordinator = new PreviewRequestCoordinator();
+  const first = coordinator.begin();
+  const second = coordinator.begin();
+  assert.equal(first.signal.aborted, true);
+  assert.equal(coordinator.isCurrent(first), false);
+  assert.equal(coordinator.isCurrent(second), true);
+  coordinator.cancel();
+  assert.equal(second.signal.aborted, true);
+  assert.equal(coordinator.isCurrent(second), false);
 });
 
 function listingItem(objectId, parentId, name = objectId, type = 'folder') {

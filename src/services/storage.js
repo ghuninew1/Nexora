@@ -1,4 +1,5 @@
 import { getCurrentUser } from './auth.js';
+import { getStoragePreviewSpec } from '../utils/storage-preview.js';
 
 const SAFE_MESSAGES = {
   UNAUTHENTICATED: 'Your session has expired. Sign in again to continue.',
@@ -8,6 +9,8 @@ const SAFE_MESSAGES = {
   INVALID_INPUT: 'Check the folder name and try again.',
   UPLOAD_TOO_LARGE: 'This file is too large for the connected storage.',
   CAPABILITY_UNAVAILABLE: 'This operation is unavailable for this storage.',
+  PREVIEW_UNSUPPORTED: 'Preview is not available for this file.',
+  PREVIEW_TOO_LARGE: 'File is too large to preview.',
   OPERATION_TOO_LARGE: 'This folder contains too many items for a synchronous copy.',
   QUOTA_EXCEEDED: 'The storage limit has been reached.',
   TRANSFER_INCOMPLETE: 'The transfer did not complete. Try again.',
@@ -30,7 +33,11 @@ function safeErrorCode(body, status) {
   if (status === 403) return 'FORBIDDEN';
   if (status === 404) return 'NOT_FOUND';
   if (status === 409) return 'NAME_CONFLICT';
-  if (status === 413) return body?.error?.code === 'OPERATION_TOO_LARGE' ? 'OPERATION_TOO_LARGE' : 'UPLOAD_TOO_LARGE';
+  if (status === 413) {
+    if (body?.error?.code === 'OPERATION_TOO_LARGE') return 'OPERATION_TOO_LARGE';
+    if (body?.error?.code === 'PREVIEW_TOO_LARGE') return 'PREVIEW_TOO_LARGE';
+    return 'UPLOAD_TOO_LARGE';
+  }
   if (status === 422) return 'CAPABILITY_UNAVAILABLE';
   if (status === 429) return body?.error?.code === 'QUOTA_EXCEEDED' ? 'QUOTA_EXCEEDED' : 'RATE_LIMITED';
   if (status === 400) return 'INVALID_INPUT';
@@ -253,6 +260,37 @@ export async function copyStorageObject(storageId, objectId, parentId, options =
 
 export function storageObjectDownloadUrl(storageId, objectId) {
   return `/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}/download`;
+}
+
+export function storageObjectPreviewUrl(storageId, objectId) {
+  return `/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}/preview`;
+}
+
+export async function fetchStorageObjectPreview(storageId, object, { fetchImpl = fetch, signal, maxBytes, kind } = {}) {
+  let response;
+  try {
+    response = await fetchImpl(storageObjectPreviewUrl(storageId, object.objectId), {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/octet-stream' },
+      signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    throw new StorageApiError('PROVIDER_UNAVAILABLE', 0);
+  }
+
+  if (!response.ok) {
+    let body;
+    try { body = await response.json(); } catch { body = null; }
+    throw new StorageApiError(safeErrorCode(body, response.status), response.status);
+  }
+  const mimeType = (response.headers.get('Content-Type') || '').split(';', 1)[0].trim().toLowerCase();
+  const resolved = getStoragePreviewSpec({ type: 'file', name: object.name, mimeType });
+  if (!resolved || resolved.kind !== kind) throw new StorageApiError('PREVIEW_UNSUPPORTED', 415);
+  const blob = await response.blob();
+  if (blob.size > maxBytes) throw new StorageApiError('PREVIEW_TOO_LARGE', 413);
+  return { blob, kind: resolved.kind, mimeType: resolved.mimeType };
 }
 
 export async function startStorageObjectDownload(storageId, objectId, { fetchImpl = fetch, signal, navigate = (url) => window.location.assign(url) } = {}) {

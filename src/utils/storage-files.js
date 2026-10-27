@@ -23,6 +23,19 @@ export function normalizeFileBrowserRouteState(routeState, storageId, folderId) 
   return breadcrumbs;
 }
 
+export function breadcrumbDestination(storageId, breadcrumbs, objectId) {
+  if (typeof storageId !== 'string' || !Array.isArray(breadcrumbs)) return null;
+  const index = breadcrumbs.findIndex((item) => item.objectId === objectId);
+  if (index < 0) return null;
+  const nextBreadcrumbs = breadcrumbs.slice(0, index + 1);
+  const folderId = nextBreadcrumbs.at(-1)?.objectId ?? null;
+  return {
+    folderId,
+    search: folderId ? `?folder=${encodeURIComponent(folderId)}` : '',
+    state: { fileBrowser: { storageId, breadcrumbs: nextBreadcrumbs } },
+  };
+}
+
 export function appendBreadcrumb(breadcrumbs, folder) {
   const parentPath = breadcrumbs.filter((item) => item.objectId !== folder.objectId);
   return [...parentPath, { objectId: folder.objectId, label: folder.name }];

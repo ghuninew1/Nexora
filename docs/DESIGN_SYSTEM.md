@@ -37,7 +37,7 @@ JSX ที่สร้างหรือแก้ต้องใช้ `cx()` �
 
 ## สถานะของ UI foundation
 
-Foundation, App Layout, File Browser และหน้า workspace ใช้ design system นี้แล้ว ส่วนข้อมูลและ operations ยังเป็น demo ใน browser; Nexora ยังไม่เชื่อม authentication, Storage API หรือ database
+Foundation, App Layout และหน้า workspace ใช้ design system นี้แล้ว. Nexora เชื่อม authentication, D1-backed session และบาง File Browser operations ผ่าน same-origin API; Dashboard, Recent, Favorites, Shared และ Trash ยังคงใช้ demo/fixture state.
 
 ก่อนจบแต่ละ phase ให้รัน lint/build ตามขอบเขต และตรวจ browser จริง: Dark/Light/System, desktop/mobile, keyboard, dialog/menu และ console errors
 
@@ -53,7 +53,8 @@ Foundation, App Layout, File Browser และหน้า workspace ใช้ d
 - Interaction อ้างอิง IssueDesk GlassButton: diagonal sheen, radial light ตามเมาส์, inset rim/shadow และ active scale 0.97; sheen, pointer light และ rim ของปุ่มใช้สีตัวอักษร จึงมองเห็นได้บนพื้นปุ่มทั้งสว่างและมืด ส่วนปุ่ม filled/destructive คงสีเพื่อรักษา contrast
 - Pointer tracking ไม่ทำงานกับ touch/disabled และไม่ใช้ React state ต่อการขยับเมาส์ Caller ยังส่ง `onPointerMove`, `ref`, `render` และ className callback ผ่าน Button ได้
 - ปุ่มตกแต่ง Search/Notifications เดิมใน Header ถูกแทนด้วยชื่อหน้าและคำอธิบาย ปุ่ม file search ใน toolbar ยังอยู่ตาม implementation เดิม
-- `FilesProvider` เก็บ files, favorites, recents และ trash ข้าม route ในหน่วยความจำ ข้อมูล demo รีเซ็ตเมื่อ refresh; upload queue จำลอง progress และไม่ส่งข้อมูลไป Storage Service
+- `FilesProvider` เก็บ files, favorites, recents และ trash ข้าม route ในหน่วยความจำ ข้อมูล demo รีเซ็ตเมื่อ refresh; upload queue ของ demo จำลอง progress และไม่ส่งข้อมูลไป Storage Service
 - File Browser มี responsive list/grid, search/sort, context actions, selection, dialogs, sample empty states และ preview สำหรับ browser `File` ใน session; ปุ่มรูปดาว Favorites วางหน้าสัญลักษณ์ไฟล์/โฟลเดอร์เพื่อ toggle ได้ตรงรายการ โดยมี touch target อย่างน้อย 44px
+- Connected File Browser uses a separate on-demand preview dialog for allowlisted images, PDF, and text. Text and JSON render as escaped source text, PDFs use a sandboxed frame, and preview loading/error/size states appear inline. Preview bytes are fetched only when requested; no preview bytes enter the listing cache.
 - Shared, provider usage และ permissions ยังไม่ใช่ข้อมูลหรือ operations จริง ปุ่ม Share ถูกปิดจนกว่าจะมี API ที่ผ่านการทบทวน
-- `pnpm lint`, `pnpm build`, `git diff --check` และ mobile browser QA ล่าสุดผ่านตามขอบเขตที่บันทึกใน `PROJECT_HANDOFF.md`; desktop viewport, console และ flow ที่ระบุว่ายังไม่ทดสอบต้องตรวจเพิ่ม
+- `pnpm lint`, `pnpm test`, `pnpm build`, and `git diff --check` pass for Phase 9.3.2. The local browser reached the sign-in gate because the dev auth API is unavailable; the connected preview dialog and its responsive states were not visually verified. See `PROJECT_HANDOFF.md` for remaining QA.

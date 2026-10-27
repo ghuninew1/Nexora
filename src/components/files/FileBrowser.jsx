@@ -11,6 +11,7 @@ import NewFolderDialog from "./NewFolderDialog";
 import RenameDialog from "./RenameDialog";
 import FolderDestinationDialog from "./FolderDestinationDialog";
 import UploadQueue from "./UploadQueue";
+import StorageFilePreviewDialog from "./StorageFilePreviewDialog";
 
 function FileListLoading() {
   return <div className={cx("overflow-hidden rounded-xl border border-border bg-card")} role="status" aria-live="polite" aria-busy="true" aria-label="Loading files">
@@ -64,7 +65,7 @@ function FileBrowser() {
         <h1 className={cx("sr-only")}>My Files</h1>
         <div className={cx("flex flex-wrap items-center justify-between gap-3")}>
           <FileBreadcrumbs items={browser.breadcrumbs.map((item) => ({ id: item.objectId, label: item.label }))} onNavigate={browser.navigateToBreadcrumb} />
-          <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Trash and preview are unavailable</span>
+          <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Preview on demand · Trash unavailable</span>
         </div>
         {browser.notice && <p className={cx("rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite">{browser.notice}</p>}
         {browser.revalidationError && <div className={cx("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><span>{browser.revalidationError}</span><Button type="button" variant="ghost" size="sm" onClick={() => void browser.refreshCurrentFolder()}>Refresh</Button></div>}
@@ -101,14 +102,14 @@ function FileBrowser() {
             onSelect={browser.toggleSelect}
             onSelectAll={browser.selectAll}
             onOpenFolder={browser.openFolder}
-            onPreview={() => {}}
+            onPreview={(file) => void browser.openPreview(file)}
             onRename={setRenameFile}
             onDelete={() => {}}
             onDownload={(file) => void browser.downloadObject(file)}
             onMove={(file) => setDestinationAction({ action: "move", file, key: crypto.randomUUID() })}
             onCopy={(file) => setDestinationAction({ action: "copy", file, key: crypto.randomUUID() })}
             onToggleFavorite={() => {}}
-            capabilities={{ download: browser.canDownload, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy }}
+            capabilities={{ download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy }}
             mutatingIds={browser.mutatingIds}
             canCreateFolder={browser.canCreateFolder}
             onCreateFolder={() => setNewFolderOpen(true)}
@@ -130,6 +131,7 @@ function FileBrowser() {
         isAllowed={destinationAction?.action === "move" ? browser.canMove : browser.canCopy}
         onConfirm={handleDestination}
       />
+      <StorageFilePreviewDialog preview={browser.preview} onOpenChange={(open) => { if (!open) browser.closePreview(); }} onDownload={(file) => void browser.downloadObject(file)} maxTextPreviewBytes={browser.maxTextPreviewBytes} />
     </div>
   );
 }
