@@ -50,7 +50,7 @@ Foundation, App Layout, File Browser และหน้า workspace ใช้ d
 - Dashboard, Recent, Favorites และ Trash ใช้ in-memory state ร่วมกับ File Browser; Shared ใช้ fixture records, Storage แสดงสถานะยังไม่เชื่อม และ Settings ใช้ตั้งค่าธีมได้ URL ที่ไม่พบแสดง 404
 - Mobile navigation ใช้ Base UI Dialog: focus trap, Escape, คืน focus และปิดเมื่อเลือกเมนูหรือเปลี่ยนเป็น desktop breakpoint
 - `Button` กลางยังใช้ Base UI และ variants เดิม โดยใช้ `src/utils/glass.js` และ `.glass-interactive` ร่วมกับ navigation
-- Interaction อ้างอิง IssueDesk GlassButton: diagonal sheen, radial light ตามเมาส์, inset rim/shadow และ active scale 0.97 ปุ่ม filled/destructive คงสีเพื่อรักษา contrast
+- Interaction อ้างอิง IssueDesk GlassButton: diagonal sheen, radial light ตามเมาส์, inset rim/shadow และ active scale 0.97; sheen, pointer light และ rim ของปุ่มใช้สีตัวอักษร จึงมองเห็นได้บนพื้นปุ่มทั้งสว่างและมืด ส่วนปุ่ม filled/destructive คงสีเพื่อรักษา contrast
 - Pointer tracking ไม่ทำงานกับ touch/disabled และไม่ใช้ React state ต่อการขยับเมาส์ Caller ยังส่ง `onPointerMove`, `ref`, `render` และ className callback ผ่าน Button ได้
 - ปุ่มตกแต่ง Search/Notifications เดิมใน Header ถูกแทนด้วยชื่อหน้าและคำอธิบาย ปุ่ม file search ใน toolbar ยังอยู่ตาม implementation เดิม
 - `FilesProvider` เก็บ files, favorites, recents และ trash ข้าม route ในหน่วยความจำ ข้อมูล demo รีเซ็ตเมื่อ refresh; upload queue จำลอง progress และไม่ส่งข้อมูลไป Storage Service

@@ -13,9 +13,10 @@
 - Browser QA ที่ยังไม่ยืนยัน: desktop viewport, native file chooser/upload queue (เลือกไฟล์ไม่ได้ใน browser control นี้), permanent delete (ต้องให้ผู้ใช้ยืนยัน ณ เวลาลบ), reduced-motion system override และ console log
 - UI follow-up mobile QA: ตรวจ File Browser ที่ `/files` ใน in-app browser บนหน้าจอมือถือ, สลับ List/Grid, กดดาวเพิ่ม Favorites แล้วตรวจสถานะปุ่มเปลี่ยนเป็น Remove, เปิด mobile Sidebar และตรวจ labels/โลโก้เต็ม; screenshot ยืนยัน layout ไม่มีการตัดแถวรายการใน viewport ที่ตรวจ
 - Phase 8 backend foundation: Pages Functions, Nexora D1 schema, hashed-cookie sessions, origin checks, mount ownership และ server-only Shared Storage `/v3` client
-- Operator ยืนยัน production D1 และ migration พร้อมใช้งาน และ Shared Storage app/project/access token/secrets ผ่าน `/v3` HTTP 200; รอบ CLI นี้ไม่เชื่อมต่อ production, ไม่เปลี่ยน secrets และไม่สร้าง records
+- Operator ยืนยัน production D1/migration, admin, storage mount, Shared Storage app/project/access token และ production secrets พร้อมใช้งาน; `/v3` capabilities test ได้ HTTP 200. Phase 8.5 ไม่เชื่อมต่อ production และไม่เปลี่ยน records/secrets
 - `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; `wrangler.jsonc` กำหนด D1 `nexora-db` พร้อม database ID
 - `FilesProvider`, `useFiles`, fixtures และ upload simulation ยังเป็น demo และไม่เรียก backend; frontend integration อยู่ Phase 9
+- Phase 8.5 เพิ่ม frontend auth/session restore, protected routes, login/logout และ Header identity; Storage/File Browser ยัง demo-only
 - `FilesProvider` เก็บ files, Favorites, Recent และ Trash ใน memory ระหว่าง route; refresh จะคืนข้อมูล demo
 - Upload queue จำลอง progress ใน browser; preview/download ทำได้กับไฟล์ที่ผู้ใช้เลือกและยังอยู่ใน session เท่านั้น
 - Shared แสดง fixture records, Share action ยังปิดอยู่, Storage แสดงว่า provider ยังไม่ได้เชื่อม
@@ -29,14 +30,16 @@
 - [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md): current and target architecture, provider behavior contract, registry/secrets, logical IDs, namespace, D1 table proposal, auth/security/streaming review, SMB readiness และ Phase 8 file-level sequence
 - [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md): proposed provider-neutral `/api/storage/v1/*` routes, request/response patterns, capability model, logical IDs, errors, retry/streaming behavior
 - [`docs/PRODUCTION_PROVISIONING.md`](docs/PRODUCTION_PROVISIONING.md): exact manual commands/env, remote target behavior, and recovery guidance for admin and mount provisioning
+- [`docs/PHASE_8_5.md`](docs/PHASE_8_5.md): frontend auth design, routes, session lifecycle, security review, validation and production smoke test
 - Audit อ่านเฉพาะ source/config ที่เกี่ยวข้อง; ไม่อ่าน credentials, local Storage database/WAL/SHM หรือ object data และไม่แก้ IssueDesk/Shared Storage Service
 
 ## สถานะ frontend validation
 
 - Checks ที่รันในรอบก่อน: `pnpm lint` ผ่าน, `pnpm build` ผ่าน, browser route/interaction checks ตามรายการด้านบน
 - UI follow-up ล่าสุด: `pnpm lint`, `pnpm build` และ `git diff --check` ผ่านหลังเพิ่มปุ่ม Favorites inline; in-app browser mobile interaction/layout ผ่านตามรายการด้านบน
-- Browser plugin ไม่อยู่ในเครื่องมือของ session นี้ และ `pnpm exec playwright --version` แจ้งว่าไม่มี Playwright; desktop viewport กับ browser console จึงยังไม่ได้ตรวจ ยังค้าง native file chooser/upload queue, permanent delete, reduced-motion OS override และ console logs
-- Phase 8 เพิ่ม `pnpm test`; 25/25 backend tests ผ่านด้วย Node in-memory SQLite และ mocked Shared Storage
+- Browser UI smoke tests สำหรับ Phase 8.5 ใช้ localhost Vite server กับ mock auth endpoint/QA identity; ตรวจ unauthenticated redirect, login/return route, Header identity, logout และ safe invalid-password message. ไม่ใช้ production account
+- `pnpm exec playwright --version` ไม่มี Playwright ใน dependencies; ไม่มี React component test framework จึงเพิ่ม Node tests สำหรับ auth API contract และ safe return handling แทน; production login และ browser/device matrix ยังไม่ยืนยัน
+- Phase 8 เพิ่ม `pnpm test`; backend และ auth-client/provisioning tests รันด้วย Node in-memory SQLite/mocks
 - QA ที่ยังไม่ครบตามรายการด้านบนต้องตรวจแยกก่อนสรุปว่า UI ผ่านทุก flow/viewport
 
 ## Shared Storage Phase S1/S2 — 2026-10-27
@@ -49,11 +52,15 @@ Shared Storage S1/S2 เสร็จใน checkout แยก `issuedesk/garage/
 
 Auth uses PBKDF2-HMAC-SHA-256 at 600,000 iterations via Web Crypto, 32 random bytes per session, SHA-256 token hashes in D1, 14-day Secure/HttpOnly/SameSite=Lax cookies, inactive-user rejection and bounded login attempts. `pnpm admin:create:local` remains unchanged. Added explicit `pnpm admin:create:remote` and `pnpm storage:mount:create:remote`, both hard-coded to Wrangler `--remote` against configured `nexora-db`; neither was run in this work. No public registration, share mutation API, or SMB support.
 
-See [Phase 8 report](docs/PHASE_8.md) and [production provisioning guide](docs/PRODUCTION_PROVISIONING.md). Production D1/migration and Shared Storage credentials/configuration are operator-confirmed; production user and mount records remain an operator action through the new commands. Frontend integration remains Phase 9.
+See [Phase 8 report](docs/PHASE_8.md), [production provisioning guide](docs/PRODUCTION_PROVISIONING.md), and [Phase 8.5 report](docs/PHASE_8_5.md). Production records/configuration are operator-confirmed. The operator reported the production provisioning CLI can print an unexpected-response message after a successful write; admin and mount were verified directly in D1. Do not rerun provisioning or alter those records as part of Phase 8.5. Production login has not been tested here.
 
-## งานถัดไป: Phase 9 (รอ review)
+## Phase 8.5 — Frontend Authentication
 
-หลัง review provisioning CLI ผู้ดูแลสามารถสั่งสร้าง production admin/mount ตามคู่มือได้; จากนั้น Phase 9 จึงเชื่อม File Browser/UI กับ Nexora API โดยคง demo mode ตามแผน
+เพิ่ม AuthProvider/useAuth, same-origin `/api/auth/*` client, `/login`, protected workspace routing, session restore และ Header sign out/user identity. `FilesProvider`, fixture state และ upload simulation ยังไม่เชื่อม Storage API; รายละเอียด QA และ manual production smoke test อยู่ใน `docs/PHASE_8_5.md`.
+
+## งานถัดไป: Phase 9 (ยังไม่เริ่ม)
+
+หลัง review Phase 8.5 ให้เริ่มวางแผนเชื่อม File Browser กับ Nexora Storage API เป็นงานใหม่; อย่าขยาย Phase 8.5 ไปเชื่อม FilesProvider หรือเปลี่ยน production.
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -70,7 +77,7 @@ See [Phase 8 report](docs/PHASE_8.md) and [production provisioning guide](docs/P
 
 - IssueDesk เป็น reference ด้าน architecture/UI; Nexora ยังคงเป็น Private Cloud/File Management ไม่ copy business logic หรือ auth assumptions โดยไม่ตรวจสอบ
 - ใช้ `cx()` กับ JSX `className` ทุกจุดที่สร้างหรือแก้; helper นี้รวม string/falsy values และไม่ได้ merge Tailwind conflicts
-- ใช้ shared `Button` และ Liquid Glass styles ที่มีอยู่ รักษา keyboard, focus-visible, reduced-motion และ responsive behavior
+- ใช้ shared `Button` และ Liquid Glass styles ที่มีอยู่; sheen, pointer light และ inset rim ของปุ่มปรับตามสีตัวอักษรให้เห็นบนพื้นสว่างและมืด รักษา keyboard, focus-visible, reduced-motion และ responsive behavior
 - ห้าม deploy, migrate remote D1, เปลี่ยน secrets, แก้ข้อมูล Storage หรือเปลี่ยน Shared Storage Service หากไม่ได้รับ authorization แยก
 - รักษาไฟล์และการแก้ไขเดิมใน checkout; ไม่เปลี่ยน dependency เพียงเพื่อ workaround ปัญหา local environment
 
@@ -81,13 +88,13 @@ See [Phase 8 report](docs/PHASE_8.md) and [production provisioning guide](docs/P
 - `src/components/files/`: File Browser, demo grid, dialogs, preview และ upload queue UI
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, Settings
 - `src/data/files.js`: fixtures; metadata ตัวอย่างไม่ใช่สถานะ Storage จริง
-- `src/services/`: ยังไม่มี Nexora browser API client; `functions/` และ `migrations/` มี Phase 8 backend foundation
+- `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: frontend authentication state/client; ยังไม่มี Storage API client
 - `README.md`, `AGENTS.md`, `docs/DESIGN_SYSTEM.md`: project status, working conventions และ UI foundation
-- `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`, `docs/PHASE_8.md`, `docs/PRODUCTION_PROVISIONING.md`: source audit, API contract, Phase 8 report และ operator provisioning guide
+- `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`, `docs/PHASE_8.md`, `docs/PHASE_8_5.md`, `docs/PRODUCTION_PROVISIONING.md`: source audit, API contract, phase reports and provisioning guide
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_8.md`, `docs/PRODUCTION_PROVISIONING.md` และตรวจ `git status --short`; production provisioning CLI พร้อมให้ operator review โดย frontend ยังเป็น demo ก่อน Phase 9
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_8.md`, `docs/PHASE_8_5.md`, `docs/PRODUCTION_PROVISIONING.md` และตรวจ `git status --short`; Phase 8.5 frontend auth เสร็จแล้ว โดย Storage/File Browser ยังเป็น demo ก่อน Phase 9
 
 ## กติกาการดูแลเอกสาร
 

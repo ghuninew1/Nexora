@@ -12,12 +12,14 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/` owns Pages API routing, PBKDF2 password verification, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
-- Phase 8 API/auth exists locally; `FilesProvider`, `useFiles`, fixtures, and upload simulation remain demo-only until Phase 9.
+- Phase 8.5 connects frontend authentication only; `FilesProvider`, `useFiles`, fixtures, and upload simulation remain demo-only until Phase 9.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
 
 - `src/App.jsx`, `src/layouts/`: routing and persistent shared shell.
+- `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: same-origin auth requests, session bootstrap, login/logout, and public user state.
+- `src/components/auth/`, `src/pages/Login.jsx`: loading/error gates, protected-route handling, and sign-in page.
 - `src/context/FilesProvider.jsx`: in-memory file, favorite, recent, and trash state shared across routes.
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
@@ -36,9 +38,10 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/STORAGE_ARCHITECTURE.md`: current/target provider architecture and Phase 8 implementation boundary.
 - `docs/STORAGE_API_V1_PROPOSAL.md`: reviewed provider-neutral `/api/storage/v1/*` contract; implemented routes remain subject to later production review.
 - `docs/PHASE_8.md`: backend/auth/API implementation report and local verification.
+- `docs/PHASE_8_5.md`: frontend auth routes, session lifecycle, security review, validation, and manual production smoke test.
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
 - `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: local Shared Storage implementation in the separate IssueDesk checkout. S2 migration remains unapplied to its service runtime.
-- `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2 and local Phase 8 status; production provisioning and Phase 9 remain separate.
+- `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2, Phase 8 backend, Phase 8.5 frontend auth, and remaining Phase 9 scope.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
 
@@ -66,7 +69,7 @@ Check this map against actual files when changing the architecture; update READM
 - Use semantic progressbar values and labels for progress indicators, polite status announcements for completion, and sufficiently large touch targets for row actions.
 - Keep long breadcrumbs usable on narrow screens and honor `prefers-reduced-motion` for animation and transitions.
 - Preserve `Button` Base UI semantics, variants, `ref`, render/slot composition, state-based className callbacks, and caller event handlers when extending the shared component.
-- Use the shared `Button` for actions and retain its IssueDesk-referenced Liquid Glass hover behavior; avoid one-off button styling that bypasses the shared variants.
+- Use the shared `Button` for actions and retain its IssueDesk-referenced Liquid Glass hover behavior; button sheen and pointer light should contrast with light and dark button surfaces; avoid one-off button styling that bypasses the shared variants.
 
 ## File Browser behavior
 
@@ -101,7 +104,7 @@ pnpm deploy
 pnpm cf-typegen
 ```
 
-`pnpm test` uses Node's test runner with in-memory SQLite, mocked upstream calls, and pure provisioning logic; it never writes remote D1. `pnpm db:migrate:local` always uses Wrangler `--local`; never remove that flag for routine validation. `pnpm admin:create:local` remains local-only. The explicit `*:remote` provisioning commands target `nexora-db` with `--remote`; never run them during validation or without a reviewed operator request. `pnpm preview` builds and starts Wrangler Pages locally. `pnpm deploy` deploys; it is not a validation command and requires explicit authorization.
+`pnpm test` uses Node's test runner with in-memory SQLite, mocked upstream calls, auth-client logic, and pure provisioning logic; it never writes remote D1. `pnpm db:migrate:local` always uses Wrangler `--local`; never remove that flag for routine validation. `pnpm admin:create:local` remains local-only. The explicit `*:remote` provisioning commands target `nexora-db` with `--remote`; never run them during validation or without a reviewed operator request. `pnpm preview` builds and starts Wrangler Pages locally. `pnpm deploy` deploys; it is not a validation command and requires explicit authorization.
 
 When dependencies appear incomplete, inspect the package manager/store and preserve `package.json` and `pnpm-lock.yaml`. Do not change dependency versions merely to work around a local `node_modules` hydration problem.
 
