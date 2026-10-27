@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Activity, File, FileText, Files, Folder, FolderClock, HardDrive, Heart, LoaderCircle, RefreshCw, RotateCcw, Share2, ShieldCheck, Trash2, UploadCloud, Users } from "lucide-react";
+import { Activity, Download, Eye, File, FileText, Files, Folder, FolderClock, HardDrive, Heart, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, Star, Trash2, Users } from "lucide-react";
 import { getPageInfo } from "../components/navigation/navigation";
 import { Button } from "../components/ui/button";
 import { cx } from "../utils/cx";
@@ -30,37 +30,116 @@ function StatCard({ icon: Icon, label, value, hint }) {
   </article>;
 }
 
-function DashboardPage({ browser, openFile, navigate }) {
-  const sharedCount = browser.files.filter((file) => file.sharedWith || file.sharedByMe).length;
+function formatRelativeAccess(value) {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return "Time unavailable";
+  const seconds = Math.round((timestamp - Date.now()) / 1000);
+  const units = [[60, "second"], [60, "minute"], [24, "hour"], [7, "day"], [4.35, "week"], [12, "month"], [Infinity, "year"]];
+  let amount = seconds;
+  let unit = "second";
+  for (const [threshold, nextUnit] of units) {
+    if (Math.abs(amount) < threshold) { unit = nextUnit; break; }
+    amount /= threshold;
+    unit = nextUnit;
+  }
+  return new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(Math.round(amount), unit);
+}
+
+function RecentItemRow({ item, browser, compact = false }) {
+  const isFolder = item.type === "folder";
+  const isCurrentStorage = item.storageId === browser.storageId;
+  const isFavorite = browser.favorites.some((favorite) => favorite.storageId === item.storageId && favorite.objectId === item.objectId);
+  const isPending = browser.mutatingIds.has(item.objectId);
+  const canPreview = isCurrentStorage && !isFolder && browser.canPreviewFile(item);
+  const Icon = isFolder ? Folder : item.mimeType === "application/pdf" ? FileText : File;
+  return <article className={cx("glass-surface flex min-w-0 flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
+    <div className={cx("flex min-w-0 items-start gap-3")}>
+      <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
+      <div className={cx("min-w-0 flex-1")}>
+        <p className={cx("truncate text-sm font-medium")}>{item.name}</p>
+        <p className={cx("mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground")}>
+          <span>{item.storageName} · {isFolder ? "Folder" : item.size ?? "File"}</span>
+          <span aria-hidden="true">·</span>
+          <time dateTime={item.accessedAt} title={new Date(item.accessedAt).toLocaleString()}>{formatRelativeAccess(item.accessedAt)}</time>
+        </p>
+      </div>
+    </div>
+    <div className={cx("flex flex-wrap gap-1 sm:shrink-0")}>
+      {isFolder ? <Button type="button" variant="outline" size={compact ? "sm" : "default"} disabled={!isCurrentStorage} onClick={() => browser.openRecentFolder(item)} aria-label={`Open folder ${item.name}`}><Folder data-icon="inline-start" />Open folder</Button> : <>
+        <Button type="button" variant="outline" size={compact ? "sm" : "default"} disabled={!canPreview} onClick={() => void browser.openPreview(item)} aria-label={`Preview ${item.name}`}><Eye data-icon="inline-start" />Preview</Button>
+        <Button type="button" variant="ghost" size={compact ? "sm" : "default"} disabled={!isCurrentStorage || !browser.canDownload || isPending} onClick={() => void browser.downloadObject(item)} aria-label={`Download ${item.name}`}><Download data-icon="inline-start" />Download</Button>
+        {item.parentId !== undefined && <Button type="button" variant="ghost" size={compact ? "sm" : "default"} disabled={!isCurrentStorage} onClick={() => browser.openContainingFolder(item)} aria-label={`Open containing folder for ${item.name}`}>Open folder</Button>}
+      </>}
+      <Button type="button" variant="ghost" size="icon-lg" className={cx("min-h-11 min-w-11 shrink-0", isFavorite && "text-amber-500")} disabled={isPending} onClick={() => void browser.toggleFavorite(item)} aria-label={`${isFavorite ? "Remove" : "Add"} ${item.name} ${isFavorite ? "from" : "to"} Favorites`} aria-pressed={isFavorite} title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}><Star className={cx(isFavorite && "fill-amber-400")} aria-hidden="true" /></Button>
+    </div>
+  </article>;
+}
+
+function RecentPanel({ browser, items, compact = false, emptyTitle = "Nothing here yet" }) {
+  if (["loading", "refreshing", "idle"].includes(browser.recentStatus)) return <div className={cx("glass-surface flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><LoaderCircle className={cx("size-4 animate-spin motion-reduce:animate-none")} />Loading Recent activity…</div>;
+  if (browser.recentStatus === "error") return <div className={cx("glass-surface flex flex-col items-start gap-3 p-5")} role="alert"><p className={cx("text-sm text-destructive")}>{browser.recentError}</p><Button type="button" variant="outline" onClick={() => void browser.refreshRecent()}>Try again<RefreshCw /></Button></div>;
+  if (items.length === 0) return <div className={cx("glass-surface flex min-h-40 flex-col items-center justify-center px-6 text-center")}><h2 className={cx("text-sm font-semibold")}>{emptyTitle}</h2><p className={cx("mt-1 max-w-sm text-sm text-muted-foreground")}>Open a connected folder, preview a file, or download it to see it here.</p></div>;
+  return <div className={cx("flex flex-col gap-3")}>{items.map((item) => <RecentItemRow key={`${item.storageId}:${item.objectId}`} item={item} browser={browser} compact={compact} />)}</div>;
+}
+
+function formatUsage(usage) {
+  if (usage.status !== "available" || usage.usedBytes === null) return "Not reported";
+  const used = `${usage.usedBytes.toLocaleString()} bytes used`;
+  return usage.quotaBytes === null ? used : `${used} of ${usage.quotaBytes.toLocaleString()} bytes`;
+}
+
+function DashboardPage({ navigate }) {
+  const browser = useFiles();
+  const { refreshRecent } = browser;
+  const storage = useStorage();
+  useEffect(() => { void refreshRecent(6); }, [refreshRecent]);
+  const connection = storage.status === "ready" ? "Connected"
+    : storage.status === "empty" ? "No active storage"
+      : storage.status === "unavailable" ? "Unavailable" : "Checking…";
+  const storageName = storage.activeStorage?.name ?? connection;
   const stats = [
-    { icon: Files, label: "My files", value: browser.files.filter((file) => file.type === "file").length, hint: "Files in this demo workspace" },
-    { icon: Heart, label: "Favorites", value: browser.favoriteFiles.length, hint: "Saved for quick access" },
-    { icon: Share2, label: "Shared", value: sharedCount, hint: "Sample sharing records" },
-    { icon: Trash2, label: "Trash", value: "—", hint: "Open Trash to review connected items" },
+    { icon: HardDrive, label: "Storage", value: storageName, hint: `${connection}${storage.activeStorage ? ` · ${storage.activeStorage.providerLabel}${storage.activeStorage.readOnly ? " · Read only" : ""}` : ""}` },
+    { icon: Files, label: "Storage usage", value: formatUsage(storage.usage), hint: storage.usage.measuredAt ? `Measured ${new Date(storage.usage.measuredAt).toLocaleString()}` : "Reported by connected storage" },
   ];
   return <div className={cx("flex flex-col gap-8")}>
-    <PageHeading eyebrow="Workspace overview" title="Good to see you" description="A quick look at your files and recent activity." action={<Button onClick={() => navigate("/files")}><Files data-icon="inline-start" />Browse files</Button>} />
-    <div className={cx("grid gap-3 sm:grid-cols-2 xl:grid-cols-4")}>{stats.map((item) => <StatCard key={item.label} {...item} />)}</div>
+    <PageHeading eyebrow="Workspace overview" title="Good to see you" description="Your connected storage, recent access, and useful shortcuts." action={<Button type="button" onClick={() => navigate("/files")}><Files data-icon="inline-start" />Browse files</Button>} />
+    {storage.status === "unavailable" && <p className={cx("rounded-lg border border-destructive/30 px-3 py-2 text-sm text-destructive")} role="status">{storage.error || "Storage connection is unavailable."}</p>}
+    <div className={cx("grid gap-3 sm:grid-cols-2")}>{stats.map((item) => <StatCard key={item.label} {...item} />)}</div>
     <section className={cx("flex flex-col gap-4")}>
-      <div className={cx("flex items-end justify-between gap-3")}><div><h2 className={cx("text-lg font-semibold")}>Recently opened</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Pick up where you left off.</p></div><Button variant="ghost" size="sm" onClick={() => navigate("/recent")}>View all<FolderClock /></Button></div>
-      <DemoFileGrid files={browser.recentFiles.slice(0, 3)} mode="recent" emptyTitle="Nothing here yet" emptyDescription="Open a file or folder to see it in Recent." onOpen={openFile} />
+      <div className={cx("flex flex-wrap items-end justify-between gap-3")}><div><h2 className={cx("text-lg font-semibold")}>Recently accessed</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Folders you opened and files you previewed or downloaded.</p></div><Button type="button" variant="ghost" size="sm" onClick={() => navigate("/recent")}>View all<FolderClock /></Button></div>
+      <RecentPanel browser={browser} items={browser.recentItems.slice(0, 6)} compact />
     </section>
-    <div className={cx("glass-surface flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between")}>
-      <div className={cx("flex items-start gap-3")}><span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}><UploadCloud className={cx("size-5")} /></span><div><h2 className={cx("text-sm font-semibold")}>Keep everything organized</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Create folders or add files to this temporary demo workspace.</p></div></div>
-      <Button variant="outline" onClick={() => navigate("/files")}>Open My Files</Button>
-    </div>
+    <section className={cx("flex flex-col gap-3")} aria-labelledby="dashboard-shortcuts-heading">
+      <div><h2 id="dashboard-shortcuts-heading" className={cx("text-lg font-semibold")}>Quick links</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Go straight to the places you use most.</p></div>
+      <div className={cx("flex flex-wrap gap-2")}>
+        <Button type="button" variant="outline" onClick={() => navigate("/files")}><Files data-icon="inline-start" />My Files</Button>
+        <Button type="button" variant="outline" onClick={() => navigate("/recent")}><FolderClock data-icon="inline-start" />Recent</Button>
+        <Button type="button" variant="outline" onClick={() => navigate("/favorites")}><Star data-icon="inline-start" />Favorites</Button>
+        <Button type="button" variant="outline" onClick={() => navigate("/trash")}><Trash2 data-icon="inline-start" />Trash</Button>
+      </div>
+    </section>
+  </div>;
+}
+
+function RecentPage({ page }) {
+  const browser = useFiles();
+  const { refreshRecent } = browser;
+  const storage = useStorage();
+  useEffect(() => { void refreshRecent(); }, [refreshRecent]);
+  return <div className={cx("flex flex-col gap-6")}>
+    <PageHeading eyebrow="Your library" title={page.label} description="Files and folders you explicitly accessed most recently." action={<Button type="button" variant="outline" onClick={() => void browser.refreshRecent()} disabled={["loading", "refreshing"].includes(browser.recentStatus)} aria-busy={["loading", "refreshing"].includes(browser.recentStatus)}><RefreshCw data-icon="inline-start" />Refresh</Button>} />
+    {storage.status === "empty" && <div className={cx("glass-surface px-4 py-3 text-sm text-muted-foreground")} role="status">No active storage mount is connected.</div>}
+    <RecentPanel browser={browser} items={browser.recentItems} emptyTitle="No recent activity" />
   </div>;
 }
 
 function ListingPage({ page, browser, openFile }) {
   const connected = useFiles();
   const path = page.to;
-  const recent = path === "/recent";
   const favorites = path === "/favorites";
   const shared = path === "/shared";
-  const files = recent ? browser.recentFiles : favorites ? connected.favoriteFiles : browser.files.filter((file) => file.sharedWith || file.sharedByMe);
+  const files = favorites ? connected.favoriteFiles : browser.files.filter((file) => file.sharedWith || file.sharedByMe);
   const descriptions = {
-    "/recent": "Files and folders you opened recently in this browser session.",
     "/favorites": "Your starred items from connected storage.",
     "/shared": "Sample sharing records for this workspace. Sharing links and permissions are not connected.",
   };
@@ -76,7 +155,7 @@ function ListingPage({ page, browser, openFile }) {
               <div className={cx("min-w-0 flex-1")}><p className={cx("truncate text-sm font-medium")}>{file.name}</p><p className={cx("mt-1 truncate text-xs text-muted-foreground")}>{file.storageName} · {file.type === "folder" ? "Folder" : file.size ?? "File"}</p></div>
               <Button type="button" variant="ghost" size="icon-lg" className={cx("min-h-11 min-w-11 shrink-0 text-amber-500")} onClick={() => void connected.toggleFavorite(file)} aria-label={`Remove ${file.name} from Favorites`} title="Remove from Favorites"><Heart className={cx("fill-amber-400")} aria-hidden="true" /></Button>
             </article>)}
-    </section> : <DemoFileGrid files={files} mode={recent ? "recent" : "shared"} onOpen={openFile} emptyTitle={recent ? "No recent activity" : "Nothing shared here"} emptyDescription={recent ? "Open a file or folder to see it here." : "Shared items will appear here when sharing is configured."} />}
+    </section> : <DemoFileGrid files={files} mode="shared" onOpen={openFile} emptyTitle="Nothing shared here" emptyDescription="Shared items will appear here when sharing is configured." />}
   </div>;
 }
 
@@ -192,7 +271,7 @@ function SettingsPage({ page }) {
       <div><h2 className={cx("text-sm font-semibold")}>Appearance</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Choose light, dark, or follow your system preference.</p></div><ThemeToggle />
     </section>
     <section className={cx("glass-surface p-5")}>
-      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Favorites, and Recent activity use demo data held in app memory. Connected File Browser and Trash data come from the active storage API. Theme preference is saved locally in this browser.</p></div></div>
+      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Recent, Favorites, File Browser, and Trash use connected Nexora data where available. Shared remains an illustrative page; Theme preference is saved locally in this browser.</p></div></div>
     </section>
   </div>;
 }
@@ -215,8 +294,9 @@ export default function WorkspacePage() {
   };
   let screen;
   if (!page) screen = <section className={cx("glass-surface p-8 text-center")}><h1 className={cx("text-xl font-semibold")}>Page not found</h1><Button variant="outline" className={cx("mt-4")} onClick={() => navigate("/files")}>Back to My Files</Button></section>;
-  else if (pathname === "/dashboard") screen = <DashboardPage browser={browser} openFile={openFile} navigate={navigate} />;
-  else if (["/recent", "/favorites", "/shared"].includes(pathname)) screen = <ListingPage page={page} browser={browser} openFile={openFile} />;
+  else if (pathname === "/dashboard") screen = <DashboardPage navigate={navigate} />;
+  else if (pathname === "/recent") screen = <RecentPage page={page} />;
+  else if (["/favorites", "/shared"].includes(pathname)) screen = <ListingPage page={page} browser={browser} openFile={openFile} />;
   else if (pathname === "/trash") screen = <TrashPage page={page} />;
   else if (pathname === "/storage") screen = <StoragePage page={page} navigate={navigate} />;
   else if (pathname === "/settings") screen = <SettingsPage page={page} />;

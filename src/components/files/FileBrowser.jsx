@@ -77,7 +77,7 @@ function FileBrowser() {
       <section className={cx("flex min-w-0 flex-col gap-5")}>
         <h1 className={cx("sr-only")}>My Files</h1>
         <div className={cx("flex flex-wrap items-center justify-between gap-3")}>
-          <FileBreadcrumbs items={browser.breadcrumbs.map((item) => ({ id: item.objectId, label: item.label }))} onNavigate={browser.navigateToBreadcrumb} />
+          <FileBreadcrumbs abbreviated={browser.breadcrumbsAbbreviated} items={browser.breadcrumbs.map((item) => ({ id: item.objectId, label: item.label }))} onNavigate={browser.navigateToBreadcrumb} />
           <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Preview on demand</span>
         </div>
         {browser.notice && <p className={cx("rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite">{browser.notice}</p>}

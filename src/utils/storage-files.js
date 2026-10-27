@@ -7,6 +7,7 @@ export function rootBreadcrumbs() {
 export function normalizeFileBrowserRouteState(routeState, storageId, folderId) {
   if (!routeState || routeState.storageId !== storageId || !Array.isArray(routeState.breadcrumbs)
     || routeState.breadcrumbs.length < 1 || routeState.breadcrumbs.length > 101) return null;
+  if (routeState.abbreviated === true && routeState.breadcrumbs.length !== 2) return null;
   const [root, ...segments] = routeState.breadcrumbs;
   if (!root || root.objectId !== null || root.label !== 'My Files') return null;
   const seen = new Set();
@@ -23,7 +24,7 @@ export function normalizeFileBrowserRouteState(routeState, storageId, folderId) 
   return breadcrumbs;
 }
 
-export function breadcrumbDestination(storageId, breadcrumbs, objectId) {
+export function breadcrumbDestination(storageId, breadcrumbs, objectId, abbreviated = false) {
   if (typeof storageId !== 'string' || !Array.isArray(breadcrumbs)) return null;
   const index = breadcrumbs.findIndex((item) => item.objectId === objectId);
   if (index < 0) return null;
@@ -32,7 +33,8 @@ export function breadcrumbDestination(storageId, breadcrumbs, objectId) {
   return {
     folderId,
     search: folderId ? `?folder=${encodeURIComponent(folderId)}` : '',
-    state: { fileBrowser: { storageId, breadcrumbs: nextBreadcrumbs } },
+    state: { fileBrowser: { storageId, breadcrumbs: nextBreadcrumbs,
+      ...(abbreviated && folderId !== null ? { abbreviated: true } : {}) } },
   };
 }
 

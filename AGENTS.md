@@ -8,29 +8,29 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/App.jsx` defines routes; `src/layouts/AppLayout.jsx` keeps a shared `AppShell` around the route outlet.
 - `src/components/layout/` contains responsive navigation, header, and app shell. `src/components/files/` contains file browser UI. `src/hooks/` owns reusable state. `src/services/` is the intended location for domain API clients as integrations are added.
 - `src/index.css` owns design tokens and Liquid Glass primitives. Base UI/shadcn wrappers live in `src/components/ui/`.
-- `src/data/files.js` is demo data for Dashboard, Favorites, Recent and Shared views; those changes reset when the tab is refreshed. Phase 9.2 File Browser listing/navigation/folder creation, Phase 9.3 upload/download/rename/move/copy, and Phase 9.4 Trash/restore/permanent delete use logical object metadata through the authenticated Nexora Storage API.
+- `src/data/files.js` remains demo data for Shared and legacy examples; Dashboard, Recent, Favorites, File Browser, and Trash use authenticated Nexora data where implemented. Phase 9.5 uses the existing D1 `recent_access` store and `/api/recent` routes for bounded Recent history and current object hydration.
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
-- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory metadata-only listing cache; Phase 9.3.2 adds on-demand safe inline preview through the authenticated download path and fixes exact-ancestor breadcrumb navigation; Phase 9.4 connects Move to Trash, Trash listing, restore, and permanent delete. Dashboard, Recent, Favorites, and Shared remain demo-only.
+- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory metadata-only listing cache; Phase 9.3.2 adds on-demand safe inline preview through the authenticated download path and fixes exact-ancestor breadcrumb navigation; Phase 9.4 connects Move to Trash, Trash listing, restore, and permanent delete; Phase 9.4.1 connects selection actions and Favorites; Phase 9.5 connects Recent tracking, Recent page, and Dashboard. Shared remains demo-only.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
 
 - `src/App.jsx`, `src/layouts/`: routing and persistent shared shell.
 - `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: same-origin auth requests, session bootstrap, login/logout, and public user state.
-- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated same-origin storage mount discovery, public capabilities, optional usage, object listing/pagination, folder creation, and Trash lifecycle requests.
+- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated same-origin storage mount discovery, public capabilities, optional usage, object listing/pagination, folder creation, Favorites, Recent, and Trash lifecycle requests.
 - `src/components/auth/`, `src/pages/Login.jsx`: loading/error gates, protected-route handling, and sign-in page.
 - `src/context/FilesProvider.jsx`, `src/context/files-context.js`: in-memory demo state plus remote File Browser state context.
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, connected Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
-- `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`, `src/utils/remote-files-cache.js`: remote File Browser list/navigation/create-folder UI, bounded session cache and isolated demo domain state for other workspace views.
+- `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`, `src/utils/remote-files-cache.js`: remote File Browser, Recent and Favorites state; bounded metadata-only folder cache and isolated demo state for Shared.
 - `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, and value-free capability/Copy-upstream diagnostics with manual trusted-origin redirect policy.
-- `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata.
+- `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata. Phase 9.5 reuses this schema; no migration is currently required.
 - `scripts/create-admin.mjs`: local-only first-admin provisioning via Wrangler `--local`.
 - `scripts/create-admin-remote.mjs`, `scripts/create-storage-mount-remote.mjs`: explicit production-only provisioning commands; both target `nexora-db` using Wrangler `--remote`.
 - `scripts/lib/production-provisioning.js`: private SQL-file runner and SQL builders for the production provisioning commands.
-- `tests/backend.test.js`: Node tests using in-memory SQLite and mocked Shared Storage.
+- `tests/backend.test.js`: Node tests using in-memory SQLite and mocked Shared Storage, including Recent ownership, upserts, hydration, stale cleanup, and failure isolation.
 - `src/hooks/useUploadQueue.js`: real File Browser upload queue with bounded concurrency, cancellation, retry, and status-only progress reporting.
 - `src/components/files/StorageFilePreviewDialog.jsx`, `src/utils/storage-preview.js`, `src/utils/preview-request.js`: safe on-demand connected-file previews, MIME allowlist, text-size limits, and request cancellation/race control.
 - `src/components/files/FolderDestinationDialog.jsx`: lazy folder-only destination picker for move/copy.
@@ -86,7 +86,7 @@ Check this map against actual files when changing the architecture; update READM
 ## File Browser behavior
 
 - Fixture IDs and object URLs are not stable server file IDs. File Browser uses only public logical object IDs returned by Nexora APIs; never accept a provider project ID or physical reference from the browser.
-- `FilesProvider` demo state backs Dashboard, Recent, Favorites, and Shared. Connected Trash has separate mount-scoped remote state; do not make demo mutations appear to update the connected mount.
+- Dashboard uses public StorageProvider state and the shared authenticated Recent/Favorites data sources. Recent entries are created only by explicit object access; passive listing, render, cache revalidation, and Dashboard/Recent/Favorites reads do not write Recent. Shared remains fixture data. Connected Trash has separate mount-scoped remote state; do not make demo mutations appear to update the connected mount.
 - The connected File Browser upload queue sends bytes through the Nexora API with at most two concurrent uploads; do not invent byte progress. Download remains streamed through the same-origin API. Rename/move retain IDs and copy creates new IDs. Preview is on-demand through the authenticated inline route. Normal Delete means Move to Trash; restore and permanent delete use separate Trash-only actions.
 - Folder navigation uses the `folder` query parameter on `/files`; validate logical IDs and breadcrumb history state, and safely return to root for unverified or deleted folders.
 - Keep folder navigation and breadcrumbs consistent. Use backend cursors and merge pages by logical object ID; root requests omit `parentId`. Search/sort apply only to loaded items and use normalized fields (name, `modifiedAt`, `sizeBytes`), never display strings such as `"2.4 MB"` as numeric sizes.

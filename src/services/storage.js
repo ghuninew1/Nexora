@@ -180,6 +180,37 @@ export async function removeStorageFavorite(storageId, objectId, options = {}) {
   return { storageId, objectId };
 }
 
+export async function listStorageRecent({ limit = 100, ...options } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new StorageApiError('INVALID_INPUT', 400);
+  const data = await request(`/api/recent?${new URLSearchParams({ limit: String(limit) })}`, options);
+  if (!Array.isArray(data.items)) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return data.items.map((item) => {
+    if (!item || typeof item.storageId !== 'string' || !item.storageId.trim()
+      || typeof item.accessedAt !== 'string' || Number.isNaN(Date.parse(item.accessedAt))) {
+      throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+    }
+    return {
+      ...normalizeStorageObject(item),
+      storageId: item.storageId,
+      storageName: typeof item.storageName === 'string' ? item.storageName : 'Connected storage',
+      accessedAt: item.accessedAt,
+    };
+  });
+}
+
+export async function recordStorageRecent(storageId, objectId, options = {}) {
+  const data = await request(`/api/recent/${encodeURIComponent(storageId)}/${encodeURIComponent(objectId)}`, {
+    ...options,
+    method: 'POST',
+  });
+  const item = data.item;
+  if (!item || item.storageId !== storageId || item.objectId !== objectId
+    || typeof item.accessedAt !== 'string' || Number.isNaN(Date.parse(item.accessedAt))) {
+    throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  }
+  return { ...normalizeStorageObject(item), storageId, storageName: item.storageName, accessedAt: item.accessedAt };
+}
+
 const OBJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
 
 export function normalizeStorageObject(value) {

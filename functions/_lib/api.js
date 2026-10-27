@@ -41,9 +41,10 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
         if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
         return await handleFavoritesApi({ request, env, user, parts, fetchImpl });
       }
-      if (parts[1] === 'recent' && parts.length === 2 && request.method.toUpperCase() === 'GET') {
+      if (parts[1] === 'recent') {
         const user = await requireUser(request, env);
-        return await handleRecentApi({ env, user });
+        if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
+        return await handleRecentApi({ request, env, user, parts, fetchImpl });
       }
       throw new ApiError('NOT_FOUND', 404);
     } catch (error) {

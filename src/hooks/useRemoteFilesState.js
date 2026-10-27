@@ -10,6 +10,7 @@ import {
   fetchStorageObjectPreview,
   listStorageObjects,
   listStorageFavorites,
+  listStorageRecent,
   mergeStorageObjects,
   moveStorageObject,
   renameStorageObject,
@@ -17,6 +18,7 @@ import {
   permanentlyDeleteStorageObject,
   restoreStorageObject,
   removeStorageFavorite,
+  recordStorageRecent,
   startStorageObjectDownload,
   StorageApiError,
   trashStorageObject,
@@ -51,9 +53,9 @@ const EMPTY_TRASH_STATE = {
   paginationError: null,
 };
 
-function routeStateFor(storageId, breadcrumbs, notice = null) {
+function routeStateFor(storageId, breadcrumbs, notice = null, abbreviated = false) {
   return {
-    fileBrowser: { storageId, breadcrumbs },
+    fileBrowser: { storageId, breadcrumbs, ...(abbreviated ? { abbreviated: true } : {}) },
     ...(notice ? { fileBrowserNotice: notice } : {}),
   };
 }
@@ -85,8 +87,12 @@ export default function useRemoteFilesState() {
   const [preview, setPreview] = useState(null);
   const [trashState, setTrashState] = useState(EMPTY_TRASH_STATE);
   const [favoriteState, setFavoriteState] = useState({ items: [], status: 'idle', error: null });
+  const [recentState, setRecentState] = useState({ items: [], status: 'idle', error: null });
   const favoriteSequenceRef = useRef(0);
   const favoriteControllerRef = useRef(null);
+  const recentSequenceRef = useRef(0);
+  const recentControllerRef = useRef(null);
+  const recentAuthScopeRef = useRef({ authStatus, userEmail: user?.email ?? null });
   const createControllerRef = useRef(null);
   const generationRef = useRef(0);
   const previousStorageIdRef = useRef(null);
@@ -121,6 +127,64 @@ export default function useRemoteFilesState() {
   const validFolderId = requestedFolderId === null
     || (isValidObjectId(requestedFolderId) && Boolean(routeBreadcrumbs));
   const folderId = validFolderId && storageId ? requestedFolderId : null;
+
+  const refreshRecent = useCallback(async (limit = 100) => {
+    if (authStatus !== 'authenticated') {
+      setRecentState({ items: [], status: 'idle', error: null });
+      return { error: 'UNAUTHENTICATED' };
+    }
+    recentControllerRef.current?.abort();
+    const controller = new AbortController();
+    recentControllerRef.current = controller;
+    const sequence = ++recentSequenceRef.current;
+    setRecentState((current) => ({ ...current, status: current.items.length ? 'refreshing' : 'loading', error: null }));
+    try {
+      const items = await listStorageRecent({ signal: controller.signal, limit });
+      if (controller.signal.aborted || sequence !== recentSequenceRef.current) return { error: 'CANCELLED' };
+      setRecentState({ items, status: items.length ? 'ready' : 'empty', error: null });
+      return { ok: true };
+    } catch (error) {
+      if (controller.signal.aborted || error?.name === 'AbortError' || sequence !== recentSequenceRef.current) return { error: 'CANCELLED' };
+      if (error instanceof StorageApiError && error.status === 401) expireSession();
+      setRecentState((current) => ({ ...current, status: 'error', error: error instanceof Error ? error.message : 'Recent activity could not be loaded.' }));
+      return { error: error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE' };
+    }
+  }, [authStatus, expireSession]);
+
+  const recordRecentAccess = useCallback(async (file) => {
+    const targetStorageId = file?.storageId ?? storageId;
+    const objectId = file?.objectId ?? file?.id;
+    if (!targetStorageId || !isValidObjectId(objectId)) return { error: 'INVALID_INPUT' };
+    try {
+      const item = await recordStorageRecent(targetStorageId, objectId);
+      setRecentState((current) => {
+        const items = [item, ...current.items.filter((entry) => entry.storageId !== item.storageId || entry.objectId !== item.objectId)]
+          .sort((left, right) => Date.parse(right.accessedAt) - Date.parse(left.accessedAt)).slice(0, 100);
+        return { items, status: 'ready', error: null };
+      });
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof StorageApiError && error.status === 401) expireSession();
+      return { error: error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE' };
+    }
+  }, [storageId, expireSession]);
+
+  useEffect(() => {
+    const nextScope = { authStatus, userEmail: authStatus === 'authenticated' ? user?.email ?? null : null };
+    const previousScope = recentAuthScopeRef.current;
+    if (authStatus !== 'authenticated' || previousScope.authStatus !== nextScope.authStatus
+      || previousScope.userEmail !== nextScope.userEmail) {
+      recentSequenceRef.current += 1;
+      recentControllerRef.current?.abort();
+      setRecentState({ items: [], status: 'idle', error: null });
+    }
+    recentAuthScopeRef.current = nextScope;
+  }, [authStatus, user?.email]);
+
+  useEffect(() => () => {
+    recentSequenceRef.current += 1;
+    recentControllerRef.current?.abort();
+  }, []);
 
   const refreshFavorites = useCallback(async () => {
     if (authStatus !== 'authenticated') {
@@ -188,6 +252,7 @@ export default function useRemoteFilesState() {
     }
   }, [storageId, favoriteState.items, activeStorage?.name, expireSession, refreshFavorites]);
   const breadcrumbs = routeBreadcrumbs ?? rootBreadcrumbs();
+  const breadcrumbsAbbreviated = Boolean(routeState?.abbreviated && routeBreadcrumbs);
   const cachedListing = storageId ? cacheRef.current.get(storageId, folderId) : null;
   const displayState = useMemo(() => browserState.storageId === storageId && browserState.folderId === folderId
     && (cachedListing || ['loading', 'refreshing', 'error'].includes(browserState.status))
@@ -266,6 +331,7 @@ export default function useRemoteFilesState() {
         setPreview({ file, status: 'too-large', kind: spec.kind, message: spec.kind === 'text' ? 'Text previews are limited to 1 MiB.' : 'This file exceeds the preview size limit.' });
         return;
       }
+      void refreshRecent();
       if (spec.kind === 'text') {
         const text = await result.blob.text();
         if (!previewCoordinatorRef.current.isCurrent(request)) return;
@@ -297,7 +363,7 @@ export default function useRemoteFilesState() {
             : 'Preview failed. Try again.',
       });
     }
-  }, [storageId, storageStatus, activeStorage, capabilities, closePreview, expireSession]);
+  }, [storageId, storageStatus, activeStorage, capabilities, closePreview, expireSession, refreshRecent]);
 
   useEffect(() => {
     if (!preview?.objectUrl) return undefined;
@@ -639,13 +705,17 @@ export default function useRemoteFilesState() {
     onResult: (result) => cacheRef.current.rememberObjects(storageId, [result.object]),
   }), [runObjectOperation, storageId]);
 
-  const downloadObject = useCallback((file) => runObjectOperation({
-    file,
-    capability: 'download',
-    affectedFolders: [],
-    successMessage: `Downloading ${file.name}.`,
-    run: (signal) => startStorageObjectDownload(storageId, file.objectId, { signal }),
-  }), [runObjectOperation, storageId]);
+  const downloadObject = useCallback(async (file) => {
+    const result = await runObjectOperation({
+      file,
+      capability: 'download',
+      affectedFolders: [],
+      successMessage: `Downloading ${file.name}.`,
+      run: (signal) => startStorageObjectDownload(storageId, file.objectId, { signal }),
+    });
+    if (result?.ok) void refreshRecent();
+    return result;
+  }, [runObjectOperation, storageId, refreshRecent]);
 
   const trashObject = useCallback((file) => runObjectOperation({
     file,
@@ -768,22 +838,49 @@ export default function useRemoteFilesState() {
 
   const navigateToBreadcrumb = useCallback((objectId) => {
     if (!storageId) return;
-    const destination = breadcrumbDestination(storageId, breadcrumbs, objectId);
+    const destination = breadcrumbDestination(storageId, breadcrumbs, objectId, breadcrumbsAbbreviated);
     if (!destination) return;
     setNotice('');
     setSearchParams(destination.folderId ? { folder: destination.folderId } : {}, {
       state: destination.state,
     });
-  }, [storageId, breadcrumbs, setSearchParams]);
+  }, [storageId, breadcrumbs, breadcrumbsAbbreviated, setSearchParams]);
+
+  const openRecentFolder = useCallback((item) => {
+    if (!item || item.storageId !== storageId || item.type !== 'folder' || !isValidObjectId(item.objectId)) return false;
+    const knownBreadcrumbs = cacheRef.current.getBreadcrumbs(storageId, item.objectId, rootBreadcrumbs()[0]);
+    const nextBreadcrumbs = knownBreadcrumbs ?? [...rootBreadcrumbs(), { objectId: item.objectId, label: item.name }];
+    void recordRecentAccess(item);
+    setNotice('');
+    setSearchParams({ folder: item.objectId }, { state: routeStateFor(storageId, nextBreadcrumbs, null, !knownBreadcrumbs) });
+    return true;
+  }, [storageId, setSearchParams, recordRecentAccess]);
+
+  const openContainingFolder = useCallback((item) => {
+    if (!item || item.storageId !== storageId) return false;
+    if (item.parentId === null) {
+      setNotice('');
+      setSearchParams({}, { state: routeStateFor(storageId, rootBreadcrumbs()) });
+      return true;
+    }
+    if (!isValidObjectId(item.parentId)) return false;
+    const knownBreadcrumbs = cacheRef.current.getBreadcrumbs(storageId, item.parentId, rootBreadcrumbs()[0]);
+    const nextBreadcrumbs = knownBreadcrumbs ?? [...rootBreadcrumbs(), { objectId: item.parentId, label: 'Containing folder' }];
+    void recordRecentAccess({ objectId: item.parentId, storageId });
+    setNotice('');
+    setSearchParams({ folder: item.parentId }, { state: routeStateFor(storageId, nextBreadcrumbs, null, !knownBreadcrumbs) });
+    return true;
+  }, [storageId, setSearchParams, recordRecentAccess]);
 
   const openFolder = useCallback((objectId) => {
     if (!storageId || !isValidObjectId(objectId)) return;
     const item = displayState.items.find((entry) => entry.objectId === objectId);
     if (!item || item.type !== 'folder') return;
+    void recordRecentAccess({ ...item, storageId });
     const nextBreadcrumbs = appendBreadcrumb(breadcrumbs, item);
     setNotice('');
-    setSearchParams({ folder: objectId }, { state: routeStateFor(storageId, nextBreadcrumbs) });
-  }, [storageId, displayState.items, breadcrumbs, setSearchParams]);
+    setSearchParams({ folder: objectId }, { state: routeStateFor(storageId, nextBreadcrumbs, null, breadcrumbsAbbreviated) });
+  }, [storageId, displayState.items, breadcrumbs, breadcrumbsAbbreviated, setSearchParams, recordRecentAccess]);
 
   const navigateRoot = useCallback(() => {
     if (!storageId) return;
@@ -860,6 +957,7 @@ export default function useRemoteFilesState() {
     storageId,
     folderId,
     breadcrumbs,
+    breadcrumbsAbbreviated,
     items: displayState.items,
     status: storageStatus === 'loading' ? 'loading' : storageStatus === 'empty' || storageStatus === 'unavailable' ? 'unavailable' : displayState.status,
     error: storageStatus === 'empty' ? 'No active storage is available for this account.' : storageStatus === 'unavailable' ? (storageError || 'Storage could not be reached. Check the connection and try again.') : displayState.error,
@@ -888,6 +986,13 @@ export default function useRemoteFilesState() {
     favoritesError: favoriteState.error,
     refreshFavorites,
     toggleFavorite,
+    recentItems: recentState.items,
+    recentStatus: recentState.status,
+    recentError: recentState.error,
+    refreshRecent,
+    recordRecentAccess,
+    openRecentFolder,
+    openContainingFolder,
     trashItems: trashState.storageId === storageId ? trashState.items : [],
     trashNextCursor: trashState.storageId === storageId ? trashState.nextCursor : null,
     trashStatus: storageStatus === 'loading' ? 'loading'
@@ -927,7 +1032,8 @@ export default function useRemoteFilesState() {
     renameObject, moveObject, copyObject, downloadObject, trashObject, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
     preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,
-    favoriteState, refreshFavorites, toggleFavorite]);
+    favoriteState, refreshFavorites, toggleFavorite, recentState, refreshRecent, recordRecentAccess,
+    openRecentFolder, openContainingFolder, breadcrumbsAbbreviated]);
 
   return value;
 }

@@ -72,7 +72,7 @@ async function requireCapability(client, request, mount, capability) {
 async function recordRecent(db, user, mount, objectId, now = Date.now()) {
   const existing = await db.prepare('SELECT accessed_at FROM recent_access WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?')
     .bind(user.id, mount.id, objectId).first();
-  if (existing && Number(existing.accessed_at) > now - 60_000) return;
+  if (existing && Number(existing.accessed_at) > now - 2_000) return Number(existing.accessed_at);
   await db.prepare(`INSERT INTO recent_access (user_id, storage_mount_id, object_id, accessed_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id, storage_mount_id, object_id) DO UPDATE SET accessed_at = excluded.accessed_at`)
     .bind(user.id, mount.id, objectId, now).run();
@@ -80,6 +80,11 @@ async function recordRecent(db, user, mount, objectId, now = Date.now()) {
   await db.prepare(`DELETE FROM recent_access WHERE user_id = ? AND (storage_mount_id, object_id) NOT IN
     (SELECT storage_mount_id, object_id FROM recent_access WHERE user_id = ? ORDER BY accessed_at DESC LIMIT 100)`)
     .bind(user.id, user.id).run();
+  return now;
+}
+
+async function recordRecentBestEffort(db, user, mount, objectId) {
+  try { await recordRecent(db, user, mount, objectId); } catch { /* Recent is secondary to the requested file access. */ }
 }
 
 async function getObject(client, request, mount, objectId) {
@@ -266,7 +271,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const objectId = requireObjectId(restTail[0]);
     const object = await getObject(client, request, mount, objectId);
     if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
-    await recordRecent(env.DB, user, mount, objectId);
+    await recordRecentBestEffort(env.DB, user, mount, objectId);
     return json({ object });
   }
   if (route === 'folders' && method === 'POST' && restTail.length === 0) {
@@ -305,7 +310,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       const code = normalizeUpstreamError(payload, result.response.status);
       throw new ApiError(code, statusFor(code));
     }
-    await recordRecent(env.DB, user, mount, objectId);
+    await recordRecentBestEffort(env.DB, user, mount, objectId);
     return streamResponse(result);
   }
   if (route === 'objects' && restTail.length >= 1) {
@@ -330,7 +335,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
         const code = normalizeUpstreamError(payload, result.response.status);
         throw new ApiError(code, statusFor(code));
       }
-      await recordRecent(env.DB, user, mount, objectId);
+      await recordRecentBestEffort(env.DB, user, mount, objectId);
       return streamResponse(result);
     }
     if (suffix[0] === 'preview' && suffix.length === 1 && method === 'GET') {
@@ -360,7 +365,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
         result.cleanup();
         throw new ApiError('PREVIEW_TOO_LARGE', 413);
       }
-      await recordRecent(env.DB, user, mount, objectId);
+      await recordRecentBestEffort(env.DB, user, mount, objectId);
       return streamPreviewResponse(result, spec);
     }
     if (suffix[0] === 'move' && suffix.length === 1 && method === 'POST') {
@@ -504,11 +509,53 @@ export async function handleFavoritesApi({ request, env, user, parts, fetchImpl 
   return json({ removed: true });
 }
 
-export async function handleRecentApi({ env, user }) {
-  const rows = await env.DB.prepare(`SELECT r.storage_mount_id, r.object_id, r.accessed_at, m.name AS storage_name
-    FROM recent_access r JOIN storage_mounts m ON m.id = r.storage_mount_id
-    WHERE r.user_id = ? AND m.owner_user_id = ? AND m.status = 'active'
-    ORDER BY r.accessed_at DESC LIMIT 100`).bind(user.id, user.id).all();
-  return json({ items: (rows.results || []).map((row) => ({ storageId: row.storage_mount_id, objectId: row.object_id,
-    storageName: row.storage_name, accessedAt: new Date(Number(row.accessed_at)).toISOString() })) });
+export async function handleRecentApi({ request, env, user, parts, fetchImpl = fetch }) {
+  const client = createStorageClient({ env, fetchImpl });
+  const method = request.method.toUpperCase();
+  if (parts.length === 2 && method === 'GET') {
+    const requestedLimit = new URL(request.url).searchParams.get('limit');
+    const limit = requestedLimit === null ? 100 : parseLimit(requestedLimit);
+    const rows = await env.DB.prepare(`SELECT r.storage_mount_id, r.object_id, r.accessed_at, m.name AS storage_name,
+        m.shared_storage_project_id
+      FROM recent_access r JOIN storage_mounts m ON m.id = r.storage_mount_id
+      WHERE r.user_id = ? AND m.owner_user_id = ? AND m.status = 'active'
+      ORDER BY r.accessed_at DESC LIMIT ?`).bind(user.id, user.id, limit).all();
+    const items = [];
+    const recentRows = rows.results || [];
+    for (let index = 0; index < recentRows.length; index += 8) {
+      const page = await Promise.all(recentRows.slice(index, index + 8).map(async (row) => {
+        let object;
+        try {
+          const payload = await client.jsonRequest({ request, projectId: row.shared_storage_project_id,
+            path: `/objects/${encodeURIComponent(row.object_id)}` });
+          const data = upstreamPayload(payload);
+          object = normalizeObject(data?.object || data?.item || data);
+          if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+        } catch (error) {
+          if (error?.code !== 'NOT_FOUND') throw error;
+        }
+        if (!object) {
+          await env.DB.prepare('DELETE FROM recent_access WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?')
+            .bind(user.id, row.storage_mount_id, row.object_id).run();
+          return null;
+        }
+        return { ...object, storageId: row.storage_mount_id, storageName: row.storage_name,
+          accessedAt: new Date(Number(row.accessed_at)).toISOString() };
+      }));
+      items.push(...page.filter(Boolean));
+    }
+    return json({ items });
+  }
+
+  if (parts.length === 4 && method === 'POST') {
+    const mount = await requireStorageMount(env.DB, user, parts[2]);
+    const objectId = requireObjectId(parts[3]);
+    await requireCapability(client, request, mount, 'stat');
+    const object = await getObject(client, request, mount, objectId);
+    if (!object) throw new ApiError('NOT_FOUND', 404);
+    const accessedAt = await recordRecent(env.DB, user, mount, objectId);
+    return json({ item: { ...object, storageId: mount.id, storageName: mount.name,
+      accessedAt: new Date(accessedAt).toISOString() } }, 200);
+  }
+  throw new ApiError('NOT_FOUND', 404);
 }

@@ -162,6 +162,11 @@ export default function useFiles() {
     return { ...item, id: item.objectId, extension, modified: formatModified(item.modifiedAt),
       size: item.type === 'folder' ? null : formatBytes(item.sizeBytes) };
   });
+  const recentItems = remote.recentItems.map((item) => {
+    const extension = item.type === 'file' && item.name.includes('.') ? item.name.split('.').pop().toLowerCase() : undefined;
+    return { ...item, id: item.objectId, extension, modified: formatModified(item.modifiedAt),
+      size: item.type === 'folder' ? null : formatBytes(item.sizeBytes) };
+  });
 
   return {
     ...remote,
@@ -178,6 +183,7 @@ export default function useFiles() {
     setView,
     favorites,
     favoriteFiles,
+    recentItems,
     toggleSelect,
     selectAll,
     clearSelection,

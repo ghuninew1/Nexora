@@ -929,6 +929,90 @@ test('favorites verify mount ownership and object existence, and deduplicate', a
   assert.equal((await request('/api/favorites/mount_other/object_foreign', { method: 'POST', headers: { Origin: origin } })).status, 404);
 });
 
+test('Recent explicit access upserts by owner, mount and logical object ID', async () => {
+  sqlite.prepare('DELETE FROM recent_access WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?').run(user.id, storageId, objectId);
+  sqlite.prepare('INSERT INTO recent_access (user_id, storage_mount_id, object_id, accessed_at) VALUES (?, ?, ?, ?)')
+    .run(user.id, storageId, objectId, Date.now() - 10_000);
+  const first = await request(`/api/recent/${storageId}/${objectId}`, { method: 'POST', headers: { Origin: origin } });
+  assert.equal(first.status, 200);
+  const firstItem = (await first.json()).data.item;
+  assert.equal(firstItem.objectId, objectId);
+  assert.equal(firstItem.name, 'file.txt');
+  assert.equal(firstItem.storageId, storageId);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?')
+    .get(user.id, storageId, objectId).count, 1);
+  const olderTimestamp = Date.now() - 10_000;
+  sqlite.prepare('UPDATE recent_access SET accessed_at = ? WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?')
+    .run(olderTimestamp, user.id, storageId, objectId);
+  const repeated = await request(`/api/recent/${storageId}/${objectId}`, { method: 'POST', headers: { Origin: origin } });
+  assert.equal(repeated.status, 200);
+  assert.ok(Date.parse((await repeated.json()).data.item.accessedAt) > olderTimestamp);
+  assert.equal((await request('/api/recent/mount_other/object_foreign', { method: 'POST', headers: { Origin: origin } })).status, 404);
+  const unauthenticated = await handler(new Request(`${origin}/api/recent/${storageId}/${objectId}`, {
+    method: 'POST', headers: { Origin: origin },
+  }), env);
+  assert.equal(unauthenticated.status, 401);
+});
+
+test('Recent GET hydrates current safe metadata in access order without recording another access', async () => {
+  sqlite.prepare('DELETE FROM recent_access WHERE user_id = ?').run(user.id);
+  const now = Date.now();
+  sqlite.prepare('INSERT INTO recent_access (user_id, storage_mount_id, object_id, accessed_at) VALUES (?, ?, ?, ?)')
+    .run(user.id, storageId, 'object_alpha', now - 1000);
+  sqlite.prepare('INSERT INTO recent_access (user_id, storage_mount_id, object_id, accessed_at) VALUES (?, ?, ?, ?)')
+    .run(user.id, storageId, 'object_beta', now - 2000);
+  const recentCountBefore = sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ?').get(user.id).count;
+  const fetchImpl = (url, init) => new URL(url).pathname.endsWith('/objects/object_beta')
+    ? Response.json({ success: true, object: { ...object('object_beta'), name: 'Renamed folder item', parentId: 'folder_parent' } })
+    : upstreamResponse(url, init);
+  const response = await request('/api/recent', { fetchImpl });
+  assert.equal(response.status, 200);
+  const items = (await response.json()).data.items;
+  assert.deepEqual(items.map((item) => item.objectId), ['object_alpha', 'object_beta']);
+  assert.equal(items[1].name, 'Renamed folder item');
+  assert.equal(items[1].parentId, 'folder_parent');
+  assert.equal(items[0].accessedAt, new Date(now - 1000).toISOString());
+  assert.equal(Object.hasOwn(items[0], 'shared_storage_project_id'), false);
+  assert.equal(Object.hasOwn(items[0], 'provider_reference'), false);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ?').get(user.id).count, recentCountBefore);
+  const limited = await request('/api/recent?limit=1');
+  assert.equal((await limited.json()).data.items.length, 1);
+  assert.equal((await request('/api/recent?limit=101')).status, 400);
+});
+
+test('Recent removes confirmed missing objects but preserves rows during provider failure', async () => {
+  sqlite.prepare('DELETE FROM recent_access WHERE user_id = ?').run(user.id);
+  sqlite.prepare('INSERT INTO recent_access (user_id, storage_mount_id, object_id, accessed_at) VALUES (?, ?, ?, ?)')
+    .run(user.id, storageId, 'object_missing', Date.now());
+  const staleResponse = await request('/api/recent');
+  assert.equal(staleResponse.status, 200);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ? AND object_id = ?').get(user.id, 'object_missing').count, 0);
+
+  sqlite.prepare('INSERT INTO recent_access (user_id, storage_mount_id, object_id, accessed_at) VALUES (?, ?, ?, ?)')
+    .run(user.id, storageId, 'object_flaky', Date.now());
+  const fetchImpl = (url, init) => new URL(url).pathname.endsWith('/objects/object_flaky')
+    ? Response.json({ success: false, error: { code: 'PROVIDER_UNAVAILABLE' } }, { status: 503 })
+    : upstreamResponse(url, init);
+  const unavailable = await request('/api/recent', { fetchImpl });
+  assert.equal(unavailable.status, 503);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ? AND object_id = ?').get(user.id, 'object_flaky').count, 1);
+});
+
+test('download succeeds when optional Recent D1 tracking fails', async () => {
+  const originalPrepare = env.DB.prepare;
+  env.DB.prepare = (sql) => {
+    if (sql.includes('recent_access')) throw new Error('Recent database unavailable');
+    return originalPrepare(sql);
+  };
+  try {
+    const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/download`);
+    assert.equal(response.status, 200);
+    await response.body.cancel();
+  } finally {
+    env.DB.prepare = originalPrepare;
+  }
+});
+
 test('D1 capabilities do not invent provider usage and mount read-only policy restricts mutations', async () => {
   const usage = await request(`/api/storage/v1/storages/${storageId}/usage`);
   assert.deepEqual((await usage.json()).data.usage, { status: 'unavailable', usedBytes: null, quotaBytes: null, objectCount: null, measuredAt: null });

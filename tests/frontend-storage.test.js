@@ -7,6 +7,8 @@ import {
   getStorageCapabilities,
   getStorageUsage,
   listStorageFavorites,
+  listStorageRecent,
+  recordStorageRecent,
   addStorageFavorite,
   removeStorageFavorite,
   listStorageObjects,
@@ -196,6 +198,29 @@ test('Favorites use the authenticated same-origin API and normalize public objec
   await removeStorageFavorite('mount_123', 'file_a', { fetchImpl });
   assert.deepEqual(calls.map(({ url, options }) => [url.pathname, options.method]), [
     ['/api/favorites', 'GET'], ['/api/favorites/mount_123/file_a', 'POST'], ['/api/favorites/mount_123/file_a', 'DELETE'],
+  ]);
+  assert.ok(calls.every(({ options }) => options.credentials === 'same-origin'));
+});
+
+test('Recent clients read normalized entries and record explicit access with logical IDs', async () => {
+  const calls = [];
+  const item = { objectId: 'folder_a', parentId: null, name: 'Projects', type: 'folder', sizeBytes: null,
+    storageId: 'mount_123', storageName: 'Personal files', accessedAt: '2026-10-28T09:00:00.000Z', provider_reference: 'secret' };
+  const fetchImpl = async (url, options) => {
+    const parsed = new URL(url, 'https://nexora.test');
+    calls.push({ parsed, options });
+    return options.method === 'POST'
+      ? Response.json({ data: { item } })
+      : Response.json({ data: { items: [item] } });
+  };
+  const [listed] = await listStorageRecent({ fetchImpl });
+  const recorded = await recordStorageRecent('mount_123', 'folder_a', { fetchImpl });
+  assert.equal(listed.name, 'Projects');
+  assert.equal(listed.accessedAt, item.accessedAt);
+  assert.equal(Object.hasOwn(listed, 'provider_reference'), false);
+  assert.equal(recorded.objectId, 'folder_a');
+  assert.deepEqual(calls.map(({ parsed, options }) => [parsed.pathname, parsed.searchParams.get('limit'), options.method]), [
+    ['/api/recent', '100', 'GET'], ['/api/recent/mount_123/folder_a', null, 'POST'],
   ]);
   assert.ok(calls.every(({ options }) => options.credentials === 'same-origin'));
 });
@@ -425,6 +450,10 @@ test('folder breadcrumbs use logical IDs and reject route state from another sto
   assert.equal(normalizeFileBrowserRouteState(routeState, 'mount_other', 'folder_b'), null);
   assert.equal(normalizeFileBrowserRouteState(routeState, 'mount_123', 'folder_c'), null);
   assert.equal(normalizeFileBrowserRouteState({ ...routeState, breadcrumbs: [...nestedPath, nestedPath[1]] }, 'mount_123', 'folder_a'), null);
+  const abbreviated = { storageId: 'mount_123', abbreviated: true,
+    breadcrumbs: [rootBreadcrumbs()[0], { objectId: 'folder_b', label: 'Recent folder' }] };
+  assert.equal(normalizeFileBrowserRouteState(abbreviated, 'mount_123', 'folder_b').at(-1).label, 'Recent folder');
+  assert.equal(normalizeFileBrowserRouteState({ ...abbreviated, breadcrumbs: nestedPath }, 'mount_123', 'folder_b'), null);
 });
 
 test('breadcrumb destinations resolve exact ancestors and preserve verified route state', () => {
@@ -447,6 +476,9 @@ test('breadcrumb destinations resolve exact ancestors and preserve verified rout
   assert.equal(root.search, '');
   assert.deepEqual(root.state.fileBrowser.breadcrumbs, rootBreadcrumbs());
   assert.equal(breadcrumbDestination('mount_123', path, 'missing_folder'), null);
+  const abbreviatedPath = [rootBreadcrumbs()[0], { objectId: 'folder_b', label: 'Recent folder' }];
+  const abbreviatedDestination = breadcrumbDestination('mount_123', abbreviatedPath, 'folder_b', true);
+  assert.equal(abbreviatedDestination.state.fileBrowser.abbreviated, true);
   assert.doesNotMatch(JSON.stringify(destinationB), /provider|project|bucket/u);
 });
 

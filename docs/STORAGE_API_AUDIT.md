@@ -10,7 +10,7 @@
 
 Nexora now has local Pages Functions under `functions/`, migration `migrations/0001_backend_foundation.sql`, hashed-cookie session auth and a server-only client for Shared Storage S2 `/v3`. Same-origin `/api/storage/v1/*` derives project IDs from owner-scoped D1 mounts; browser-facing serializers omit project/provider references. `/api/auth/*`, Favorites and bounded Recent routes are also present. See [Phase 8 report](PHASE_8.md) for the endpoint matrix, security checks and test results.
 
-The React demo is not wired to these routes. D1 migration has only run against Wrangler local D1; production D1, Access service identity, Shared Storage credentials/mount and deploy remain unconfigured. Nexora upload remains bounded but S2 buffers multipart; downloads stream. This audit is based on local source and does not prove production behavior.
+Phase 9.5 wires Dashboard/Recent to the existing `recent_access` table and `/api/recent`: GET hydrates bounded logical references through owner-scoped mounts, and explicit access uses an authenticated POST; it adds no migration. Dashboard reads safe active-mount/optional-usage state and six Recent entries without recursive scans or preview prefetch. Shared remains demo-only. D1 migration has only run against Wrangler local D1; production D1, Access service identity, Shared Storage credentials/mount and deploy state are not verified by this source audit. Nexora upload remains bounded but S2 buffers multipart; downloads stream. See [Phase 9.5 report](PHASE_9_5.md).
 
 ## ภาพรวม API ที่พบ
 
