@@ -2,77 +2,39 @@
 
 อัปเดตล่าสุด: 2026-10-27
 
-เอกสารนี้ใช้เริ่มงานต่อจาก Phase 6 โดยเก็บสถานะจริง ข้อจำกัด และลำดับงานที่ต้องทำก่อนเชื่อมระบบจัดเก็บไฟล์จริง
+เอกสารนี้สรุปสถานะ Nexora และเป็นจุดเริ่มงานหลัง Phase 7; แยก local validation, source audit และ proposal ออกจาก backend/production ที่ยังไม่ได้รับอนุมัติ
 
 ## สถานะปัจจุบัน
 
 - Phase 1–6 เสร็จในขอบเขต frontend/demo: Liquid Glass foundation, app shell, File Browser และหน้า Dashboard, Recent, Favorites, Shared, Trash, Storage, Settings
 - Phase 6 เพิ่ม labels/focus, keyboard/touch behavior, duplicate-name validation, responsive breadcrumbs, progressbar semantics และ reduced-motion support
-- **ยังไม่ได้รัน lint, build หรือ browser QA หลัง Phase 6** จึงยังไม่มีหลักฐานยืนยันว่า frontend ล่าสุด build ผ่านหรือใช้งานได้ครบทุก viewport
+- Phase 7: `pnpm lint` และ `pnpm build` ผ่านหลังแก้ lint errors/warnings ใน preview lifecycle, FilesProvider restore helper และ hook dependencies
+- Browser: ตรวจ route `/dashboard`, `/files`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings` และ unknown route ใน in-app browser ขนาดแคบประมาณ 576 px; ยืนยัน mobile navigation menu, search, list/grid, folder/breadcrumb, create folder, move to Trash, restore, preview sample state, theme Light/Dark/System, Tab focus ring และปิด preview dialog ได้
+- Browser QA ที่ยังไม่ยืนยัน: desktop viewport, native file chooser/upload queue (เลือกไฟล์ไม่ได้ใน browser control นี้), permanent delete (ต้องให้ผู้ใช้ยืนยัน ณ เวลาลบ), reduced-motion system override และ console log
 - Nexora ยังไม่มี authentication, domain API, Pages Functions, D1 binding หรือ migrations; `wrangler.jsonc` ปัจจุบันตั้งค่า Pages output เป็น `dist/` เท่านั้น
 - `FilesProvider` เก็บ files, Favorites, Recent และ Trash ใน memory ระหว่าง route; refresh จะคืนข้อมูล demo
 - Upload queue จำลอง progress ใน browser; preview/download ทำได้กับไฟล์ที่ผู้ใช้เลือกและยังอยู่ใน session เท่านั้น
 - Shared แสดง fixture records, Share action ยังปิดอยู่, Storage แสดงว่า provider ยังไม่ได้เชื่อม
 - Theme เป็น browser preference ใน `localStorage`
 
-## งานถัดไปตามลำดับ
+## Phase 7 deliverables
 
-### 1. ตรวจความพร้อมของ frontend ที่เพิ่งทำ
+- [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md): routes/methods, payload/response, auth, authorization, size limits, filename handling, error behavior, Garage communication, streaming, CORS findings และ REUSE/EXTEND/REPLACE/NOT FOR NEXORA classifications
+- [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md): current and target architecture, provider behavior contract, registry/secrets, logical IDs, namespace, D1 table proposal, auth/security/streaming review, SMB readiness และ Phase 8 file-level sequence
+- [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md): proposed provider-neutral `/api/storage/v1/*` routes, request/response patterns, capability model, logical IDs, errors, retry/streaming behavior
+- Audit อ่านเฉพาะ source/config ที่เกี่ยวข้อง; ไม่อ่าน credentials, local Storage database/WAL/SHM หรือ object data และไม่แก้ IssueDesk/Shared Storage Service
 
-ก่อนเริ่ม backend ให้ตรวจสถานะล่าสุดจาก checkout นี้:
+## สถานะ frontend validation
 
-1. รัน `pnpm lint` และ `pnpm build`
-2. เปิดแอปด้วย `pnpm dev` แล้วตรวจ route ทั้งหมดใน desktop และ mobile
-3. ตรวจ keyboard/focus, light/dark/system, dialogs, file selection, Trash restore/permanent delete, upload queue, preview และ console errors
-4. แก้ปัญหาที่พบและปรับ README/AGENTS ให้ตรงกับผลจริง
+- Checks ที่รัน: `pnpm lint` ผ่าน, `pnpm build` ผ่าน, browser route/interaction checks ตามรายการด้านบน
+- Project ไม่มี root test script
+- ไม่ได้ยืนยัน upload queue, permanent delete, desktop viewport, reduced motion หรือ console logs; อย่าอ้างว่า QA ครบทุก flow/viewport
 
-โปรเจกต์ไม่มี root test script ในปัจจุบัน; อย่าอ้างว่าผ่าน check ที่ยังไม่ได้รัน
+## งานถัดไป: Phase 8 (รอ approval)
 
-### 2. ทำ Storage/API audit ให้เป็นเอกสารก่อนแตะ implementation
+เมื่อได้รับอนุมัติ Phase 8 ให้เริ่มจาก D1/schema/auth boundary และ server-side Storage Manager/Provider Contract ตามข้อเสนอ จากนั้นจึงเพิ่ม Garage adapter และค่อยเปลี่ยน frontend ออกจาก demo state
 
-ตรวจ source ปัจจุบันของ IssueDesk และ Shared Storage Service (`garage/storage/` หากยังเป็นตำแหน่งปัจจุบัน) อีกครั้ง โดยระบุ:
-
-- endpoints, methods, request/response, authentication, authorization และข้อจำกัดปัจจุบัน
-- endpoints ที่ Nexora ใช้ซ้ำได้ และช่องว่างที่ต้องออกแบบเพิ่มสำหรับ File Manager
-- การ map user/session ของ Nexora ไปยัง Storage Service โดยไม่เปิด secret ใน frontend
-- security risks, ownership checks, namespace และ migration plan
-
-README ระบุว่าเคยทำ audit แล้ว แต่ใน Nexora checkout นี้ยังไม่มี endpoint matrix หรือผล audit ที่ละเอียดพอสำหรับเริ่ม integration ให้ถือ source ปัจจุบันเป็นข้อเท็จจริงและตรวจซ้ำก่อนออกแบบ ห้ามเดา endpoint จากชื่อ operation
-
-### 3. เสนอและทบทวน contract ก่อนแก้ shared service
-
-ร่างแผนและขอ approval แยกก่อนเปลี่ยน IssueDesk/Shared Storage Service หรือ production infrastructure ตามข้อกำหนดในคำขอเดิม โดยข้อเสนอควรครอบคลุม:
-
-- public, provider-agnostic API ภายใต้ `/api/storage/v1/*`; ห้ามสร้าง `/api/garage/*` หรือ `/api/smb/*` ให้ frontend เรียกโดยตรง
-- การ authenticate/authorize ระหว่าง Nexora server กับ Storage API; ห้ามใส่ API key/secret ใน `VITE_*`, browser bundle หรือ browser request
-- namespace แยก application และ user เช่น `nexora/users/{userId}/*`
-- stable logical `fileId`, `folderId`, `storageId`, `parentId`; ห้ามใช้ physical path เป็น identity
-- Nexora metadata database แยกจาก IssueDesk business data; พิจารณา D1 และ schema สำหรับ files/folders, favorites, shares, trash metadata และ storage usage metadata
-- Storage Registry และ provider contract ที่รองรับ list/stat/createFolder/upload/download/rename/move/copy/delete/restore/getCapabilities
-- provider capabilities ให้ frontend แสดง action ตาม capability ไม่ hard-code provider
-- streaming สำหรับ upload/download และ contract ที่รองรับ cross-provider copy/move ในอนาคต
-- Garage เป็น provider ที่ implement ก่อน; ออกแบบเผื่อ SMB โดยไม่ติดตั้ง dependency หรือทำ SMB connection ในงานรอบแรก
-- threat/security review, failure behavior, limits, migrations, rollback และ test plan
-
-**ห้าม duplicate Storage API implementation เข้า Nexora และห้ามแก้ Shared Storage Service จนกว่าจะมี approval ที่ครอบคลุมงานนั้น**
-
-### 4. Implement backend ของ Nexora หลัง contract ได้รับ approval
-
-แยก domain API ฝั่ง server ออกจาก frontend แล้วทำ authentication/authorization, ownership enforcement, validation, D1 migrations และ service-to-service access ตาม contract ที่ผ่านการทบทวน ใช้ logical IDs และ provider capabilities ตลอด flow; ห้าม expose provider credentials
-
-### 5. เชื่อม frontend และแทน demo behavior
-
-เพิ่ม `src/services/` domain client และเชื่อม File Browser/หน้าอื่นกับ Nexora server API:
-
-- เปลี่ยน `FilesProvider` จาก in-memory records เป็น server state พร้อม loading/error/empty/retry states
-- ทำ list/create folder, upload จริงแบบ streaming, rename, move/copy ตาม capabilities, download และ preview ด้วย authorization ที่ถูกต้อง
-- ทำ Favorites, Recent, Trash/restore, sharing/permissions และ storage usage ให้ persistent ตาม API
-- คง fallback/error messages ที่ไม่เปิดเผย secret หรือ physical path
-- เก็บ sample data กับ demo UI ให้แยกจาก production operations อย่างชัดเจน
-
-### 6. เตรียม SMB เป็น provider ในอนาคต
-
-เริ่มหลัง Garage contract/API ทำงานและผ่าน QA แล้วเท่านั้น: เพิ่ม `SMBStorageProvider` หลัง provider contract โดยไม่เปลี่ยน public API, ห้ามเก็บ password เป็น plaintext, ใช้ server-side secret/credential storage และรองรับ read-only mounts/capabilities ก่อนเปิดใช้งาน
+Phase 7 **ไม่ได้อนุญาต** backend implementation, D1 migrations, Shared Storage Service/Garage changes, credentials/secrets, SMB install/connection หรือ deployment. รอ approval สำหรับ **Phase 8 — Backend Foundation & Storage Contract Implementation** ก่อนเริ่ม
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -102,7 +64,8 @@ README ระบุว่าเคยทำ audit แล้ว แต่ใน N
 - `src/data/files.js`: fixtures; metadata ตัวอย่างไม่ใช่สถานะ Storage จริง
 - `src/services/`, `functions/`, `migrations/`: ยังไม่มี implementation ใน checkout ปัจจุบัน
 - `README.md`, `AGENTS.md`, `docs/DESIGN_SYSTEM.md`: project status, working conventions และ UI foundation
+- `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`: Phase 7 audit และ proposal
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md` และตรวจ `git status --short` ก่อนแก้ไฟล์ จากนั้นทำขั้นที่ 1 (frontend validation) และขั้นที่ 2 (audit source ปัจจุบันของ IssueDesk/Storage API) ก่อนเสนอ contract หรือเริ่ม backend
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md` และตรวจ `git status --short`; Phase 7 validation/audit/proposal เสร็จแล้ว เริ่ม Phase 8 เฉพาะหลังได้รับ approval แยก

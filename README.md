@@ -45,11 +45,13 @@ Pages ใช้ `AppLayout` ร่วมกับ `AppShell` และ `<Outlet 
 
 รายการงานถัดไป, Storage/API guardrails และ acceptance criteria อยู่ใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
 
+ผลตรวจ frontend หลัง Phase 6 และข้อเสนอ Storage สำหรับ Phase 8 อยู่ใน [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md), [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md) และ [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md) เอกสารเหล่านี้เป็น source audit/proposal; ยังไม่ได้เชื่อม service หรือเปลี่ยน production
+
 ## แนวทางข้อมูลและ Storage
 
 เมื่อเริ่มเชื่อมข้อมูลจริง ให้เพิ่ม domain API client ใน `src/services/` และหน้า Pages Functions ตามแผน File Management ห้ามใส่ Storage secrets ใน frontend หรือสร้าง Garage endpoint เฉพาะ UI ต้องเรียก unified Storage API ที่ server ตรวจ session, ownership และ capabilities ก่อนส่งต่อ
 
-IssueDesk เป็นผู้ดูแล Shared Storage Service → Garage/QNAP ส่วน Nexora ต้องมี metadata database แยก ข้อมูล service endpoints, authentication, namespace, provider contract และ migrations ต้องตรวจ source ปัจจุบันของ IssueDesk และทบทวนแผนก่อนเริ่มเปลี่ยน shared service
+IssueDesk เชื่อมกับ Shared Storage Service แยกต่างหาก; source ของ Service ใช้ SQLite สำหรับ metadata และ S3-compatible API สำหรับ object bytes โดย Garage เป็น provider หลัง service ในการตั้งค่าปัจจุบัน แต่ checkout นี้ไม่ได้ยืนยัน remote Garage/QNAP availability. Nexora ต้องมี metadata database แยก และยึดผล audit/proposal ใน `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md` กับ `docs/STORAGE_API_V1_PROPOSAL.md` ก่อนเริ่ม integration
 
 ## Phases
 
@@ -59,6 +61,7 @@ IssueDesk เป็นผู้ดูแล Shared Storage Service → Garage/QN
 - **Phase 4 — File Browser:** toolbar, URL breadcrumbs, search/sort, list/grid, selection, context actions, local preview/download และ demo interactions — เสร็จใน frontend
 - **Phase 5 — Remaining Pages:** Dashboard, Recent, Favorites, Shared, Trash, Storage และ Settings ในขอบเขต frontend/demo — เสร็จ
 - **Phase 6 — Polish:** labels และ focus ที่ keyboard/screen reader ใช้ได้, validation ชื่อซ้ำ, select-all บนมือถือ, breadcrumb เลื่อนบนจอแคบ, upload progress semantics และ reduced-motion support — เสร็จใน frontend; ไม่มี network loading/error states เพราะยังไม่มี API
+- **Phase 7 — Validation & Storage Proposal:** `pnpm lint` และ `pnpm build` ผ่าน; ตรวจทุก route และหลาย workflow ใน in-app browser ที่ mobile-size, สลับธีม Light/Dark/System ได้; desktop browser, upload file chooser, permanent delete, reduced-motion OS override และ console log ยังไม่ได้ยืนยัน — ทำ source audit และเอกสาร proposal ครบ แต่ยังไม่ implement backend
 - **Storage API implementation:** แยก approval/แผน backend จาก UI; ปัจจุบันยังไม่มี endpoint implementation ใน Nexora
 
 ## Coding conventions

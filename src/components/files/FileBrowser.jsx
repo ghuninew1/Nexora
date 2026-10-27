@@ -34,7 +34,8 @@ function FileBrowser() {
   const [dragging, setDragging] = useState(false);
   const dragCounterRef = useRef(0);
 
-  const handleUploadComplete = useCallback((item) => browser.addUploadedFile(item), [browser.addUploadedFile]);
+  const { addUploadedFile } = browser;
+  const handleUploadComplete = useCallback((item) => addUploadedFile(item), [addUploadedFile]);
   const queue = useUploadQueue({ onComplete: handleUploadComplete });
   const selectedFiles = browser.files.filter((file) => browser.selectedIds.includes(file.id));
 

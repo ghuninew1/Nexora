@@ -57,7 +57,9 @@ export function FilesProvider({ children }) {
     const restoreIds = new Set(files.filter((file) => ids.includes(file.id) || (file.trashGroup && groups.has(file.trashGroup))).map((file) => file.id));
     setFiles((current) => current.map((file) => {
       if (!restoreIds.has(file.id)) return file;
-      const { trashedAt, trashGroup, ...activeFile } = file;
+      const activeFile = { ...file };
+      delete activeFile.trashedAt;
+      delete activeFile.trashGroup;
       return activeFile;
     }));
   }, [files]);
@@ -76,6 +78,7 @@ export function FilesProvider({ children }) {
   return <FilesContext.Provider value={value}>{children}</FilesContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useFilesData() {
   const value = useContext(FilesContext);
   if (!value) throw new Error("useFilesData must be used inside FilesProvider");

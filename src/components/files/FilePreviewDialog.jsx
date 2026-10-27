@@ -6,8 +6,10 @@ import { cx } from "../../utils/cx";
 function FilePreviewDialog({ file, open, onOpenChange }) {
   const [url, setUrl] = useState(null);
   useEffect(() => {
-    if (!open || !file?.sourceFile) { setUrl(null); return undefined; }
+    if (!open || !file?.sourceFile) return undefined;
     const objectUrl = URL.createObjectURL(file.sourceFile);
+    // This effect synchronizes the component with the browser's object URL API.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [open, file]);

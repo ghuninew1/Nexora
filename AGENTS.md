@@ -23,7 +23,10 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/data/files.js`: fixture entries.
 - `src/components/ui/`, `src/utils/cx.js`, `src/utils/glass.js`, `src/index.css`: shared controls, classes, glass interactions, and tokens.
 - `README.md` and `docs/DESIGN_SYSTEM.md`: current user-facing project status and design usage.
-- `PROJECT_HANDOFF.md`: ordered follow-up plan, current integration boundaries, and acceptance criteria; verify source and git status before continuing.
+- `docs/STORAGE_API_AUDIT.md`: source-derived IssueDesk and Shared Storage API endpoint/auth/streaming audit.
+- `docs/STORAGE_ARCHITECTURE.md`: target provider architecture, metadata/auth/security proposal, and Phase 8 file sequence.
+- `docs/STORAGE_API_V1_PROPOSAL.md`: proposed provider-neutral `/api/storage/v1/*` contract; proposal only.
+- `PROJECT_HANDOFF.md`: verified Phase 7 status, implementation boundaries, and approval gate for Phase 8; verify source and git status before continuing.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
 
