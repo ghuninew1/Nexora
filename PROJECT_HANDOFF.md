@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-28
 
-เอกสารนี้สรุปสถานะ Nexora หลังเริ่ม implementation Phase 9.4; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลัง implementation Phase 9.4.1; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
@@ -12,6 +12,7 @@
 - Phase 9.3.1 เพิ่ม bounded in-memory listing cache, stale-while-revalidate, cursor-aware dedupe, metadata breadcrumbs และ selective mutation invalidation. Final validation: `pnpm lint` passed; `pnpm test` 81/81; `pnpm build` passed; `git diff --check` passed. Local File Browser rendering was blocked at the auth gate because the local auth API is unavailable; no production endpoint or deploy was used.
 - Phase 9.3.2 adds exact ancestor breadcrumb routing and on-demand safe preview through an authenticated inline endpoint. Local validation: `pnpm lint`, `pnpm test` (88/88), `pnpm build`, and `git diff --check` passed. Browser preview interaction remains unverified: Playwright is not installed, and the local Vite page stopped at the session gate because no local auth service is available. No production endpoint or deployment was used.
 - Phase 9.4 connects File Browser Move to Trash and the Trash page to the existing mount-scoped Storage API. Trash has separate cursor-paginated state; Restore and Permanent Delete are capability/readOnly-gated, server-confirmed, and protected by per-object mutation state. Cache updates are targeted; folder subtree metadata is removed and a previewed trashed file closes/cancels preview. `pnpm test` passed 93/93 and `git diff --check` passed. `pnpm lint` and `pnpm build` did not complete because local ESLint/Tailwind dependency resolution stalled or failed; manifests remain unchanged. Browser/mobile QA was not run because Browser and Playwright are unavailable. No production endpoint or deployment was used.
+- Phase 9.4.1 connects single-selection toolbar actions to the same callbacks/dialogs as row actions, repairs toolbar Trash, and reuses the existing Favorites D1/API. Favorites GET hydrates owner-scoped logical metadata and removes confirmed-stale records; Favorites page has real loading/error/empty/data states and no fixture fallback. `pnpm lint`, `pnpm test` (94/94), and `git diff --check` passed. Default Vite build is blocked writing `node_modules/.vite-temp`; Vite build with `--configLoader runner --outDir /tmp/nexora-phase-941-build` passed after transforming 2,318 modules. Browser and production QA were not run, and no production resources changed. See [Phase 9.4.1](docs/PHASE_9_4_1.md).
 - Phase 6 เพิ่ม labels/focus, keyboard/touch behavior, duplicate-name validation, responsive breadcrumbs, progressbar semantics และ reduced-motion support
 - Phase 7: `pnpm lint` และ `pnpm build` ผ่านหลังแก้ lint errors/warnings ใน preview lifecycle, FilesProvider restore helper และ hook dependencies
 - Browser: ตรวจ route `/dashboard`, `/files`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings` และ unknown route ใน in-app browser ขนาดแคบประมาณ 576 px; ยืนยัน mobile navigation menu, search, list/grid, folder/breadcrumb, create folder, move to Trash, restore, preview sample state, theme Light/Dark/System, Tab focus ring และปิด preview dialog ได้
@@ -22,8 +23,8 @@
 - `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; `wrangler.jsonc` กำหนด D1 `nexora-db` พร้อม database ID
 - Phase 9.1 เพิ่ม storage discovery/capabilities/usage client และ provider ผ่าน same-origin Nexora API; Storage page แสดง safe connection state. Production deploy/connection ยังไม่ได้ตรวจในงานนี้
 - Phase 9.2 เปลี่ยน File Browser เป็น real listing/navigation ผ่าน Nexora API: root/child listing, cursor pagination, logical-ID breadcrumbs, refresh, loaded-item search/sort และ create-folder ตาม capability
-- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Phase 9.3 operations, Phase 9.3.2 preview, and Phase 9.4 Trash lifecycle use Nexora same-origin APIs when authorized; Favorites/Share remain demo-only or unavailable.
-- `FilesProvider` demo data ยังคงใช้กับ Dashboard, Recent, Favorites และ Shared; Trash ใช้ remote state แยกตาม active storage mount
+- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Phase 9.3 operations, Phase 9.3.2 preview, Phase 9.4 Trash lifecycle, and Phase 9.4.1 Favorites use Nexora same-origin APIs when authorized; Share remains demo-only or unavailable.
+- `FilesProvider` demo data ยังคงใช้กับ Dashboard, Recent และ Shared; Favorites ใช้ remote D1/API state และ Trash ใช้ remote state แยกตาม active storage mount
 - Upload queue ที่เหลือใน demo จำลอง progress ใน browser; ไม่ส่ง bytes ไป storage
 - Shared แสดง fixture records และ Share action ยังปิดอยู่. Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
 - Theme เป็น browser preference ใน `localStorage`
@@ -101,6 +102,10 @@ The existing routes are reused: object `DELETE` means Move to Trash; `GET .../tr
 
 Local checks and browser QA for Phase 9.4 are recorded in `docs/PHASE_9_4.md`. Production Trash/Restore/Permanent Delete remains unverified until approved production QA; this implementation pass did not deploy or modify production data.
 
+## Phase 9.4.1 — Selection Toolbar Actions and Favorites
+
+For one selected object, the File Browser toolbar offers the same Preview, Favorite, Copy, Move, and Move to Trash paths used by item actions; multi-selection supports clearing only. Toolbar Trash opens the same confirmation as the row action and never invokes Permanent Delete. Favorites reuses the existing D1 table and `/api/favorites` routes, with normalized object details hydrated from each owner-scoped storage mount. Missing objects are removed from favorites; provider project IDs remain server-side. The Favorites page has no demo fallback. Local checks and build/browser limitations are recorded in `docs/PHASE_9_4_1.md`; production verification remains outstanding.
+
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
 - endpoint matrix และ architecture/security review อ้างอิง source ปัจจุบันและได้รับ approval
@@ -124,12 +129,12 @@ Local checks and browser QA for Phase 9.4 are recorded in `docs/PHASE_9_4.md`. P
 
 - `src/App.jsx`, `src/layouts/AppLayout.jsx`, `src/components/layout/`: route และ shared shell
 - `src/context/FilesProvider.jsx`, `src/context/files-context.js`, `src/hooks/useFiles.js`: demo workspace state และ remote File Browser context
-- `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`: remote listing/navigation/create-folder state and breadcrumb validation
-- `src/components/files/`: connected File Browser listing, folder dialog and still-disabled later-phase actions
+- `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`: remote listing/navigation/Favorites/Trash state and breadcrumb validation
+- `src/components/files/`: connected File Browser listing, selection toolbar, item actions and folder dialog
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, Settings
 - `src/data/files.js`: fixtures; metadata ตัวอย่างไม่ใช่สถานะ Storage จริง
 - `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: frontend authentication state/client
-- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated mount discovery, capabilities, object listing/pagination and folder creation client
+- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated mount discovery, capabilities, object listing/pagination, Favorites, folder actions and Trash clients
 - `README.md`, `AGENTS.md`, `docs/DESIGN_SYSTEM.md`: project status, working conventions และ UI foundation
 - `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`, `docs/PHASE_8.md`, `docs/PHASE_8_5.md`, `docs/PHASE_9_1.md`, `docs/PHASE_9_2.md`, `docs/PRODUCTION_PROVISIONING.md`: source audit, API contract, phase reports and provisioning guide
 

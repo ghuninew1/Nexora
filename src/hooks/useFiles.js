@@ -156,6 +156,12 @@ export default function useFiles() {
     return { storageId: remote.storageId, folderId: remote.folderId, ids: allSelected ? ids.filter((id) => !currentFiles.some((file) => file.id === id)) : [...new Set([...ids, ...currentFiles.map((file) => file.id)])] };
   }), [currentFiles, remote.storageId, remote.folderId]);
   const clearSelection = useCallback(() => setSelection({ storageId: remote.storageId, folderId: remote.folderId, ids: [] }), [remote.storageId, remote.folderId]);
+  const favorites = remote.favorites.filter((file) => file.storageId === remote.storageId).map((file) => file.objectId);
+  const favoriteFiles = remote.favorites.map((item) => {
+    const extension = item.type === 'file' && item.name.includes('.') ? item.name.split('.').pop().toLowerCase() : undefined;
+    return { ...item, id: item.objectId, extension, modified: formatModified(item.modifiedAt),
+      size: item.type === 'folder' ? null : formatBytes(item.sizeBytes) };
+  });
 
   return {
     ...remote,
@@ -170,7 +176,8 @@ export default function useFiles() {
     setSortDirection,
     view,
     setView,
-    favorites: [],
+    favorites,
+    favoriteFiles,
     toggleSelect,
     selectAll,
     clearSelection,

@@ -53,20 +53,30 @@ function DashboardPage({ browser, openFile, navigate }) {
 }
 
 function ListingPage({ page, browser, openFile }) {
+  const connected = useFiles();
   const path = page.to;
   const recent = path === "/recent";
   const favorites = path === "/favorites";
   const shared = path === "/shared";
-  const files = recent ? browser.recentFiles : favorites ? browser.favoriteFiles : browser.files.filter((file) => file.sharedWith || file.sharedByMe);
+  const files = recent ? browser.recentFiles : favorites ? connected.favoriteFiles : browser.files.filter((file) => file.sharedWith || file.sharedByMe);
   const descriptions = {
     "/recent": "Files and folders you opened recently in this browser session.",
-    "/favorites": "Your starred items, kept in this demo session.",
+    "/favorites": "Your starred items from connected storage.",
     "/shared": "Sample sharing records for this workspace. Sharing links and permissions are not connected.",
   };
   return <div className={cx("flex flex-col gap-6")}>
     <PageHeading eyebrow="Your library" title={page.label} description={descriptions[path]} />
     {shared && <div className={cx("glass-surface flex items-start gap-3 p-4")}><Users className={cx("mt-0.5 size-4 shrink-0 text-muted-foreground")} /><p className={cx("text-sm text-muted-foreground")}>These are illustrative records only. Nexora has no sharing API or access-control service configured.</p></div>}
-    <DemoFileGrid files={files} mode={recent ? "recent" : shared ? "shared" : "favorites"} onFavorite={browser.toggleFavorite} onOpen={openFile} emptyTitle={recent ? "No recent activity" : favorites ? "No favorites yet" : "Nothing shared here"} emptyDescription={recent ? "Open a file or folder to see it here." : favorites ? "Use the file actions menu to add an item to Favorites." : "Shared items will appear here when sharing is configured."} />
+    {favorites ? <section className={cx("flex flex-col gap-3")} aria-label="Favorite files">
+      {connected.favoritesStatus === "loading" || connected.favoritesStatus === "refreshing" ? <div className={cx("glass-surface flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><LoaderCircle className={cx("size-4 animate-spin motion-reduce:animate-none")} />Loading Favorites…</div>
+        : connected.favoritesStatus === "error" ? <div className={cx("glass-surface flex flex-col items-start gap-3 p-5")} role="alert"><p className={cx("text-sm text-destructive")}>{connected.favoritesError}</p><Button variant="outline" onClick={() => void connected.refreshFavorites()}>Try again<RefreshCw /></Button></div>
+          : files.length === 0 ? <div className={cx("glass-surface flex min-h-64 flex-col items-center justify-center px-6 text-center")}><span className={cx("glass-control flex size-12 items-center justify-center rounded-2xl text-muted-foreground")}><Folder className={cx("size-5")} aria-hidden="true" /></span><h2 className={cx("mt-4 text-sm font-semibold")}>No favorites yet</h2><p className={cx("mt-1 max-w-sm text-sm text-muted-foreground")}>Star a connected file or folder to keep it here.</p></div>
+            : files.map((file) => <article key={`${file.storageId}:${file.objectId}`} className={cx("glass-surface flex min-w-0 items-center gap-3 p-4")}>
+              <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}>{file.type === "folder" ? <Folder className={cx("size-5")} aria-hidden="true" /> : <File className={cx("size-5")} aria-hidden="true" />}</span>
+              <div className={cx("min-w-0 flex-1")}><p className={cx("truncate text-sm font-medium")}>{file.name}</p><p className={cx("mt-1 truncate text-xs text-muted-foreground")}>{file.storageName} · {file.type === "folder" ? "Folder" : file.size ?? "File"}</p></div>
+              <Button type="button" variant="ghost" size="icon-lg" className={cx("min-h-11 min-w-11 shrink-0 text-amber-500")} onClick={() => void connected.toggleFavorite(file)} aria-label={`Remove ${file.name} from Favorites`} title="Remove from Favorites"><Heart className={cx("fill-amber-400")} aria-hidden="true" /></Button>
+            </article>)}
+    </section> : <DemoFileGrid files={files} mode={recent ? "recent" : "shared"} onOpen={openFile} emptyTitle={recent ? "No recent activity" : "Nothing shared here"} emptyDescription={recent ? "Open a file or folder to see it here." : "Shared items will appear here when sharing is configured."} />}
   </div>;
 }
 

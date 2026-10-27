@@ -6,6 +6,9 @@ import {
   createStorageFolder,
   getStorageCapabilities,
   getStorageUsage,
+  listStorageFavorites,
+  addStorageFavorite,
+  removeStorageFavorite,
   listStorageObjects,
   listStorageTrash,
   listStorages,
@@ -173,6 +176,28 @@ test('child listing safely encodes parentId and forwards opaque cursor and reque
   assert.equal(parsed.searchParams.get('cursor'), cursor);
   assert.equal(parsed.searchParams.get('limit'), '25');
   await assert.rejects(listStorageObjects('mount_123', { limit: 101, fetchImpl: async () => { throw new Error('must not request'); } }), { code: 'INVALID_INPUT' });
+});
+
+test('Favorites use the authenticated same-origin API and normalize public object metadata', async () => {
+  let calls = [];
+  const favorite = { objectId: 'file_a', parentId: null, name: 'Report.pdf', type: 'file', sizeBytes: 128,
+    storageId: 'mount_123', storageName: 'Personal files', provider_reference: 'must be stripped' };
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: new URL(url, 'https://nexora.test'), options });
+    if (options.method === 'POST') return Response.json({ data: { favorite: { storageId: 'mount_123', objectId: 'file_a' } } }, { status: 201 });
+    if (options.method === 'DELETE') return Response.json({ data: { removed: true } });
+    return Response.json({ data: { favorites: [favorite] } });
+  };
+  const [listed] = await listStorageFavorites({ fetchImpl });
+  assert.equal(listed.name, 'Report.pdf');
+  assert.equal(listed.storageName, 'Personal files');
+  assert.equal(Object.hasOwn(listed, 'provider_reference'), false);
+  await addStorageFavorite('mount_123', 'file_a', { fetchImpl });
+  await removeStorageFavorite('mount_123', 'file_a', { fetchImpl });
+  assert.deepEqual(calls.map(({ url, options }) => [url.pathname, options.method]), [
+    ['/api/favorites', 'GET'], ['/api/favorites/mount_123/file_a', 'POST'], ['/api/favorites/mount_123/file_a', 'DELETE'],
+  ]);
+  assert.ok(calls.every(({ options }) => options.credentials === 'same-origin'));
 });
 
 test('real object normalization validates file/folder model and strips provider internals', () => {

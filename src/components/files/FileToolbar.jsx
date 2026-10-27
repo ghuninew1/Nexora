@@ -1,6 +1,6 @@
 import {
   ChevronDown, FolderPlus, Grid2X2, List, Plus, RefreshCw,
-  Search, Trash2, ArrowUpDown,
+  Search, Trash2, ArrowUpDown, Eye, Star, Copy, ArrowRightLeft,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
@@ -9,7 +9,7 @@ import { Separator } from "../ui/separator";
 import { cx } from "../../utils/cx";
 import UploadButton from "./UploadButton";
 
-function FileToolbar({ selectedCount, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange, onClearSelection }) {
+function FileToolbar({ selectedCount, selectedFile, selectedFavorite, isSelectionBusy = false, canPreviewSelected = false, canMoveSelected = false, canCopySelected = false, canTrashSelected = false, onPreviewSelected, onToggleFavoriteSelected, onMoveSelected, onCopySelected, onTrashSelected, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange, onClearSelection }) {
   const hasSelection = selectedCount > 0;
   const isBusy = isRefreshing || isCreatingFolder;
   return (
@@ -17,8 +17,13 @@ function FileToolbar({ selectedCount, onNewFolder, canCreateFolder, isCreatingFo
       <div className={cx("flex min-w-0 items-center gap-2 overflow-x-auto")}>
         {hasSelection ? <>
           <span className={cx("shrink-0 text-sm font-medium text-foreground")}>{selectedCount} selected</span>
-          <span className={cx("shrink-0 text-xs text-muted-foreground")}>Use each item’s menu for file actions.</span>
-          <Button variant="outline" size="sm" disabled title="Delete and Trash actions are not available yet"><Trash2 />Delete</Button>
+          {selectedCount === 1 && selectedFile && <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label={`Actions for ${selectedFile.name}`}>
+            {selectedFile.type === "file" && <Button variant="ghost" size="sm" onClick={onPreviewSelected} disabled={!canPreviewSelected || isSelectionBusy} title="Preview selected file"><Eye />Preview</Button>}
+            <Button variant="ghost" size="sm" onClick={onToggleFavoriteSelected} disabled={isSelectionBusy} aria-pressed={selectedFavorite} title={selectedFavorite ? "Remove from Favorites" : "Add to Favorites"}><Star className={cx(selectedFavorite && "fill-amber-400 text-amber-500")} />{selectedFavorite ? "Unfavorite" : "Favorite"}</Button>
+            <Button variant="ghost" size="sm" onClick={onCopySelected} disabled={!canCopySelected || isSelectionBusy} title="Copy selected item"><Copy />Copy</Button>
+            <Button variant="ghost" size="sm" onClick={onMoveSelected} disabled={!canMoveSelected || isSelectionBusy} title="Move selected item"><ArrowRightLeft />Move</Button>
+            <Button variant="outline" size="sm" onClick={onTrashSelected} disabled={!canTrashSelected || isSelectionBusy} title="Move selected item to Trash"><Trash2 />Move to Trash</Button>
+          </div>}
           <Button variant="ghost" size="sm" onClick={onClearSelection}>Clear selection</Button>
         </> : <>
           <DropdownMenu>

@@ -4,16 +4,19 @@ import { useAuth } from './useAuth';
 import { useStorage } from './useStorage';
 import {
   copyStorageObject,
+  addStorageFavorite,
   canUseStorageCapability,
   createStorageFolder,
   fetchStorageObjectPreview,
   listStorageObjects,
+  listStorageFavorites,
   mergeStorageObjects,
   moveStorageObject,
   renameStorageObject,
   listStorageTrash,
   permanentlyDeleteStorageObject,
   restoreStorageObject,
+  removeStorageFavorite,
   startStorageObjectDownload,
   StorageApiError,
   trashStorageObject,
@@ -81,6 +84,9 @@ export default function useRemoteFilesState() {
   const [notice, setNotice] = useState('');
   const [preview, setPreview] = useState(null);
   const [trashState, setTrashState] = useState(EMPTY_TRASH_STATE);
+  const [favoriteState, setFavoriteState] = useState({ items: [], status: 'idle', error: null });
+  const favoriteSequenceRef = useRef(0);
+  const favoriteControllerRef = useRef(null);
   const createControllerRef = useRef(null);
   const generationRef = useRef(0);
   const previousStorageIdRef = useRef(null);
@@ -115,6 +121,72 @@ export default function useRemoteFilesState() {
   const validFolderId = requestedFolderId === null
     || (isValidObjectId(requestedFolderId) && Boolean(routeBreadcrumbs));
   const folderId = validFolderId && storageId ? requestedFolderId : null;
+
+  const refreshFavorites = useCallback(async () => {
+    if (authStatus !== 'authenticated') {
+      setFavoriteState({ items: [], status: 'idle', error: null });
+      return { ok: false, error: 'UNAUTHENTICATED' };
+    }
+    favoriteControllerRef.current?.abort();
+    const controller = new AbortController();
+    favoriteControllerRef.current = controller;
+    const sequence = ++favoriteSequenceRef.current;
+    setFavoriteState((current) => ({ ...current, status: current.items.length ? 'refreshing' : 'loading', error: null }));
+    try {
+      const items = await listStorageFavorites({ signal: controller.signal });
+      if (controller.signal.aborted || sequence !== favoriteSequenceRef.current) return { error: 'CANCELLED' };
+      setFavoriteState({ items, status: items.length ? 'ready' : 'empty', error: null });
+      return { ok: true };
+    } catch (error) {
+      if (controller.signal.aborted || error?.name === 'AbortError' || sequence !== favoriteSequenceRef.current) return { error: 'CANCELLED' };
+      if (error instanceof StorageApiError && error.status === 401) expireSession();
+      setFavoriteState((current) => ({ ...current, status: 'error', error: error instanceof Error ? error.message : 'Favorites could not be loaded.' }));
+      return { error: error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE' };
+    }
+  }, [authStatus, expireSession]);
+
+  useEffect(() => {
+    void refreshFavorites();
+    return () => {
+      favoriteSequenceRef.current += 1;
+      favoriteControllerRef.current?.abort();
+    };
+  }, [refreshFavorites]);
+
+  const toggleFavorite = useCallback(async (file) => {
+    const targetStorageId = file?.storageId ?? storageId;
+    const objectId = file?.objectId ?? file?.id;
+    if (!targetStorageId || !isValidObjectId(objectId)) return { error: 'INVALID_INPUT' };
+    const exists = favoriteState.items.some((item) => item.storageId === targetStorageId && item.objectId === objectId);
+    setMutatingIds((current) => new Set(current).add(objectId));
+    try {
+      if (exists) await removeStorageFavorite(targetStorageId, objectId);
+      else await addStorageFavorite(targetStorageId, objectId);
+      setFavoriteState((current) => {
+        const items = exists
+          ? current.items.filter((item) => item.storageId !== targetStorageId || item.objectId !== objectId)
+          : [{ ...file, id: objectId, objectId, storageId: targetStorageId, storageName: activeStorage?.name ?? 'Connected storage' }, ...current.items];
+        return { items, status: items.length ? 'ready' : 'empty', error: null };
+      });
+      setOperationFeedback({ type: 'success', message: exists ? 'Removed from Favorites.' : 'Added to Favorites.' });
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof StorageApiError && error.status === 401) expireSession();
+      const code = error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE';
+      if (code === 'NOT_FOUND') void refreshFavorites();
+      const message = code === 'NOT_FOUND' ? 'This item is no longer available. Favorites were refreshed.'
+        : code === 'FORBIDDEN' ? 'You do not have access to this storage.'
+          : 'Favorites could not be updated. Try again.';
+      setOperationFeedback({ type: 'error', message });
+      return { error: code };
+    } finally {
+      setMutatingIds((current) => {
+        const next = new Set(current);
+        next.delete(objectId);
+        return next;
+      });
+    }
+  }, [storageId, favoriteState.items, activeStorage?.name, expireSession, refreshFavorites]);
   const breadcrumbs = routeBreadcrumbs ?? rootBreadcrumbs();
   const cachedListing = storageId ? cacheRef.current.get(storageId, folderId) : null;
   const displayState = useMemo(() => browserState.storageId === storageId && browserState.folderId === folderId
@@ -811,6 +883,11 @@ export default function useRemoteFilesState() {
     canRename: canUseCapability('rename'),
     canMove: canUseCapability('move'),
     canCopy: canUseCapability('copy'),
+    favorites: favoriteState.items,
+    favoritesStatus: favoriteState.status,
+    favoritesError: favoriteState.error,
+    refreshFavorites,
+    toggleFavorite,
     trashItems: trashState.storageId === storageId ? trashState.items : [],
     trashNextCursor: trashState.storageId === storageId ? trashState.nextCursor : null,
     trashStatus: storageStatus === 'loading' ? 'loading'
@@ -849,7 +926,8 @@ export default function useRemoteFilesState() {
     operationFeedback, uploadQueue, uploadFiles, cancelUpload, retryUpload, clearFinishedUploads,
     renameObject, moveObject, copyObject, downloadObject, trashObject, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
-    preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash]);
+    preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,
+    favoriteState, refreshFavorites, toggleFavorite]);
 
   return value;
 }

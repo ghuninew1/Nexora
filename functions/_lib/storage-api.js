@@ -458,11 +458,34 @@ export async function handleFavoritesApi({ request, env, user, parts, fetchImpl 
   const method = request.method.toUpperCase();
   if (parts.length === 2 && parts[0] === 'api' && parts[1] === 'favorites' && method === 'GET') {
     const rows = await env.DB.prepare(`SELECT f.storage_mount_id, f.object_id, f.created_at, m.name AS storage_name
+      , m.shared_storage_project_id
       FROM favorites f JOIN storage_mounts m ON m.id = f.storage_mount_id
       WHERE f.user_id = ? AND m.owner_user_id = ? AND m.status = 'active' ORDER BY f.created_at DESC LIMIT 100`)
       .bind(user.id, user.id).all();
-    return json({ favorites: (rows.results || []).map((row) => ({ storageId: row.storage_mount_id, objectId: row.object_id,
-      storageName: row.storage_name, createdAt: new Date(Number(row.created_at)).toISOString() })) });
+    const favorites = [];
+    const favoriteRows = rows.results || [];
+    for (let index = 0; index < favoriteRows.length; index += 8) {
+      const page = await Promise.all(favoriteRows.slice(index, index + 8).map(async (row) => {
+        let object;
+        try {
+          const payload = await client.jsonRequest({ request, projectId: row.shared_storage_project_id,
+            path: `/objects/${encodeURIComponent(row.object_id)}` });
+          object = normalizeObject(upstreamPayload(payload)?.object || upstreamPayload(payload)?.item || upstreamPayload(payload));
+          if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+        } catch (error) {
+          if (error?.code !== 'NOT_FOUND') throw error;
+        }
+        if (!object) {
+          await env.DB.prepare('DELETE FROM favorites WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?')
+            .bind(user.id, row.storage_mount_id, row.object_id).run();
+          return null;
+        }
+        return { ...object, storageId: row.storage_mount_id, storageName: row.storage_name,
+          createdAt: new Date(Number(row.created_at)).toISOString() };
+      }));
+      favorites.push(...page.filter(Boolean));
+    }
+    return json({ favorites });
   }
   if (parts.length !== 4 || parts[0] !== 'api' || parts[1] !== 'favorites') throw new ApiError('NOT_FOUND', 404);
   const storageId = parts[2];

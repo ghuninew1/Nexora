@@ -916,7 +916,16 @@ test('favorites verify mount ownership and object existence, and deduplicate', a
   const repeated = await request(`/api/favorites/${storageId}/${objectId}`, { method: 'POST', headers: { Origin: origin } });
   assert.equal(repeated.status, 201);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM favorites WHERE user_id = ? AND object_id = ?').get(user.id, objectId).count, 1);
-  assert.equal((await request('/api/favorites')).status, 200);
+  const recentCountBeforeList = sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ? AND object_id = ?').get(user.id, objectId).count;
+  const favoritesResponse = await request('/api/favorites');
+  assert.equal(favoritesResponse.status, 200);
+  const favorites = (await favoritesResponse.json()).data.favorites;
+  assert.equal(favorites.length, 1);
+  assert.equal(favorites[0].objectId, objectId);
+  assert.equal(favorites[0].name, 'file.txt');
+  assert.equal(favorites[0].storageId, storageId);
+  assert.equal(Object.hasOwn(favorites[0], 'shared_storage_project_id'), false);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ? AND object_id = ?').get(user.id, objectId).count, recentCountBeforeList);
   assert.equal((await request('/api/favorites/mount_other/object_foreign', { method: 'POST', headers: { Origin: origin } })).status, 404);
 });
 

@@ -33,6 +33,8 @@ function FileBrowser() {
   const [destinationAction, setDestinationAction] = useState(null);
   const [trashFile, setTrashFile] = useState(null);
   const selectedCount = browser.selectedIds.length;
+  const selectedFile = selectedCount === 1 ? browser.currentFiles.find((file) => file.id === browser.selectedIds[0]) : null;
+  const selectedIsBusy = Boolean(selectedFile && browser.mutatingIds.has(selectedFile.objectId));
   const isLoading = browser.status === "loading";
   const isRefreshing = browser.status === "refreshing";
   const isReady = browser.status === "ready" || browser.status === "empty" || isRefreshing;
@@ -82,6 +84,18 @@ function FileBrowser() {
         {browser.revalidationError && <div className={cx("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><span>{browser.revalidationError}</span><Button type="button" variant="ghost" size="sm" onClick={() => void browser.refreshCurrentFolder()}>Refresh</Button></div>}
         <FileToolbar
           selectedCount={selectedCount}
+          selectedFile={selectedFile}
+          selectedFavorite={Boolean(selectedFile && browser.favorites.includes(selectedFile.id))}
+          isSelectionBusy={selectedIsBusy}
+          canPreviewSelected={Boolean(selectedFile && browser.canPreviewFile(selectedFile))}
+          canMoveSelected={browser.canMove}
+          canCopySelected={browser.canCopy}
+          canTrashSelected={browser.canTrash}
+          onPreviewSelected={() => selectedFile && void browser.openPreview(selectedFile)}
+          onToggleFavoriteSelected={() => selectedFile && void browser.toggleFavorite(selectedFile)}
+          onMoveSelected={() => selectedFile && setDestinationAction({ action: "move", file: selectedFile, key: crypto.randomUUID() })}
+          onCopySelected={() => selectedFile && setDestinationAction({ action: "copy", file: selectedFile, key: crypto.randomUUID() })}
+          onTrashSelected={() => selectedFile && setTrashFile(selectedFile)}
           onNewFolder={() => setNewFolderOpen(true)}
           canCreateFolder={browser.canCreateFolder}
           isCreatingFolder={browser.isCreatingFolder}
@@ -109,7 +123,7 @@ function FileBrowser() {
             selectedIds={browser.selectedIds}
             query={browser.query}
             view={browser.view}
-            favorites={[]}
+            favorites={browser.favorites}
             onSelect={browser.toggleSelect}
             onSelectAll={browser.selectAll}
             onOpenFolder={browser.openFolder}
@@ -119,7 +133,8 @@ function FileBrowser() {
             onMove={(file) => setDestinationAction({ action: "move", file, key: crypto.randomUUID() })}
             onCopy={(file) => setDestinationAction({ action: "copy", file, key: crypto.randomUUID() })}
             onTrash={setTrashFile}
-            onToggleFavorite={() => {}}
+            onToggleFavorite={(id) => { const file = browser.currentFiles.find((item) => item.id === id); if (file) void browser.toggleFavorite(file); }}
+            allowFavorites
             capabilities={{ download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}
             mutatingIds={browser.mutatingIds}
             canCreateFolder={browser.canCreateFolder}

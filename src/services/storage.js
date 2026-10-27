@@ -143,6 +143,43 @@ export async function getStorageUsage(storageId, options) {
   return normalizeStorageUsage(data.usage);
 }
 
+export async function listStorageFavorites(options = {}) {
+  const data = await request('/api/favorites', options);
+  if (!Array.isArray(data.favorites)) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return data.favorites.map((favorite) => {
+    if (!favorite || typeof favorite.storageId !== 'string' || !favorite.storageId.trim()) {
+      throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+    }
+    return {
+      ...normalizeStorageObject(favorite),
+      storageId: favorite.storageId,
+      storageName: typeof favorite.storageName === 'string' ? favorite.storageName : 'Connected storage',
+      createdAt: typeof favorite.createdAt === 'string' ? favorite.createdAt : null,
+    };
+  });
+}
+
+export async function addStorageFavorite(storageId, objectId, options = {}) {
+  const data = await request(`/api/favorites/${encodeURIComponent(storageId)}/${encodeURIComponent(objectId)}`, {
+    ...options,
+    method: 'POST',
+  });
+  const favorite = data.favorite;
+  if (!favorite || favorite.storageId !== storageId || favorite.objectId !== objectId) {
+    throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  }
+  return favorite;
+}
+
+export async function removeStorageFavorite(storageId, objectId, options = {}) {
+  const data = await request(`/api/favorites/${encodeURIComponent(storageId)}/${encodeURIComponent(objectId)}`, {
+    ...options,
+    method: 'DELETE',
+  });
+  if (data.removed !== true) throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  return { storageId, objectId };
+}
+
 const OBJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
 
 export function normalizeStorageObject(value) {
