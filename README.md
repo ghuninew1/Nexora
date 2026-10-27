@@ -8,13 +8,11 @@ Shared Storage ใน checkout แยก `issuedesk/garage/storage/` มี File
 
 ## สถานะปัจจุบัน
 
-Frontend ทำงานด้วยข้อมูลตัวอย่างในหน่วยความจำ: เปิดโฟลเดอร์และย้อนผ่าน URL breadcrumbs, ค้นหา/เรียงรายการ, สลับ List/Grid, เลือกหลายรายการ, สร้าง/เปลี่ยนชื่อ/ย้ายไป Trash, restore/permanent delete, ทำเครื่องหมาย Favorites และดู Recent, Dashboard และ sharing records ตัวอย่างได้ ไฟล์ตัวอย่างมีเฉพาะ metadata; preview และ download ใช้ได้กับไฟล์ที่เลือกจากเครื่องและอยู่ใน session เท่านั้น
+File Browser แสดงรายการจริงจาก mount ที่เลือกผ่าน Nexora same-origin API, เปิดโฟลเดอร์และ breadcrumb ด้วย logical object IDs, โหลดหน้าถัดไป, ค้นหา/เรียงรายการที่โหลดแล้ว, สลับ List/Grid และเลือกหลายรายการได้. สร้างโฟลเดอร์ได้เมื่อ capability อนุญาต; validation ฝั่ง server เป็นผู้ตัดสินสุดท้าย. Search ครอบคลุมเฉพาะรายการที่โหลดแล้ว และ refresh จะเริ่มจากหน้าแรก
 
-File Browser มีปุ่มรูปดาวสำหรับเพิ่ม/นำรายการออกจาก Favorites อยู่หน้าสัญลักษณ์ไฟล์หรือโฟลเดอร์ กดได้โดยตรงโดยไม่ต้องเปิดเมนู Actions; สถานะยังเป็น demo ใน memory และหายเมื่อ refresh เช่นเดิม Sidebar ใช้โลโก้เต็มเมื่อขยายและโลโก้ย่อเมื่อพับ พร้อมรองรับเมนูบนจอเล็ก
+Upload, preview, download, rename, move/copy, delete/Trash, Favorite และ Share ยังไม่เปิดใน File Browser. Dashboard, Recent, Favorites, Shared และ Trash ยังคงแสดงข้อมูล demo/fixture; การเปลี่ยน demo state reset เมื่อ refresh. ตัวอย่างไฟล์ไม่มี bytes; browser `File` หรือ upload queue ที่ใช้ใน demo ไม่ได้ส่งข้อมูลไป storage. Sidebar ใช้โลโก้เต็มเมื่อขยายและโลโก้ย่อเมื่อพับ พร้อมรองรับเมนูบนจอเล็ก
 
-ข้อมูลจาก `src/data/files.js` เป็น fixture; frontend ใช้ `/api/auth/*` สำหรับ login/session และ `/api/storage/v1/*` เพื่อค้นหา mount, capabilities และ usage ผ่าน Nexora เท่านั้น. สถานะ files, Recent, Favorites, Trash และ upload demo อยู่ใน memory และหายเมื่อ refresh. Phase 9.1 ยังไม่ได้ deploy หรือยืนยัน connection กับ production. ไฟล์ที่อัปโหลดจากหน้าเว็บยังไม่ถูกส่งไป Garage/QNAP; ธีมเป็นการตั้งค่าฝั่ง browser และเก็บแยกใน localStorage
-
-Dashboard, Recent, Favorites และ Trash ใน UI ยังใช้ข้อมูล demo ร่วมกับ File Browser; Shared แสดง fixture. Storage page แสดง connection/capabilities ที่ค้นพบผ่าน Nexora API; usage เป็น “Not reported” จนกว่าจะมี metrics ที่เชื่อถือได้. Phase 8 backend มี Favorites/Recent API แต่ UI ยังไม่เรียกใช้. File Browser operations, shares, permissions, cross-device download และ live capacity ยังไม่เปิดใน UI; ปุ่ม Share จึงปิดไว้
+frontend ใช้ `/api/auth/*` สำหรับ login/session และ `/api/storage/v1/*` ผ่าน Nexora เท่านั้น; ไม่เรียก Shared Storage/Garage โดยตรง. Phase 9.1/9.2 production deploy และ connection ยังไม่ยืนยันใน checkout นี้. Storage page แสดง capabilities ที่ API ส่งกลับ; usage เป็น “Not reported” จนกว่าจะมี metrics ที่เชื่อถือได้. ธีมเป็นการตั้งค่าฝั่ง browser และเก็บแยกใน localStorage
 
 ## เริ่มใช้งาน
 
@@ -38,10 +36,10 @@ src/
 │   ├── layout/      # AppShell, Sidebar, Header
 │   ├── navigation/  # route/navigation metadata
 │   └── ui/          # Base UI components และ variants
-├── data/            # file browser demo fixtures
-├── context/         # auth, storage connection state และ shared in-memory file state
-├── hooks/           # useAuth, useStorage, useFiles (demo domain state) และ upload queue
-├── services/        # same-origin auth และ Storage discovery clients
+├── data/            # demo fixtures สำหรับ Dashboard และหน้า workspace อื่น
+├── context/         # auth, storage connection state, demo และ remote file browser state
+├── hooks/           # auth/storage hooks, demo state, remote browser state และ upload queue
+├── services/        # same-origin auth, storage discovery, object listing และ folder creation clients
 ├── layouts/         # shared React Router layouts
 ├── pages/           # route pages
 ├── theme/           # theme control
@@ -54,15 +52,15 @@ scripts/              # local-only admin provisioning
 tests/                # backend security/contract tests
 ```
 
-Pages ใช้ `AppLayout` ร่วมกับ `AppShell` และ `<Outlet />` เพื่อให้สถานะ navigation อยู่ต่อระหว่างเปลี่ยน route `FilesProvider` เก็บ demo files, favorites, recents และ trash ระหว่างเปลี่ยน route; `useFiles` จัดการ folder/search/view state และ local operations ส่วน `useUploadQueue` จำลอง progress และเพิ่ม browser `File` เข้า memory เท่านั้น การตั้งค่า design system อยู่ใน `src/index.css` และอธิบายใน [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
+Pages ใช้ `AppLayout` ร่วมกับ `AppShell` และ `<Outlet />` เพื่อให้สถานะ navigation อยู่ต่อระหว่างเปลี่ยน route. `FilesProvider` คงข้อมูล demo สำหรับ Dashboard/Recent/Favorites/Trash; File Browser ใช้ `useRemoteFilesState` และ `src/services/storage.js` เรียก Nexora API สำหรับ list/pagination/create folder. Query `folder` ใช้ logical object ID; ชื่อ breadcrumb อยู่ใน React Router history state. Upload queue ยังเป็น demo ในส่วนที่ใช้งานอยู่และไม่ส่ง bytes. การตั้งค่า design system อยู่ใน `src/index.css` และอธิบายใน [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
 
 รายการงานถัดไป, Storage/API guardrails และ acceptance criteria อยู่ใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
 
-ผลตรวจ frontend, source audit, API contract, Phase 8 implementation, Phase 8.5 auth และ provisioning CLI อยู่ใน [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md), [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md), [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md), [`docs/PHASE_8.md`](docs/PHASE_8.md), [`docs/PHASE_8_5.md`](docs/PHASE_8_5.md) และ [`docs/PRODUCTION_PROVISIONING.md`](docs/PRODUCTION_PROVISIONING.md). Phase 8.5 ใช้ local mock สำหรับ UI; operator รายงาน production login smoke test และ password logging issue แต่ source ปัจจุบันยังระบุ origin ของ production log ไม่ได้
+ผลตรวจ frontend, source audit, API contract, Phase 8 implementation, Phase 8.5 auth, Phase 9.1/9.2 และ provisioning CLI อยู่ใน [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md), [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md), [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md), [`docs/PHASE_8.md`](docs/PHASE_8.md), [`docs/PHASE_8_5.md`](docs/PHASE_8_5.md), [`docs/PHASE_9_1.md`](docs/PHASE_9_1.md), [`docs/PHASE_9_2.md`](docs/PHASE_9_2.md) และ [`docs/PRODUCTION_PROVISIONING.md`](docs/PRODUCTION_PROVISIONING.md). Phase 8.5 ใช้ local mock สำหรับ UI; operator รายงาน production login smoke test และ password logging issue แต่ source ปัจจุบันยังระบุ origin ของ production log ไม่ได้
 
 ## แนวทางข้อมูลและ Storage
 
-Phase 8 เพิ่ม Pages Functions และ same-origin Storage API แล้ว; Phase 9 จึงเพิ่ม domain API client ใน `src/services/` และเชื่อม File Browser. ห้ามใส่ Storage secrets ใน frontend หรือเรียก Garage โดยตรง; server ตรวจ session, mount ownership และ capabilities ก่อนส่งต่อ Shared Storage `/v3`
+Phase 8 เพิ่ม Pages Functions และ same-origin Storage API; Phase 9.1 เพิ่ม mount discovery และ Phase 9.2 เชื่อม File Browser สำหรับ listing/navigation/folder creation ผ่าน `src/services/storage.js`. ห้ามใส่ Storage secrets ใน frontend หรือเรียก Garage โดยตรง; server ตรวจ session, mount ownership และ capabilities ก่อนส่งต่อ Shared Storage `/v3`
 
 IssueDesk เชื่อมกับ Shared Storage Service แยกต่างหาก; source ของ Service ใช้ SQLite สำหรับ metadata และ S3-compatible API สำหรับ object bytes โดย Garage เป็น provider หลัง service ในการตั้งค่าปัจจุบัน แต่ checkout นี้ไม่ได้ยืนยัน remote Garage/QNAP availability. Nexora ต้องมี metadata database แยก และยึดผล audit/proposal ใน `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md` กับ `docs/STORAGE_API_V1_PROPOSAL.md` ก่อนเริ่ม integration
 
@@ -76,10 +74,11 @@ IssueDesk เชื่อมกับ Shared Storage Service แยกต่า�
 - **Phase 6 — Polish:** labels และ focus ที่ keyboard/screen reader ใช้ได้, validation ชื่อซ้ำ, select-all บนมือถือ, breadcrumb เลื่อนบนจอแคบ, upload progress semantics และ reduced-motion support — เสร็จใน frontend
 - **Phase 7 — Validation & Storage Proposal:** `pnpm lint` และ `pnpm build` ผ่าน; ตรวจทุก route และหลาย workflow ใน in-app browser ที่ mobile-size, สลับธีม Light/Dark/System ได้; desktop browser, upload file chooser, permanent delete, reduced-motion OS override และ console log ยังไม่ได้ยืนยัน — ทำ source audit และเอกสาร proposal ครบ แต่ยังไม่ implement backend
 - **Phase 8 — Backend Foundation:** Pages Functions, D1 schema, session auth, mount ownership, server-only Shared Storage `/v3` client, `/api/storage/v1/*`, Favorites/Recent persistence และ backend tests เสร็จ; frontend demo ไม่ได้เปลี่ยน
-- **UI follow-up:** ปรับ Sidebar ให้เต็มความสูงและ responsive, สลับโลโก้ตามสถานะพับ/ขยาย, เพิ่ม Liquid Glass hover ให้รายการ File Browser และปุ่มดาว Favorites แบบกดตรงหน้าไฟล์/โฟลเดอร์; glass effect ของ shared Button ใช้สีตัวอักษรเพื่อให้เห็นทั้งบนปุ่มพื้นขาวและพื้นเข้ม; ตรวจ interaction และ List/Grid/เมนู Sidebar บนหน้าจอมือถือแล้ว ส่วน desktop/console และ QA ที่ค้างให้ดูใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
+- **UI follow-up:** ปรับ Sidebar ให้เต็มความสูงและ responsive, สลับโลโก้ตามสถานะพับ/ขยาย, เพิ่ม Liquid Glass hover ให้รายการ File Browser และการ์ด demo Recent/Favorites; glass effect ของ shared Button ใช้สีตัวอักษรเพื่อให้เห็นทั้งบนปุ่มพื้นขาวและพื้นเข้ม. File Browser Favorites action ถูกปิดหลังเชื่อม mount ใน Phase 9.2; ดูผล QA ตาม phase ใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
 - **Production provisioning CLI:** เพิ่มคำสั่ง admin และ Storage mount แบบ explicit `--remote`, tests แบบไม่ต่อ remote และคู่มือ operator; production infra/migrations/secrets ตาม operator ยืนยันแล้ว แต่ CLI ไม่ได้ใช้สร้าง records. Frontend ยังเป็น demo จนถึง Phase 9
 - **Phase 8.5 — Frontend Authentication:** เพิ่ม AuthProvider, useAuth, session bootstrap, protected workspace routes, login/logout และ identity ใน Header; security follow-up ปรับการเก็บ password ระหว่าง login, error allowlist, tests ป้องกันข้อมูลลับรั่วใน response/logs และใช้ PBKDF2 100,000 รอบร่วมกัน. ดู [รายงาน Phase 8.5](docs/PHASE_8_5.md)
-- **Phase 9.1 — Storage Client + Mount Integration:** เพิ่ม same-origin storage client, authenticated StorageProvider/useStorage, safe mount discovery, capability/usage state, session-expiry handling และ connection summary ใน Storage page. FilesProvider/File Browser ยังเป็น demo; production deploy/smoke test ค้างอยู่. ดู [รายงาน Phase 9.1](docs/PHASE_9_1.md)
+- **Phase 9.1 — Storage Client + Mount Integration:** เพิ่ม same-origin storage client, authenticated StorageProvider/useStorage, safe mount discovery, capability/usage state, session-expiry handling และ connection summary ใน Storage page; ตอนจบ 9.1 File Browser ยังเป็น demo. ดู [รายงาน Phase 9.1](docs/PHASE_9_1.md)
+- **Phase 9.2 — Real File Listing + Folder Navigation:** File Browser ใช้ authenticated Nexora API สำหรับ real object listing, cursor pagination, folder navigation/breadcrumbs, refresh/search/sort ของรายการที่โหลดแล้ว และ create-folder ตาม capability. Upload/download/preview/rename/move/copy/Trash/Favorites/Share ยังปิด; workspace pages อื่นยังเป็น demo. Lint, 52 tests, build และ local mock browser flow ผ่าน; production deploy/connection ยังไม่ได้ตรวจ. ดู [รายงาน Phase 9.2](docs/PHASE_9_2.md)
 
 ## Coding conventions
 

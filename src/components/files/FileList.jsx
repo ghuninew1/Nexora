@@ -2,8 +2,8 @@ import { cx } from "../../utils/cx";
 import FileEmptyState from "./FileEmptyState";
 import FileListItem from "./FileListItem";
 
-function FileList({ files, selectedIds, query, view, favorites, onSelect, onSelectAll, onOpenFolder, onPreview, onRename, onDelete, onDownload, onToggleFavorite }) {
-  if (files.length === 0) return <FileEmptyState searching={Boolean(query.trim())} />;
+function FileList({ files, selectedIds, query, view, favorites, onSelect, onSelectAll, onOpenFolder, onPreview, onRename, onDelete, onDownload, onToggleFavorite, allowFavorites = false, canCreateFolder = false, onCreateFolder }) {
+  if (files.length === 0) return <FileEmptyState searching={Boolean(query.trim())} canCreateFolder={canCreateFolder} onCreateFolder={onCreateFolder} />;
   const allSelected = files.every((file) => selectedIds.includes(file.id));
   return (
     <div className={cx(view === "list" ? "overflow-hidden rounded-xl border border-border bg-card" : "")}>
@@ -14,7 +14,7 @@ function FileList({ files, selectedIds, query, view, favorites, onSelect, onSele
       </div>}
       {view === "grid" && <div className={cx("mb-2 flex justify-end")}><button type="button" onClick={onSelectAll} aria-pressed={allSelected} className={cx("min-h-10 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground")}>{allSelected ? "Deselect all" : "Select all"}</button></div>}
       <div className={cx(view === "grid" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-3" : "")}>
-        {files.map((file) => <FileListItem key={file.id} file={file} selected={selectedIds.includes(file.id)} favorite={favorites.includes(file.id)} view={view} onSelect={onSelect} onOpenFolder={onOpenFolder} onPreview={onPreview} onRename={onRename} onDelete={onDelete} onDownload={onDownload} onToggleFavorite={onToggleFavorite} />)}
+        {files.map((file) => <FileListItem key={file.id} file={file} selected={selectedIds.includes(file.id)} favorite={favorites.includes(file.id)} view={view} onSelect={onSelect} onOpenFolder={onOpenFolder} onPreview={onPreview} onRename={onRename} onDelete={onDelete} onDownload={onDownload} onToggleFavorite={onToggleFavorite} allowFavorites={allowFavorites} />)}
       </div>
     </div>
   );

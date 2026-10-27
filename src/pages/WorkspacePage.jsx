@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { cx } from "../utils/cx";
 import { useFilesData } from "../context/FilesProvider";
 import { useStorage } from "../hooks/useStorage";
-import useFiles from "../hooks/useFiles";
+import { useDemoFiles } from "../hooks/useFiles";
 import ThemeToggle from "../theme/ThemeToggle";
 import DemoFileGrid from "../components/files/DemoFileGrid";
 import FilePreviewDialog from "../components/files/FilePreviewDialog";
@@ -138,13 +138,13 @@ export default function WorkspacePage() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const page = getPageInfo(pathname);
-  const browser = useFiles();
+  const browser = useDemoFiles();
   const { recordAccess } = useFilesData();
   const [previewFile, setPreviewFile] = useState(null);
   const openFile = (file) => {
     if (file.type === "folder") {
       recordAccess(file.id);
-      navigate(`/files?folder=${encodeURIComponent(file.id)}`);
+      navigate("/files", { state: { fileBrowserNotice: "This sample folder is not part of connected storage. Showing My Files." } });
       return;
     }
     recordAccess(file.id);

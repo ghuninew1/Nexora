@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useFilesData } from "../context/FilesProvider";
+import { RemoteFilesContext } from "../context/files-context";
 
-export default function useFiles() {
+export function useDemoFiles() {
   const {
     files: allFiles,
     createFolder: createFolderData,
@@ -99,4 +100,91 @@ export default function useFiles() {
   const favoriteFiles = useMemo(() => activeFiles.filter((file) => favorites.includes(file.id)), [activeFiles, favorites]);
 
   return { files, allFiles, trashFiles, currentFolderId, currentFiles, breadcrumbs, selectedIds, query, setQuery, sortBy, setSortBy, sortDirection, setSortDirection, view, setView, favorites, favoriteFiles, recent, recentFiles, toggleFavorite, recordAccess, restore, permanentlyDelete, navigateFolder, toggleSelect, selectAll, createFolder, addUploadedFile, rename, remove, clearSelection: () => setSelection({ folderId: currentFolderId, ids: [] }) };
+}
+
+function formatBytes(bytes) {
+  if (bytes === null || bytes === undefined) return null;
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatModified(value) {
+  if (!value) return 'Not available';
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 'Not available' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(timestamp);
+}
+
+export default function useFiles() {
+  const remote = useContext(RemoteFilesContext);
+  if (!remote) throw new Error('useFiles must be used inside FilesProvider');
+  const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [view, setView] = useState('list');
+  const [selection, setSelection] = useState({ storageId: null, folderId: null, ids: [] });
+
+  const files = useMemo(() => remote.items.map((item) => {
+    const extension = item.type === 'file' && item.name.includes('.') ? item.name.split('.').pop().toLowerCase() : undefined;
+    return {
+      id: item.objectId,
+      objectId: item.objectId,
+      parentId: item.parentId,
+      name: item.name,
+      type: item.type,
+      extension,
+      mimeType: item.mimeType,
+      createdAt: item.createdAt,
+      modifiedAt: item.modifiedAt,
+      modified: formatModified(item.modifiedAt),
+      sizeBytes: item.sizeBytes,
+      size: item.type === 'folder' ? null : formatBytes(item.sizeBytes),
+    };
+  }), [remote.items]);
+
+  const currentFiles = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filtered = files.filter((file) => file.name.toLocaleLowerCase().includes(normalizedQuery));
+    return [...filtered].sort((a, b) => {
+      const left = sortBy === 'size' ? (a.sizeBytes ?? -1) : sortBy === 'modified' ? (a.modifiedAt ?? '') : a.name.toLocaleLowerCase();
+      const right = sortBy === 'size' ? (b.sizeBytes ?? -1) : sortBy === 'modified' ? (b.modifiedAt ?? '') : b.name.toLocaleLowerCase();
+      const order = typeof left === 'string' ? left.localeCompare(right) : left - right;
+      return sortDirection === 'asc' ? order : -order;
+    });
+  }, [files, query, sortBy, sortDirection]);
+
+  const selectedIds = selection.storageId === remote.storageId && selection.folderId === remote.folderId
+    ? selection.ids.filter((id) => currentFiles.some((file) => file.id === id))
+    : [];
+  const toggleSelect = useCallback((id) => setSelection((current) => {
+    const ids = current.storageId === remote.storageId && current.folderId === remote.folderId ? current.ids : [];
+    return { storageId: remote.storageId, folderId: remote.folderId, ids: ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id] };
+  }), [remote.storageId, remote.folderId]);
+  const selectAll = useCallback(() => setSelection((current) => {
+    const ids = current.storageId === remote.storageId && current.folderId === remote.folderId ? current.ids : [];
+    const allSelected = currentFiles.length > 0 && currentFiles.every((file) => ids.includes(file.id));
+    return { storageId: remote.storageId, folderId: remote.folderId, ids: allSelected ? ids.filter((id) => !currentFiles.some((file) => file.id === id)) : [...new Set([...ids, ...currentFiles.map((file) => file.id)])] };
+  }), [currentFiles, remote.storageId, remote.folderId]);
+  const clearSelection = useCallback(() => setSelection({ storageId: remote.storageId, folderId: remote.folderId, ids: [] }), [remote.storageId, remote.folderId]);
+
+  return {
+    ...remote,
+    files,
+    currentFiles,
+    selectedIds,
+    query,
+    setQuery,
+    sortBy,
+    setSortBy,
+    sortDirection,
+    setSortDirection,
+    view,
+    setView,
+    favorites: [],
+    toggleSelect,
+    selectAll,
+    clearSelection,
+    navigateFolder: remote.openFolder,
+  };
 }

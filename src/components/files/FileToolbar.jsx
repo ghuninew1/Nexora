@@ -1,41 +1,45 @@
 import {
-  ChevronDown, Download, FolderPlus, Grid2X2, List, Pencil, Plus,
-  Search, Share2, Trash2, ArrowUpDown,
+  ChevronDown, Download, FolderPlus, Grid2X2, List, Pencil, Plus, RefreshCw,
+  Search, Share2, Trash2, ArrowUpDown, Upload,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { cx } from "../../utils/cx";
-import UploadButton from "./UploadButton";
 
-function FileToolbar({ selectedCount, onNewFolder, onRename, onDelete, onFilesSelected, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange, onDownload, canDownload }) {
+function FileToolbar({ selectedCount, onNewFolder, canCreateFolder, isCreatingFolder, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange, onClearSelection }) {
   const hasSelection = selectedCount > 0;
+  const isBusy = isRefreshing || isCreatingFolder;
   return (
     <div className={cx("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between")}>
       <div className={cx("flex min-w-0 items-center gap-2 overflow-x-auto")}>
         {hasSelection ? <>
           <span className={cx("shrink-0 text-sm font-medium text-foreground")}>{selectedCount} selected</span>
-          <Button variant="outline" size="sm" disabled={!canDownload} onClick={onDownload}><Download />Download</Button>
-          <Button variant="outline" size="sm" disabled title="Sharing will be available after Storage is connected"><Share2 />Share</Button>
-          {selectedCount === 1 && <Button variant="outline" size="sm" onClick={onRename}><Pencil />Rename</Button>}
-          <Button variant="outline" size="sm" onClick={onDelete}><Trash2 />Delete</Button>
+          <Button variant="outline" size="sm" disabled title="Downloads will be available in a later phase"><Download />Download</Button>
+          <Button variant="outline" size="sm" disabled title="Sharing is not connected"><Share2 />Share</Button>
+          {selectedCount === 1 && <Button variant="outline" size="sm" disabled title="Renaming will be available in a later phase"><Pencil />Rename</Button>}
+          <Button variant="outline" size="sm" disabled title="Delete and Trash actions will be available in a later phase"><Trash2 />Delete</Button>
+          <Button variant="ghost" size="sm" onClick={onClearSelection}>Clear selection</Button>
         </> : <>
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button><Plus />New<ChevronDown /></Button>} />
-            <DropdownMenuContent align="start"><DropdownMenuItem onClick={onNewFolder}><FolderPlus />Folder</DropdownMenuItem></DropdownMenuContent>
+            <DropdownMenuTrigger render={<Button disabled={isBusy}><Plus />New<ChevronDown /></Button>} />
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem disabled={!canCreateFolder || isBusy} onClick={onNewFolder}><FolderPlus />Folder</DropdownMenuItem>
+            </DropdownMenuContent>
           </DropdownMenu>
-          <UploadButton onFilesSelected={onFilesSelected} />
+          <Button variant="outline" disabled title="Uploads will be available in a later phase"><Upload />Upload</Button>
         </>}
       </div>
       <div className={cx("flex min-w-0 items-center gap-2")}>
+        <Button variant="outline" size="icon-sm" onClick={() => void onRefresh()} disabled={isBusy} aria-label="Refresh current folder" aria-busy={isRefreshing} title="Refresh current folder"><RefreshCw className={cx(isRefreshing && "motion-safe:animate-spin")} /></Button>
         <div className={cx("relative min-w-0 flex-1 sm:w-52 sm:flex-none")}>
           <Search className={cx("pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground")} aria-hidden="true" />
-          <Input type="search" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search files..." aria-label="Search files" className={cx("pl-9")} />
+          <Input type="search" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search loaded items..." aria-label="Search loaded items" className={cx("pl-9")} />
         </div>
         <Separator orientation="vertical" className={cx("hidden h-6 sm:block")} />
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="outline" size="icon-sm" aria-label={`Sort by ${sortBy}, ${sortDirection}ending`}><ArrowUpDown /></Button>} />
+          <DropdownMenuTrigger render={<Button variant="outline" size="icon-sm" aria-label={`Sort loaded items by ${sortBy}, ${sortDirection}ending`}><ArrowUpDown /></Button>} />
           <DropdownMenuContent align="end">
             <DropdownMenuRadioGroup value={sortBy} onValueChange={onSortChange}>
               {[{ key: "name", label: "Name" }, { key: "modified", label: "Last modified" }, { key: "size", label: "File size" }].map((item) => <DropdownMenuRadioItem key={item.key} value={item.key} closeOnClick>{item.label}</DropdownMenuRadioItem>)}

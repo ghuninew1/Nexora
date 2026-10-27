@@ -2,6 +2,8 @@ const SAFE_MESSAGES = {
   UNAUTHENTICATED: 'Your session has expired. Sign in again to continue.',
   FORBIDDEN: 'You do not have access to this storage.',
   NOT_FOUND: 'This storage is no longer available.',
+  NAME_CONFLICT: 'A folder with that name already exists here.',
+  INVALID_INPUT: 'Check the folder name and try again.',
   RATE_LIMITED: 'Storage is temporarily busy. Try again shortly.',
   PROVIDER_UNAVAILABLE: 'Storage is temporarily unavailable. Try again later.',
   INTERNAL_ERROR: 'Storage could not be reached. Try again later.',
@@ -20,18 +22,22 @@ function safeErrorCode(body, status) {
   if (status === 401) return 'UNAUTHENTICATED';
   if (status === 403) return 'FORBIDDEN';
   if (status === 404) return 'NOT_FOUND';
+  if (status === 409) return 'NAME_CONFLICT';
   if (status === 429) return 'RATE_LIMITED';
   if (status >= 500 || status === 0) return 'PROVIDER_UNAVAILABLE';
   return SAFE_MESSAGES[body?.error?.code] ? body.error.code : 'INTERNAL_ERROR';
 }
 
-async function request(path, { fetchImpl = fetch, signal } = {}) {
+async function request(path, { fetchImpl = fetch, signal, method = 'GET', body: requestBody } = {}) {
+  const headers = { Accept: 'application/json' };
+  if (requestBody !== undefined) headers['Content-Type'] = 'application/json';
   let response;
   try {
     response = await fetchImpl(path, {
-      method: 'GET',
+      method,
       credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
+      headers,
+      ...(requestBody !== undefined ? { body: JSON.stringify(requestBody) } : {}),
       signal,
     });
   } catch (error) {
@@ -111,4 +117,57 @@ export async function getStorageCapabilities(storageId, options) {
 export async function getStorageUsage(storageId, options) {
   const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/usage`, options);
   return normalizeStorageUsage(data.usage);
+}
+
+const OBJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
+
+export function normalizeStorageObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || typeof value.objectId !== 'string' || !OBJECT_ID_PATTERN.test(value.objectId)
+    || (value.parentId !== null && typeof value.parentId !== 'string')
+    || (value.parentId !== null && !OBJECT_ID_PATTERN.test(value.parentId))
+    || typeof value.name !== 'string' || !value.name.trim()
+    || !['folder', 'file'].includes(value.type)) {
+    throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  }
+  return {
+    objectId: value.objectId,
+    parentId: value.parentId ?? null,
+    name: value.name,
+    type: value.type,
+    sizeBytes: Number.isSafeInteger(value.sizeBytes) && value.sizeBytes >= 0 ? value.sizeBytes : null,
+    mimeType: typeof value.mimeType === 'string' ? value.mimeType : null,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : null,
+    modifiedAt: typeof value.modifiedAt === 'string' ? value.modifiedAt : null,
+  };
+}
+
+export function mergeStorageObjects(current, incoming) {
+  const byId = new Map(current.map((item) => [item.objectId, item]));
+  incoming.forEach((item) => byId.set(item.objectId, item));
+  return [...byId.values()];
+}
+
+export async function listStorageObjects(storageId, { parentId = null, cursor = null, limit = 50, ...options } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new StorageApiError('INVALID_INPUT', 400);
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (parentId !== null) query.set('parentId', parentId);
+  if (cursor !== null) query.set('cursor', cursor);
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects?${query}`, options);
+  if (!Array.isArray(data.items) || (data.nextCursor !== null && typeof data.nextCursor !== 'string')) {
+    throw new StorageApiError('PROVIDER_UNAVAILABLE', 502);
+  }
+  return {
+    items: data.items.map(normalizeStorageObject),
+    nextCursor: data.nextCursor,
+  };
+}
+
+export async function createStorageFolder(storageId, { name, parentId = null }, options = {}) {
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/folders`, {
+    ...options,
+    method: 'POST',
+    body: { name, parentId },
+  });
+  return normalizeStorageObject(data.folder);
 }

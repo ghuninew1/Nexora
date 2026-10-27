@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-27
 
-เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.1; แยกผล local validation ออกจากสถานะ remote ที่ operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.2; แยกผล local validation ออกจากสถานะ remote ที่ operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
@@ -15,15 +15,16 @@
 - Phase 8 backend foundation: Pages Functions, Nexora D1 schema, hashed-cookie sessions, origin checks, mount ownership และ server-only Shared Storage `/v3` client
 - Operator ยืนยัน production D1/migration, admin, storage mount, Shared Storage app/project/access token และ production secrets พร้อมใช้งาน; `/v3` capabilities test ได้ HTTP 200. Phase 8.5 ไม่เชื่อมต่อ production และไม่เปลี่ยน records/secrets
 - `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; `wrangler.jsonc` กำหนด D1 `nexora-db` พร้อม database ID
-- Phase 9.1 เพิ่ม storage discovery/capabilities/usage client และ provider ผ่าน same-origin Nexora API; Storage page แสดง safe connection state. ยังไม่ได้ deploy หรือทดสอบ production connection
-- `FilesProvider`, `useFiles`, fixtures และ upload simulation ยังเป็น demo และไม่เรียก backend; File Browser migration อยู่ Phase 9.2
-- Phase 8.5 เพิ่ม frontend auth/session restore, protected routes, login/logout และ Header identity; Phase 9.1 เพิ่ม storage connection state แต่ File Browser ยัง demo-only
-- `FilesProvider` เก็บ files, Favorites, Recent และ Trash ใน memory ระหว่าง route; refresh จะคืนข้อมูล demo
-- Upload queue จำลอง progress ใน browser; preview/download ทำได้กับไฟล์ที่ผู้ใช้เลือกและยังอยู่ใน session เท่านั้น
+- Phase 9.1 เพิ่ม storage discovery/capabilities/usage client และ provider ผ่าน same-origin Nexora API; Storage page แสดง safe connection state. Production deploy/connection ยังไม่ได้ตรวจในงานนี้
+- Phase 9.2 เปลี่ยน File Browser เป็น real listing/navigation ผ่าน Nexora API: root/child listing, cursor pagination, logical-ID breadcrumbs, refresh, loaded-item search/sort และ create-folder ตาม capability
+- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Upload/download/preview/rename/move/copy/Trash/Favorites/Share ยังไม่เปิด
+- `FilesProvider` demo data ยังคงใช้กับ Dashboard, Recent, Favorites, Shared และ Trash; สถานะเหล่านี้อยู่ใน memory และ refresh แล้ว reset
+- Upload queue ที่เหลือใน demo จำลอง progress ใน browser; ไม่ส่ง bytes ไป storage
 - Shared แสดง fixture records และ Share action ยังปิดอยู่. Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
 - Theme เป็น browser preference ใน `localStorage`
-- UI follow-up: Sidebar เต็มความสูงและ responsive; ใช้ `src/assets/logo_full.avif` ตอนขยายและ `src/assets/logo.avif` ตอนพับ; File Browser และการ์ด Recent/Favorites มี Liquid Glass hover; รายการใน File Browser มีปุ่มดาว Favorites กดตรงหน้าสัญลักษณ์ไฟล์/โฟลเดอร์ได้
+- UI follow-up: Sidebar เต็มความสูงและ responsive; ใช้ `src/assets/logo_full.avif` ตอนขยายและ `src/assets/logo.avif` ตอนพับ; File Browser และการ์ด Recent/Favorites มี Liquid Glass hover; Favorites ใน File Browser ยังคงเป็น demo เฉพาะหน้าที่ใช้ demo state
 - Phase 9.1 validation: lint, 45 tests, build and diff check passed; in-app browser mock QA verified the Storage connection panel and refresh at a narrow viewport. Production connection, desktop rendering, and production console/network inspection remain unverified.
+- Phase 9.2 validation: `pnpm lint`, `pnpm test` (52/52), `pnpm build` and `git diff --check` passed. In-app browser with localhost mock API verified root/child/empty listing, folder navigation and breadcrumb, back/reload, invalid-link fallback, pagination, loaded-item search, refresh reset, duplicate-folder error and successful creation at a narrow viewport. No production endpoint was used; deployed revision/credentials/mount behavior remain unverified.
 
 ## Phase 7 deliverables
 
@@ -63,7 +64,13 @@ See [Phase 8 report](docs/PHASE_8.md), [production provisioning guide](docs/PROD
 
 เพิ่ม `src/services/storage.js`, `StorageProvider`, `useStorage` และ connection summary ใน Storage page. Bootstrap เรียก `/api/storage/v1/storages`, เลือก active mount แรกตาม backend order แล้วโหลด capabilities/usage; 401 ส่งต่อให้ AuthProvider หมด session. Usage failure ไม่ทำให้ connection ล้มเหลว. Local lint/test/build/UI mock QA ผ่าน; production deploy และ smoke test ยังรอ operator.
 
-รายละเอียดและ smoke-test checklist อยู่ใน [docs/PHASE_9_1.md](docs/PHASE_9_1.md). Phase 9.2 ยังไม่เริ่ม; File Browser ยังใช้ข้อมูล demo.
+รายละเอียดและ smoke-test checklist อยู่ใน [docs/PHASE_9_1.md](docs/PHASE_9_1.md).
+
+## Phase 9.2 — Real File Listing + Folder Navigation
+
+`src/services/storage.js` เรียก `GET /api/storage/v1/storages/:storageId/objects` โดย root omit `parentId`; ส่ง `cursor`/`limit` สำหรับหน้าถัดไปและ normalize เฉพาะ public object fields. `POST /api/storage/v1/storages/:storageId/folders` ส่ง `{name,parentId}` และ server ตัดสิน authorization/capability/duplicate policy. `useRemoteFilesState` จัดการ abort/stale responses, storage/folder-scoped selection, breadcrumb route state, refresh, pagination และ root fallback สำหรับ unverified/404 folders. File Browser search/sort ใช้เฉพาะ loaded page set; upload/download/preview/file mutations remain unavailable.
+
+Dashboard, Recent, Favorites, Shared, Trash และ local demo operations remain separate from connected mount state. Local code does not call Shared Storage directly, send file bytes, or expose provider project references. รายละเอียด API, validation, UI QA, phase boundary และ production smoke checklist อยู่ใน [docs/PHASE_9_2.md](docs/PHASE_9_2.md). Phase 9.3 ยังไม่เริ่ม.
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -87,18 +94,19 @@ See [Phase 8 report](docs/PHASE_8.md), [production provisioning guide](docs/PROD
 ## แผนที่ไฟล์ปัจจุบัน
 
 - `src/App.jsx`, `src/layouts/AppLayout.jsx`, `src/components/layout/`: route และ shared shell
-- `src/context/FilesProvider.jsx`, `src/hooks/useFiles.js`: in-memory state และ file operations
-- `src/components/files/`: File Browser, demo grid, dialogs, preview และ upload queue UI
+- `src/context/FilesProvider.jsx`, `src/context/files-context.js`, `src/hooks/useFiles.js`: demo workspace state และ remote File Browser context
+- `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`: remote listing/navigation/create-folder state and breadcrumb validation
+- `src/components/files/`: connected File Browser listing, folder dialog and still-disabled later-phase actions
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, Settings
 - `src/data/files.js`: fixtures; metadata ตัวอย่างไม่ใช่สถานะ Storage จริง
 - `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: frontend authentication state/client
-- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated storage discovery and connection state client
+- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated mount discovery, capabilities, object listing/pagination and folder creation client
 - `README.md`, `AGENTS.md`, `docs/DESIGN_SYSTEM.md`: project status, working conventions และ UI foundation
-- `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`, `docs/PHASE_8.md`, `docs/PHASE_8_5.md`, `docs/PRODUCTION_PROVISIONING.md`: source audit, API contract, phase reports and provisioning guide
+- `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`, `docs/PHASE_8.md`, `docs/PHASE_8_5.md`, `docs/PHASE_9_1.md`, `docs/PHASE_9_2.md`, `docs/PRODUCTION_PROVISIONING.md`: source audit, API contract, phase reports and provisioning guide
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_8.md`, `docs/PHASE_8_5.md`, `docs/PRODUCTION_PROVISIONING.md` และตรวจ `git status --short`; Phase 8.5 frontend auth เสร็จแล้ว โดย Storage/File Browser ยังเป็น demo ก่อน Phase 9
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md` และตรวจ `git status --short`; Phase 9.2 File Browser listing/navigation เสร็จใน local source. Phase ถัดไปยังต้องยึด brief และทำ acceptance/security review ก่อนเปิด operation เพิ่ม. ห้ามอนุมาน production state จาก source หรือเอกสาร
 
 ## กติกาการดูแลเอกสาร
 

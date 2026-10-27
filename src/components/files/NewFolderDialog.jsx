@@ -19,21 +19,35 @@ function NewFolderDialog({
 }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [isPending, setIsPending] = useState(false);
 
-  function handleCreate() {
-    const trimmedName = name.trim();
-
-    if (!trimmedName) {
+  async function handleCreate() {
+    if (isPending) return;
+    if (!name.trim()) {
+      setError("Enter a folder name.");
       return;
     }
 
-    const created = onCreate(trimmedName);
-    if (created === false) {
-      setError("A file or folder with this name already exists here.");
-      return;
+    setIsPending(true);
+    try {
+      const result = await onCreate(name);
+      if (result === false || result?.error) {
+        const messages = {
+          NAME_CONFLICT: "A file or folder with this name already exists here.",
+          INVALID_INPUT: "Use a non-empty name up to 255 UTF-8 bytes without slashes or control characters.",
+          FORBIDDEN: "Folder creation is unavailable for this storage.",
+          RATE_LIMITED: "Storage is temporarily busy. Try again shortly.",
+          PROVIDER_UNAVAILABLE: "Storage is temporarily unavailable. Try again later.",
+          INTERNAL_ERROR: "The folder could not be created. Try again later.",
+        };
+        setError(messages[result?.error] || "The folder could not be created. Try again later.");
+        return;
+      }
+      setName("");
+      setError("");
+    } finally {
+      setIsPending(false);
     }
-    setName("");
-    setError("");
   }
 
   function handleOpenChange(value) {
@@ -47,7 +61,7 @@ function NewFolderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent aria-busy={isPending}>
         <DialogHeader>
           <DialogTitle id="new-folder-title">New folder</DialogTitle>
 
@@ -86,10 +100,10 @@ function NewFolderDialog({
 
           <Button
             type="button"
-            disabled={!name.trim()}
-            onClick={handleCreate}
+            disabled={!name.trim() || isPending}
+            onClick={() => void handleCreate()}
           >
-            Create
+            {isPending ? "Creating…" : "Create"}
           </Button>
         </DialogFooter>
       </DialogContent>
