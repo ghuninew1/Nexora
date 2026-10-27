@@ -56,6 +56,6 @@ Remaining: SQLite/object writes are not atomic; compensation may fail, delete ma
 - IssueDesk root `pnpm lint` passed; both checkouts `git diff --check` passed. `node --check garage/storage/src/index.js` passed.
 - Production Node 22 Docker image, real Garage, Cloudflare Access and IssueDesk end-to-end paths have not been exercised. Frontend build is not meaningful for this service-only change.
 
-## Phase S2 review input — stop here
+## Phase S2 handoff
 
-Wait for the user's Phase S2 specification/review before implementation. Review folder/logical metadata model, stable IDs on rename/move, duplicate-name rules, bounded subtree operations, copy verification, Trash/restore/permanent-delete policy, partial failure/reconciliation and capability changes. Preserve `/v2` adapter behavior and separate credentials/project scope for future apps. Decide streaming multipart upload separately before claiming large-file support. Nexora Phase 8 remains unstarted.
+This is the S1 completion snapshot. S2 has since been implemented locally; see `PHASE_S2.md` in the Shared Storage checkout and `docs/STORAGE_PHASE_S2.md` in Nexora. Phase S2 does not start Nexora Phase 8.

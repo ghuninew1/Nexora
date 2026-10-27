@@ -1,6 +1,6 @@
 # Nexora Storage Architecture Proposal
 
-สถานะ: Nexora architecture ยังเป็น proposal; Shared Storage S1 ได้ implement เฉพาะ service foundation ใน checkout แยกแล้ว ดู [S1 report](STORAGE_PHASE_S1.md) ยังไม่มี Nexora backend/migration/connection หรือ production deployment; หยุดรอ S2 review
+สถานะ: Nexora architecture ยังเป็น proposal; Shared Storage S1/S2 implement service foundation และ File Manager internal API ใน checkout แยกแล้ว ดู [S1 report](STORAGE_PHASE_S1.md) ยังไม่มี Nexora backend/migration/connection หรือ production deployment; S2 เสร็จในเครื่องและรอ review ก่อน Phase S3
 
 ## Architecture ปัจจุบันจาก source
 
@@ -12,7 +12,7 @@ IssueDesk Cloudflare Pages Functions + D1
     │ Cloudflare Access service token + Storage app Bearer credential
     ▼
 Shared Storage Service (Hono / Node.js)
-    ├── SQLite: apps, hashed credentials, projects, file metadata
+    ├── SQLite: apps, hashed credentials, projects, legacy files + logical file/folder metadata
     └── S3-compatible API
             ▼
           Garage

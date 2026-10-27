@@ -26,7 +26,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/STORAGE_API_AUDIT.md`: source-derived IssueDesk and Shared Storage API endpoint/auth/streaming audit.
 - `docs/STORAGE_ARCHITECTURE.md`: target provider architecture, metadata/auth/security proposal, and Phase 8 file sequence.
 - `docs/STORAGE_API_V1_PROPOSAL.md`: proposed provider-neutral `/api/storage/v1/*` contract; proposal only.
-- `docs/STORAGE_PHASE_S1.md`: local Shared Storage S1 implementation/validation in the separate IssueDesk service checkout; Garage-only provider boundary, streaming download, buffered upload and S2 review gate. Nexora itself remains demo-only.
+- `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: local Shared Storage implementation in the separate IssueDesk checkout. S2 migration is not applied; Nexora remains frontend/demo-only and Phase 8 needs separate approval.
 - `PROJECT_HANDOFF.md`: verified Phase 7/S1 status, implementation boundaries, and approval gates for Shared Storage S2 and Nexora Phase 8; verify source and git status before continuing.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.

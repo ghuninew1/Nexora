@@ -2,9 +2,9 @@
 
 Nexora เป็นเว็บจัดการไฟล์บน private cloud โดยใช้ **React + Vite + Tailwind CSS v4 + React Router 7** และ Base UI components เป้าหมายด้านภาพและการจัดวางใช้ IssueDesk เป็น reference ส่วนข้อมูลและ business logic ยังเป็นของ Nexora
 
-## Shared Storage Phase S1
+## Shared Storage Phase S1/S2
 
-เตรียม foundation ในโปรเจกต์แยก `issuedesk/garage/storage/` แล้ว: Storage Manager/registry/Garage Provider, download streaming พร้อม deadline/cancellation และ regression tests 12/12 ผ่านใน workspace แยก Upload ยัง buffered; `/v2` และ ownership เดิมยังคงอยู่ ยังไม่ deploy หรือยืนยัน Garage/Access จริง ดู [รายงาน S1](docs/STORAGE_PHASE_S1.md) หยุดรอ review และคำสั่ง Phase S2 ก่อนเริ่มงานต่อ; Nexora Phase 8 ยังไม่เริ่ม
+Shared Storage ใน checkout แยก `issuedesk/garage/storage/` เพิ่ม manager/provider boundary และ File Manager API `/v3` พร้อม additive folder/file metadata, pagination, copy, Trash/restore/permanent delete และ operation recovery state. S1/S2 tests 27/27 ผ่าน, IssueDesk lint ผ่าน; migration ยังไม่ได้ apply และ service ยังไม่ deploy/ตรวจ production Garage/Access. Nexora ยังไม่มี backend/API หรือ D1 changes. ดู [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md); Phase 8 ยังรอ approval แยก
 
 ## สถานะปัจจุบัน
 

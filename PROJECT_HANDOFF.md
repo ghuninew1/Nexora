@@ -35,17 +35,15 @@
 - Project ไม่มี root test script
 - QA ที่ยังไม่ครบตามรายการด้านบนต้องตรวจแยกก่อนสรุปว่า UI ผ่านทุก flow/viewport
 
-## Shared Storage Phase S1 — 2026-10-27
+## Shared Storage Phase S1/S2 — 2026-10-27
 
-S1 ได้รับอนุญาตแยกตามคำสั่งล่าสุดและ implement ใน `issuedesk/garage/storage/` เท่านั้น: app factory, Storage Manager/registry/Garage Provider, safe headers, bounded timeout/cancellation และ download stream; upload ยัง buffer ทั้งไฟล์ คง SQL ownership, app credential, logical file ID และ `/v2` responses เดิม Tests 12/12 ผ่านในพื้นที่ทดสอบชั่วคราวโดยใช้ production SQLite schema แบบ memory, fake S3 และ HTTP loopback disconnect ไม่แตะ DB/objects/secrets จริง รายละเอียด files/capabilities/security/limitations และ checks อยู่ใน [รายงาน S1](docs/STORAGE_PHASE_S1.md)
-
-หยุดรอ review/คำสั่ง **Phase S2 — Shared Storage File Manager Operations** ก่อนเริ่ม ยังไม่ deploy/ตรวจ Garage, Cloudflare Access หรือ IssueDesk end-to-end; ไม่ได้ implement Nexora backend, migrations หรือ `/api/storage/v1/*` การอนุญาต S1 ไม่ได้อนุญาต Nexora Phase 8
+Shared Storage S1/S2 เสร็จใน checkout แยก `issuedesk/garage/storage/`: `/v3` internal manager API, logical folder/file tree, migration/backfill, name policy, copy verification, Trash/restore/purge และ operation records; `/v2` auth/response contract คงเดิมหลัง migration. `pnpm test` 27/27 และ IssueDesk lint ผ่านด้วย memory SQLite/fake S3; migration ไม่ได้ apply และไม่มี deployment/production verification. Nexora backend/API/D1 ยังไม่เริ่ม. รายละเอียด [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md). หยุดรอ review ก่อน Phase S3 หรือ Phase 8
 
 ## งานถัดไป: Phase 8 (รอ approval หลัง S1/S2)
 
-เมื่อได้รับอนุมัติ Phase 8 ให้เริ่มจาก D1/schema/auth boundary และ server-side Storage Manager/Provider Contract ตามข้อเสนอ จากนั้นจึงเพิ่ม Garage adapter และค่อยเปลี่ยน frontend ออกจาก demo state
+หลัง review S2 และได้รับ approval แยกสำหรับ Phase 8 จึงเริ่ม D1/schema/auth boundary และ Nexora server-side adapter ที่เรียก Shared Storage internal `/v3`; จากนั้นเปลี่ยน frontend ออกจาก demo state
 
-Phase 7 **ไม่ได้อนุญาต** backend implementation, D1 migrations, Shared Storage Service/Garage changes, credentials/secrets, SMB install/connection หรือ deployment. รอ approval สำหรับ **Phase 8 — Backend Foundation & Storage Contract Implementation** ก่อนเริ่ม
+S1/S2 authorization covers Shared Storage only. Nexora backend, D1 migrations, credentials, SMB and deployment still require separate Phase 8 approval.
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
