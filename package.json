@@ -10,6 +10,8 @@
         "test": "node --test",
         "db:migrate:local": "wrangler d1 migrations apply nexora-db --local",
         "admin:create:local": "node scripts/create-admin.mjs",
+        "admin:create:remote": "node scripts/create-admin-remote.mjs",
+        "storage:mount:create:remote": "node scripts/create-storage-mount-remote.mjs",
         "preview": "pnpm run build && wrangler pages dev",
         "deploy": "pnpm run build && wrangler pages deploy",
         "cf-typegen": "wrangler types",

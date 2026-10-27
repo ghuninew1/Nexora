@@ -24,7 +24,7 @@ function publicUser(user) {
   return { id: user.id, email: user.email, displayName: user.display_name ?? user.displayName, role: user.role };
 }
 
-function normalizeEmail(value) {
+export function normalizeEmail(value) {
   if (typeof value !== 'string') throw new ApiError('INVALID_INPUT', 400);
   const email = value.trim().toLowerCase();
   if (email.length > 254 || !EMAIL_PATTERN.test(email)) throw new ApiError('INVALID_INPUT', 400);
@@ -38,18 +38,28 @@ function validatePassword(value) {
   return value;
 }
 
-export async function createUser({ db, email: inputEmail, displayName, password, role = 'user', now = Date.now() }) {
-  const email = normalizeEmail(inputEmail);
-  if (typeof displayName !== 'string' || !displayName.trim() || displayName.trim().length > 120) throw new ApiError('INVALID_INPUT', 400);
-  if (!['admin', 'user'].includes(role)) throw new ApiError('INVALID_INPUT', 400);
-  if (typeof password !== 'string' || new TextEncoder().encode(password).length < 12 || new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {
+export function normalizeDisplayName(value) {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 120) throw new ApiError('INVALID_INPUT', 400);
+  return value.trim();
+}
+
+export function validateNewUserPassword(value) {
+  if (typeof value !== 'string' || new TextEncoder().encode(value).length < 12 || new TextEncoder().encode(value).length > MAX_PASSWORD_BYTES) {
     throw new ApiError('INVALID_INPUT', 400);
   }
-  const passwordHash = await hashPassword(password);
+  return value;
+}
+
+export async function createUser({ db, email: inputEmail, displayName, password, role = 'user', now = Date.now() }) {
+  const email = normalizeEmail(inputEmail);
+  const normalizedDisplayName = normalizeDisplayName(displayName);
+  if (!['admin', 'user'].includes(role)) throw new ApiError('INVALID_INPUT', 400);
+  const normalizedPassword = validateNewUserPassword(password);
+  const passwordHash = await hashPassword(normalizedPassword);
   const id = crypto.randomUUID();
   await db.prepare('INSERT INTO users (id, email, display_name, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
-    .bind(id, email, displayName.trim(), passwordHash, role, now, now).run();
-  return { id, email, displayName: displayName.trim(), role };
+    .bind(id, email, normalizedDisplayName, passwordHash, role, now, now).run();
+  return { id, email, displayName: normalizedDisplayName, role };
 }
 
 export async function authenticate(request, env, now = Date.now()) {

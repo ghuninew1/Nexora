@@ -1,6 +1,6 @@
 # Nexora — Phase 8
 
-สถานะ: implementation และ local validation เสร็จ 2026-10-27. ยังไม่มี production D1, production secret, Shared Storage mount, user provisioning หรือ deployment. `FilesProvider` และหน้า frontend ยังใช้ demo state ตามขอบเขต Phase 8.
+สถานะ: implementation และ local validation ของ Phase 8 เสร็จ 2026-10-27. สถานะ deployment/provisioning ในส่วน validation ด้านล่างเป็น snapshot ณ ตอนทำ Phase 8; operator ยืนยันภายหลังว่า production D1/migration และ Shared Storage credentials/configuration พร้อมแล้ว. ดูขั้นตอน CLI ปัจจุบันที่ [PRODUCTION_PROVISIONING.md](PRODUCTION_PROVISIONING.md). `FilesProvider` และหน้า frontend ยังใช้ demo state ตามขอบเขต Phase 8.
 
 ## Architecture
 
@@ -27,9 +27,9 @@ The browser supplies a Nexora `storageId` and logical `objectId`. The function l
 - `migrations/0001_backend_foundation.sql`: independent Nexora schema.
 - `scripts/create-admin.mjs`: explicit first-admin provisioning command; hard-coded to Wrangler `--local`.
 - `tests/backend.test.js`: Node test suite with in-memory SQLite and mocked upstream Fetch.
-- `wrangler.jsonc`: `DB` binding with an all-zero local placeholder ID and local migrations directory. Replace the placeholder only during separately reviewed production setup.
+- `wrangler.jsonc`: `DB` binding `nexora-db` with the configured database ID and local migrations directory. Verify Cloudflare account and D1 identity before any remote operation.
 - `.dev.vars.example`: secret names only; no values. `.dev.vars` and `.wrangler/` are ignored.
-- `package.json`: `test`, `db:migrate:local`, and `admin:create:local` scripts; no package versions changed.
+- `package.json`: Phase 8 added `test`, `db:migrate:local`, and `admin:create:local`; later provisioning work adds separate `admin:create:remote` and `storage:mount:create:remote` commands without changing the local command.
 
 ## D1 schema
 
@@ -43,7 +43,7 @@ The browser supplies a Nexora `storageId` and logical `objectId`. The function l
 - D1 stores only SHA-256(token); the raw token exists only in the Secure, HttpOnly, SameSite=Lax, Path=/ cookie. Session lifetime is 14 days; login removes expired sessions and caps active sessions to 10 per user.
 - `POST /api/auth/logout` revokes the session and clears the cookie. `GET /api/auth/me` resolves the current active user from the session.
 - Failed logins are rate-limited at eight per 15 minutes by hashed email or IP. Unknown-user and wrong-password paths both perform the password derivation.
-- There is no public signup. To create the first **local** admin, apply the local migration, then set `NEXORA_ADMIN_EMAIL`, `NEXORA_ADMIN_DISPLAY_NAME`, and `NEXORA_ADMIN_PASSWORD` in a private shell environment and run `pnpm admin:create:local`. The script hashes the password and invokes `wrangler d1 execute nexora-local --local`; it cannot target remote D1. It was not run in this phase. Production bootstrap, admin identity, and mount provisioning require Phase 9 operator setup.
+- There is no public signup. `pnpm admin:create:local` remains unchanged and is the existing local-only command. Production admin/mount creation uses the separate explicit remote commands documented in [PRODUCTION_PROVISIONING.md](PRODUCTION_PROVISIONING.md); they use the existing schema and do not run automatically.
 
 ## API routes
 
@@ -91,27 +91,27 @@ There is no preview, share mutation, range-read, SMB, cross-mount move, or direc
 
 ## Environment and migration safety
 
-`.dev.vars.example` lists empty server-only names: `STORAGE_API_URL`, `STORAGE_APP_SECRET`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, `STORAGE_TIMEOUT_MS`, and `STORAGE_MAX_UPLOAD_BYTES`. Copy locally to `.dev.vars` and set secrets only in an approved local/secret store. No real values are committed or provisioned.
+`.dev.vars.example` lists empty server-only names: `STORAGE_API_URL`, `STORAGE_APP_SECRET`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, `STORAGE_TIMEOUT_MS`, and `STORAGE_MAX_UPLOAD_BYTES`. Copy locally to `.dev.vars` and set secrets only in an approved local/secret store. No real values are committed.
 
-`wrangler.jsonc` uses D1 binding `DB`, database name `nexora-local`, an all-zero placeholder ID, and `migrations/`. Local operator commands:
+`wrangler.jsonc` configures D1 binding `DB`, database name `nexora-db`, and `migrations/`. Existing local operator commands:
 
 ```bash
 pnpm db:migrate:local
 pnpm admin:create:local
 ```
 
-The migration was applied successfully to **local D1 only**. It was not applied remotely. Before production, an operator must create/choose a separate Nexora D1 database, replace the placeholder with its real ID after review, bind production secrets, configure Access and the Shared Storage app credential, provision an app/project/mount mapping, back up the database, and schedule a remote migration separately. Never run remote migration as part of Phase 8.
+At Phase 8 completion, the migration had been applied successfully to **local D1**. The operator has since confirmed production D1 was created and migrations applied, and Shared Storage app/project/access token/secrets were provisioned and tested against `/v3` with HTTP 200. The provisioning CLI work does not apply migrations, provision secrets, deploy, or create records.
 
 ## Validation
 
 - `pnpm test`: **25/25 passed**, Node `node:test`, in-memory SQLite, fake Shared Storage; covers sessions and hashing, inactive/expired users, logout, origin/content type, login throttling, mount ownership, no admin bypass, project isolation, pagination, capability flags, object/folder/mutation routes, upload size/streaming, download cancellation and headers, Favorites/Recent bounds, timeout and error redaction.
-- `pnpm db:migrate:local`: **passed**; Wrangler applied `0001_backend_foundation.sql` to local D1 using the zero placeholder ID and `--local`.
+- `pnpm db:migrate:local`: **passed at Phase 8**; Wrangler applied `0001_backend_foundation.sql` to local D1 with `--local`.
 - `pnpm lint`: passed.
 - `pnpm build`: passed; existing React demo bundle builds.
 - `wrangler pages functions build`: worker bundle compiled successfully. Wrangler could not write its user-level log under the sandbox, but the build command exited successfully and reported `Compiled Worker successfully`.
 - `git diff --check`: run at final review.
-- No browser-to-API flow was tested; no production account, production D1, Cloudflare Access, Shared Storage endpoint/credential, Garage, mount, or deployment was used.
+- No browser-to-API flow was tested in Phase 8. Production D1/Shared Storage readiness described above is operator-confirmed and was not re-verified by Phase 8 local checks.
 
 ## Next phase boundary
 
-Phase 8 does not replace `FilesProvider`, fixtures, `useFiles`, upload queue or demo operations. Phase 9 review can plan production provisioning and connect frontend state incrementally. Do not enable shares, SMB, preview/range reads, resumable uploads, remote migration, or deployment without the relevant later review.
+Phase 8 does not replace `FilesProvider`, fixtures, `useFiles`, upload queue or demo operations. Production admin and mount records remain manual operator work using the reviewed provisioning CLI. Phase 9 may connect frontend state incrementally. Do not enable shares, SMB, preview/range reads, resumable uploads, remote migration, or deployment without the relevant later review.

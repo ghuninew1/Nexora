@@ -143,3 +143,4 @@ dist
 
 # Yarn Integrity file
 .yarn-integrity
+test_curl.txt
