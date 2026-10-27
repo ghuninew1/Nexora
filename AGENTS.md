@@ -40,6 +40,7 @@ Check this map against actual files when changing the architecture; update READM
 6. Never expose service credentials in `VITE_*`, JSX, client bundles, or browser requests. When integration begins, use a Nexora server-side domain API, ownership checks, and a separately reviewed shared Storage contract.
 7. Do not modify or deploy remote infrastructure, D1 data, Storage data, or secrets without explicit authorization.
 8. When work changes the UI or file behavior, keep README, this file, and design notes aligned with the resulting source.
+9. After every project change, synchronize `README.md`, `AGENTS.md`, and `PROJECT_HANDOFF.md` with the resulting source, current scope, and checks actually completed. Keep pending QA and unapproved backend work clearly marked; do not claim a check passed before running it.
 
 ## React, JSX, and styling conventions
 

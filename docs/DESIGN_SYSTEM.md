@@ -44,7 +44,8 @@ Foundation, App Layout, File Browser และหน้า workspace ใช้ d
 ## Phase 3 — Layout และ Button
 
 - `src/layouts/AppLayout.jsx` ครอบ `Outlet` ด้วย AppShell เดียว Sidebar state จึงอยู่ต่อระหว่างเปลี่ยน route
-- Sidebar desktop ใช้ floating rail ขนาด 60px / 240px ตามแนว IssueDesk ส่วน Header เป็น sticky ที่มองเห็นเสมอเพื่อเข้าถึงเครื่องมือจัดการไฟล์
+- Sidebar desktop เต็มความสูงชิดขอบซ้าย; โหมด collapsed กว้าง 60px และ expanded กว้าง 224px ตั้งแต่ `md`, 240px ที่ `lg`, และ 256px ที่ `2xl`; AppShell กันพื้นที่ด้านซ้ายตามความกว้าง Sidebar เพื่อไม่ให้บัง content
+- บน mobile ใช้ drawer เต็มความสูงที่เปิดจาก Header; desktop Sidebar คงอยู่ขณะเปลี่ยน route ส่วน Header sticky อยู่ในพื้นที่ content
 - `src/components/navigation/navigation.js` เป็นแหล่งข้อมูลร่วมของเมนู ชื่อหน้า และคำอธิบาย
 - Dashboard, Recent, Favorites และ Trash ใช้ in-memory state ร่วมกับ File Browser; Shared ใช้ fixture records, Storage แสดงสถานะยังไม่เชื่อม และ Settings ใช้ตั้งค่าธีมได้ URL ที่ไม่พบแสดง 404
 - Mobile navigation ใช้ Base UI Dialog: focus trap, Escape, คืน focus และปิดเมื่อเลือกเมนูหรือเปลี่ยนเป็น desktop breakpoint
@@ -53,6 +54,6 @@ Foundation, App Layout, File Browser และหน้า workspace ใช้ d
 - Pointer tracking ไม่ทำงานกับ touch/disabled และไม่ใช้ React state ต่อการขยับเมาส์ Caller ยังส่ง `onPointerMove`, `ref`, `render` และ className callback ผ่าน Button ได้
 - ปุ่มตกแต่ง Search/Notifications เดิมใน Header ถูกแทนด้วยชื่อหน้าและคำอธิบาย ปุ่ม file search ใน toolbar ยังอยู่ตาม implementation เดิม
 - `FilesProvider` เก็บ files, favorites, recents และ trash ข้าม route ในหน่วยความจำ ข้อมูล demo รีเซ็ตเมื่อ refresh; upload queue จำลอง progress และไม่ส่งข้อมูลไป Storage Service
-- File Browser มี responsive list/grid, search/sort, context actions, selection, dialogs, sample empty states และ preview สำหรับ browser `File` ใน session
+- File Browser มี responsive list/grid, search/sort, context actions, selection, dialogs, sample empty states และ preview สำหรับ browser `File` ใน session; ปุ่มรูปดาว Favorites วางหน้าสัญลักษณ์ไฟล์/โฟลเดอร์เพื่อ toggle ได้ตรงรายการ โดยมี touch target อย่างน้อย 44px
 - Shared, provider usage และ permissions ยังไม่ใช่ข้อมูลหรือ operations จริง ปุ่ม Share ถูกปิดจนกว่าจะมี API ที่ผ่านการทบทวน
-- สถานะ validation ล่าสุดและลำดับ integration อยู่ใน `PROJECT_HANDOFF.md`; ยังต้องรัน lint/build และ browser QA หลัง Phase 6
+- `pnpm lint`, `pnpm build`, `git diff --check` และ mobile browser QA ล่าสุดผ่านตามขอบเขตที่บันทึกใน `PROJECT_HANDOFF.md`; desktop viewport, console และ flow ที่ระบุว่ายังไม่ทดสอบต้องตรวจเพิ่ม

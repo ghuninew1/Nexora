@@ -37,9 +37,9 @@ function AppShell({ children }) {
                 menuButtonRef={menuButtonRef}
                 onToggle={() => setIsSidebarCollapsed((current) => !current)}
             />
+            <div className={cx("relative min-h-dvh min-w-0 transition-[margin] duration-200 motion-reduce:transition-none", isSidebarCollapsed ? "md:ml-[60px]" : "md:ml-56 lg:ml-60 2xl:ml-64")}>
                 <Header onMenuClick={() => setIsMobileSidebarOpen(true)} menuButtonRef={menuButtonRef} isMobileOpen={isMobileSidebarOpen} />
-            <div className={cx("relative flex min-h-dvh min-w-0 flex-col transition-[padding] duration-200 motion-reduce:transition-none", isSidebarCollapsed ? "md:pl-0" : "md:pl-0")}>
-                <main id="main-content" tabIndex={-1} className={cx("mx-auto w-full min-w-0 max-w-[1600px] flex-1 p-4 outline-none sm:p-5 lg:p-6")}>
+                <main id="main-content" tabIndex={-1} className={cx("mx-auto flex min-h-[calc(100dvh-4rem)] w-full min-w-0 max-w-[1600px] flex-col p-4 outline-none sm:p-5 lg:p-6")}>
                     {children}
                 </main>
             </div>

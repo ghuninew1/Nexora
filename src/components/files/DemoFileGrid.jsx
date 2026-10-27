@@ -15,7 +15,7 @@ export default function DemoFileGrid({ files, emptyTitle, emptyDescription, onOp
   return <div className={cx("grid gap-3 sm:grid-cols-2 xl:grid-cols-3")}>
     {files.map((file) => {
       const Icon = file.type === "folder" ? Folder : icons[file.extension] ?? File;
-      return <article key={file.id} className={cx("glass-surface group min-w-0 p-4 transition-colors hover:bg-card/80")}>
+      return <article key={file.id} className={cx("glass-surface group min-w-0 p-4 transition-[background-color,border-color] duration-150 hover:border-primary/20 hover:bg-[var(--glass-surface-hover)] focus-within:bg-[var(--glass-surface-hover)]")}>
         <div className={cx("flex items-start justify-between gap-3")}>
           <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
           {mode === "trash" ? <div className={cx("flex items-center gap-1")}>

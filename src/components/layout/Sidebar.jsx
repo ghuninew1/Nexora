@@ -1,18 +1,19 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { Hexagon, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Button } from "../ui/button";
 import { navigationGroups } from "../navigation/navigation";
 import { cx } from "../../utils/cx";
 import { glassHover, updateGlassPointer } from "../../utils/glass";
+import compactLogo from "../../assets/logo.avif";
+import fullLogo from "../../assets/logo_full.avif";
 
 function SidebarContent({ isCollapsed = false, onNavigate, onToggle, mobile = false }) {
   return (
     <>
-      <div className={cx("flex h-16 shrink-0 items-center", isCollapsed ? "justify-center" : "gap-2 px-3")}>
-        <NavLink to="/files" onClick={onNavigate} aria-label="Nexora home" title={isCollapsed ? "Nexora" : undefined} className={cx(glassHover, "flex min-w-0 items-center gap-3 rounded-xl p-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring")} onPointerMove={updateGlassPointer}>
-          <span className={cx("flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-primary text-primary-foreground")}><Hexagon className={cx("size-5")} aria-hidden="true" /></span>
-          {!isCollapsed && <span className={cx("min-w-0")}><span className={cx("block truncate text-sm font-semibold tracking-tight")}>Nexora</span><span className={cx("block text-xs text-muted-foreground")}>Private Cloud</span></span>}
+      <div className={cx("flex h-16 shrink-0 items-center", isCollapsed ? "justify-center" : "px-3")}>
+        <NavLink to="/files" onClick={onNavigate} aria-label="Nexora home" title={isCollapsed ? "Nexora" : undefined} className={cx(glassHover, "flex min-w-0 items-center rounded-xl p-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring", isCollapsed ? "justify-center" : "w-full")} onPointerMove={updateGlassPointer}>
+          <img src={isCollapsed ? compactLogo : fullLogo} alt="" className={cx("object-contain", isCollapsed ? "size-9 shrink-0" : "h-9 w-auto max-w-full object-left")} />
         </NavLink>
         {mobile && (
           <DialogPrimitive.Close render={<Button variant="ghost" size="icon-lg" className={cx("ml-auto shrink-0")} aria-label="Close navigation menu" />}><X /></DialogPrimitive.Close>
@@ -60,7 +61,7 @@ function Sidebar({ isCollapsed, isMobileOpen, onMobileOpenChange, menuButtonRef,
           </DialogPrimitive.Popup>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
-      <aside aria-label="Main sidebar" data-collapsed={isCollapsed} className={cx("glass-sidebar fixed left-3 top-1/2 z-30 hidden max-h-[calc(100dvh-2rem)] -translate-y-1/2 flex-col overflow-hidden rounded-[1.4rem] border text-sidebar-foreground shadow-xl transition-[width] duration-200 motion-reduce:transition-none md:flex", isCollapsed ? "w-[60px]" : "w-60")}>
+      <aside aria-label="Main sidebar" data-collapsed={isCollapsed} className={cx("glass-sidebar fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r text-sidebar-foreground transition-[width] duration-200 motion-reduce:transition-none md:flex", isCollapsed ? "w-[60px]" : "w-56 lg:w-60 2xl:w-64")}>
         <SidebarContent isCollapsed={isCollapsed} onToggle={onToggle} />
       </aside>
     </>

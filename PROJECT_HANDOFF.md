@@ -11,11 +11,14 @@
 - Phase 7: `pnpm lint` และ `pnpm build` ผ่านหลังแก้ lint errors/warnings ใน preview lifecycle, FilesProvider restore helper และ hook dependencies
 - Browser: ตรวจ route `/dashboard`, `/files`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings` และ unknown route ใน in-app browser ขนาดแคบประมาณ 576 px; ยืนยัน mobile navigation menu, search, list/grid, folder/breadcrumb, create folder, move to Trash, restore, preview sample state, theme Light/Dark/System, Tab focus ring และปิด preview dialog ได้
 - Browser QA ที่ยังไม่ยืนยัน: desktop viewport, native file chooser/upload queue (เลือกไฟล์ไม่ได้ใน browser control นี้), permanent delete (ต้องให้ผู้ใช้ยืนยัน ณ เวลาลบ), reduced-motion system override และ console log
+- UI follow-up mobile QA: ตรวจ File Browser ที่ `/files` ใน in-app browser บนหน้าจอมือถือ, สลับ List/Grid, กดดาวเพิ่ม Favorites แล้วตรวจสถานะปุ่มเปลี่ยนเป็น Remove, เปิด mobile Sidebar และตรวจ labels/โลโก้เต็ม; screenshot ยืนยัน layout ไม่มีการตัดแถวรายการใน viewport ที่ตรวจ
 - Nexora ยังไม่มี authentication, domain API, Pages Functions, D1 binding หรือ migrations; `wrangler.jsonc` ปัจจุบันตั้งค่า Pages output เป็น `dist/` เท่านั้น
 - `FilesProvider` เก็บ files, Favorites, Recent และ Trash ใน memory ระหว่าง route; refresh จะคืนข้อมูล demo
 - Upload queue จำลอง progress ใน browser; preview/download ทำได้กับไฟล์ที่ผู้ใช้เลือกและยังอยู่ใน session เท่านั้น
 - Shared แสดง fixture records, Share action ยังปิดอยู่, Storage แสดงว่า provider ยังไม่ได้เชื่อม
 - Theme เป็น browser preference ใน `localStorage`
+- UI follow-up: Sidebar เต็มความสูงและ responsive; ใช้ `src/assets/logo_full.avif` ตอนขยายและ `src/assets/logo.avif` ตอนพับ; File Browser และการ์ด Recent/Favorites มี Liquid Glass hover; รายการใน File Browser มีปุ่มดาว Favorites กดตรงหน้าสัญลักษณ์ไฟล์/โฟลเดอร์ได้
+- การเปลี่ยนแปลงล่าสุดครอบคลุม File Browser, Sidebar และ docs; lint/build ผ่านตามรายการ Validation ด้านล่าง ส่วน desktop/console ยังไม่ยืนยัน
 
 ## Phase 7 deliverables
 
@@ -26,9 +29,11 @@
 
 ## สถานะ frontend validation
 
-- Checks ที่รัน: `pnpm lint` ผ่าน, `pnpm build` ผ่าน, browser route/interaction checks ตามรายการด้านบน
+- Checks ที่รันในรอบก่อน: `pnpm lint` ผ่าน, `pnpm build` ผ่าน, browser route/interaction checks ตามรายการด้านบน
+- UI follow-up ล่าสุด: `pnpm lint`, `pnpm build` และ `git diff --check` ผ่านหลังเพิ่มปุ่ม Favorites inline; in-app browser mobile interaction/layout ผ่านตามรายการด้านบน
+- Browser plugin ไม่อยู่ในเครื่องมือของ session นี้ และ `pnpm exec playwright --version` แจ้งว่าไม่มี Playwright; desktop viewport กับ browser console จึงยังไม่ได้ตรวจ ยังค้าง native file chooser/upload queue, permanent delete, reduced-motion OS override และ console logs
 - Project ไม่มี root test script
-- ไม่ได้ยืนยัน upload queue, permanent delete, desktop viewport, reduced motion หรือ console logs; อย่าอ้างว่า QA ครบทุก flow/viewport
+- QA ที่ยังไม่ครบตามรายการด้านบนต้องตรวจแยกก่อนสรุปว่า UI ผ่านทุก flow/viewport
 
 ## งานถัดไป: Phase 8 (รอ approval)
 
@@ -68,4 +73,8 @@ Phase 7 **ไม่ได้อนุญาต** backend implementation, D1 migr
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md` และตรวจ `git status --short`; Phase 7 validation/audit/proposal เสร็จแล้ว เริ่ม Phase 8 เฉพาะหลังได้รับ approval แยก
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md` และตรวจ `git status --short`; ทวน UI follow-up/QA ที่ค้างก่อน จากนั้น Phase 8 เริ่มได้เฉพาะหลังได้รับ approval แยก
+
+## กติกาการดูแลเอกสาร
+
+ทุกครั้งที่แก้ source หรือ behavior ให้ซิงก์ `README.md`, `AGENTS.md` และ `PROJECT_HANDOFF.md` ในงานรอบเดียวกัน โดยบันทึก scope, สถานะ demo/backend และผลตรวจจริง; แยกสิ่งที่ยังไม่ได้ตรวจหรือยังไม่ได้รับอนุมัติออกจากรายการที่เสร็จแล้ว

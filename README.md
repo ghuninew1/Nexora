@@ -6,6 +6,8 @@ Nexora เป็นเว็บจัดการไฟล์บน private clou
 
 Frontend ทำงานด้วยข้อมูลตัวอย่างในหน่วยความจำ: เปิดโฟลเดอร์และย้อนผ่าน URL breadcrumbs, ค้นหา/เรียงรายการ, สลับ List/Grid, เลือกหลายรายการ, สร้าง/เปลี่ยนชื่อ/ย้ายไป Trash, restore/permanent delete, ทำเครื่องหมาย Favorites และดู Recent, Dashboard และ sharing records ตัวอย่างได้ ไฟล์ตัวอย่างมีเฉพาะ metadata; preview และ download ใช้ได้กับไฟล์ที่เลือกจากเครื่องและอยู่ใน session เท่านั้น
 
+File Browser มีปุ่มรูปดาวสำหรับเพิ่ม/นำรายการออกจาก Favorites อยู่หน้าสัญลักษณ์ไฟล์หรือโฟลเดอร์ กดได้โดยตรงโดยไม่ต้องเปิดเมนู Actions; สถานะยังเป็น demo ใน memory และหายเมื่อ refresh เช่นเดิม Sidebar ใช้โลโก้เต็มเมื่อขยายและโลโก้ย่อเมื่อพับ พร้อมรองรับเมนูบนจอเล็ก
+
 ข้อมูลจาก `src/data/files.js` เป็น fixture ไม่มีการเชื่อม authentication, API, Cloudflare D1 หรือ Storage Service สถานะไฟล์, Recent, Favorites, Trash และ upload demo อยู่ใน memory และหายเมื่อ refresh; ไฟล์ที่อัปโหลดจะไม่ถูกส่งไป Garage/QNAP ธีมเป็นการตั้งค่าฝั่ง browser และเก็บแยกใน localStorage
 
 Dashboard, Recent, Favorites และ Trash ใช้ข้อมูล demo ร่วมกับ File Browser; Shared แสดงรายการตัวอย่างที่ระบุไว้ใน fixtures ส่วน Storage แสดงว่า provider ยังไม่เชื่อม และ Settings ให้ปรับธีมได้ Share, permissions, cross-device download, persistent metadata, live capacity และ provider operations ยังไม่มี backend ปุ่ม Share จึงปิดไว้จนกว่าจะเชื่อม Storage/API จริง
@@ -62,6 +64,7 @@ IssueDesk เชื่อมกับ Shared Storage Service แยกต่า�
 - **Phase 5 — Remaining Pages:** Dashboard, Recent, Favorites, Shared, Trash, Storage และ Settings ในขอบเขต frontend/demo — เสร็จ
 - **Phase 6 — Polish:** labels และ focus ที่ keyboard/screen reader ใช้ได้, validation ชื่อซ้ำ, select-all บนมือถือ, breadcrumb เลื่อนบนจอแคบ, upload progress semantics และ reduced-motion support — เสร็จใน frontend; ไม่มี network loading/error states เพราะยังไม่มี API
 - **Phase 7 — Validation & Storage Proposal:** `pnpm lint` และ `pnpm build` ผ่าน; ตรวจทุก route และหลาย workflow ใน in-app browser ที่ mobile-size, สลับธีม Light/Dark/System ได้; desktop browser, upload file chooser, permanent delete, reduced-motion OS override และ console log ยังไม่ได้ยืนยัน — ทำ source audit และเอกสาร proposal ครบ แต่ยังไม่ implement backend
+- **UI follow-up:** ปรับ Sidebar ให้เต็มความสูงและ responsive, สลับโลโก้ตามสถานะพับ/ขยาย, เพิ่ม Liquid Glass hover ให้รายการ File Browser และปุ่มดาว Favorites แบบกดตรงหน้าไฟล์/โฟลเดอร์; ตรวจ interaction และ List/Grid/เมนู Sidebar บนหน้าจอมือถือแล้ว ส่วน desktop/console และ QA ที่ค้างให้ดูใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
 - **Storage API implementation:** แยก approval/แผน backend จาก UI; ปัจจุบันยังไม่มี endpoint implementation ใน Nexora
 
 ## Coding conventions
