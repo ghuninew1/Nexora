@@ -44,6 +44,11 @@ export function AuthProvider({ children }) {
     setAuth({ status: 'unauthenticated', user: null });
   }, []);
 
+  const expireSession = useCallback(() => {
+    sessionVersion.current += 1;
+    setAuth({ status: 'unauthenticated', user: null });
+  }, []);
+
   const retrySession = useCallback(() => {
     setAuth({ status: 'loading', user: null });
     void restoreSession();
@@ -80,6 +85,6 @@ export function AuthProvider({ children }) {
     };
   }, [auth.status]);
 
-  const value = useMemo(() => ({ ...auth, login, logout, retrySession }), [auth, login, logout, retrySession]);
+  const value = useMemo(() => ({ ...auth, login, logout, retrySession, expireSession }), [auth, login, logout, retrySession, expireSession]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

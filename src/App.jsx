@@ -4,6 +4,7 @@ import Files from "./pages/Files/Files";
 import WorkspacePage from "./pages/WorkspacePage";
 import { navigationItems } from "./components/navigation/navigation";
 import { FilesProvider } from "./context/FilesProvider";
+import { StorageProvider } from "./context/StorageProvider";
 import { AuthProvider } from "./context/AuthProvider";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import LoginRoute from "./components/auth/LoginRoute";
@@ -15,7 +16,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
           <Route element={<ProtectedRoute />}>
-            <Route element={<FilesProvider><AppLayout /></FilesProvider>}>
+            <Route element={<StorageProvider><FilesProvider><AppLayout /></FilesProvider></StorageProvider>}>
               <Route index element={<Navigate to="/files" replace />} />
               <Route path="/files" element={<Files />} />
               {navigationItems.filter((item) => item.to !== "/files").map((item) => (

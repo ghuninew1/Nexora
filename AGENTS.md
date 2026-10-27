@@ -12,13 +12,14 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
-- Phase 8.5 connects frontend authentication only; `FilesProvider`, `useFiles`, fixtures, and upload simulation remain demo-only until Phase 9.
+- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API; `FilesProvider`, `useFiles`, fixtures, and upload simulation remain demo-only until Phase 9.2.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
 
 - `src/App.jsx`, `src/layouts/`: routing and persistent shared shell.
 - `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: same-origin auth requests, session bootstrap, login/logout, and public user state.
+- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated same-origin storage mount discovery, public capabilities, optional usage and refresh state; no file operations.
 - `src/components/auth/`, `src/pages/Login.jsx`: loading/error gates, protected-route handling, and sign-in page.
 - `src/context/FilesProvider.jsx`: in-memory file, favorite, recent, and trash state shared across routes.
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, and Settings route views.
@@ -39,8 +40,9 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/STORAGE_API_V1_PROPOSAL.md`: reviewed provider-neutral `/api/storage/v1/*` contract; implemented routes remain subject to later production review.
 - `docs/PHASE_8.md`: backend/auth/API implementation report and local verification.
 - `docs/PHASE_8_5.md`: frontend auth routes, session lifecycle, security review, validation, and manual production smoke test.
+- `docs/PHASE_9_1.md`: storage client/provider, safe mount bootstrap, capability/usage state, validation, production smoke test, and Phase 9.2 boundary.
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
-- `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: local Shared Storage implementation in the separate IssueDesk checkout. S2 migration remains unapplied to its service runtime.
+- `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: Shared Storage implementation in the separate IssueDesk checkout. The historical S2 report predates the Phase 9.1 brief's operator-reported production deployment; Nexora must not infer live state from source docs.
 - `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2, Phase 8 backend, Phase 8.5 frontend auth, and remaining Phase 9 scope.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
@@ -84,7 +86,7 @@ Check this map against actual files when changing the architecture; update READM
 - Revoke object URLs and release upload references when previews or local queue items are removed.
 - File Browser delete moves items to in-memory Trash, including folder descendants. Trash restore/permanent delete are local demo operations; label them clearly and confirm permanent deletion.
 - Shared entries are illustrative fixture metadata. Do not claim that Nexora creates shares, permissions, or access links until a reviewed server API exists.
-- Storage status and capacity must say unavailable when no provider API is connected; never present fixture totals as live provider usage.
+- Storage status comes from the authenticated Nexora storage API; usage/capacity must say unavailable or not reported unless authoritative metrics are returned. Never present fixture totals as live provider usage.
 - Do not claim preview or download is available for entries without source bytes. Uploaded browser `File` objects can support session-only local preview/download.
 
 ## Dependencies and commands

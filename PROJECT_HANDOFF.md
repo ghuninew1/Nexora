@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-27
 
-เอกสารนี้สรุปสถานะ Nexora หลัง Phase 8 และ production provisioning CLI; แยกผล local validation ออกจากสถานะ remote ที่ operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.1; แยกผล local validation ออกจากสถานะ remote ที่ operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
@@ -15,14 +15,15 @@
 - Phase 8 backend foundation: Pages Functions, Nexora D1 schema, hashed-cookie sessions, origin checks, mount ownership และ server-only Shared Storage `/v3` client
 - Operator ยืนยัน production D1/migration, admin, storage mount, Shared Storage app/project/access token และ production secrets พร้อมใช้งาน; `/v3` capabilities test ได้ HTTP 200. Phase 8.5 ไม่เชื่อมต่อ production และไม่เปลี่ยน records/secrets
 - `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; `wrangler.jsonc` กำหนด D1 `nexora-db` พร้อม database ID
-- `FilesProvider`, `useFiles`, fixtures และ upload simulation ยังเป็น demo และไม่เรียก backend; frontend integration อยู่ Phase 9
-- Phase 8.5 เพิ่ม frontend auth/session restore, protected routes, login/logout และ Header identity; Storage/File Browser ยัง demo-only
+- Phase 9.1 เพิ่ม storage discovery/capabilities/usage client และ provider ผ่าน same-origin Nexora API; Storage page แสดง safe connection state. ยังไม่ได้ deploy หรือทดสอบ production connection
+- `FilesProvider`, `useFiles`, fixtures และ upload simulation ยังเป็น demo และไม่เรียก backend; File Browser migration อยู่ Phase 9.2
+- Phase 8.5 เพิ่ม frontend auth/session restore, protected routes, login/logout และ Header identity; Phase 9.1 เพิ่ม storage connection state แต่ File Browser ยัง demo-only
 - `FilesProvider` เก็บ files, Favorites, Recent และ Trash ใน memory ระหว่าง route; refresh จะคืนข้อมูล demo
 - Upload queue จำลอง progress ใน browser; preview/download ทำได้กับไฟล์ที่ผู้ใช้เลือกและยังอยู่ใน session เท่านั้น
-- Shared แสดง fixture records, Share action ยังปิดอยู่, Storage แสดงว่า provider ยังไม่ได้เชื่อม
+- Shared แสดง fixture records และ Share action ยังปิดอยู่. Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
 - Theme เป็น browser preference ใน `localStorage`
 - UI follow-up: Sidebar เต็มความสูงและ responsive; ใช้ `src/assets/logo_full.avif` ตอนขยายและ `src/assets/logo.avif` ตอนพับ; File Browser และการ์ด Recent/Favorites มี Liquid Glass hover; รายการใน File Browser มีปุ่มดาว Favorites กดตรงหน้าสัญลักษณ์ไฟล์/โฟลเดอร์ได้
-- การเปลี่ยนแปลงล่าสุดครอบคลุม File Browser, Sidebar และ docs; lint/build ผ่านตามรายการ Validation ด้านล่าง ส่วน desktop/console ยังไม่ยืนยัน
+- Phase 9.1 validation: lint, 45 tests, build and diff check passed; in-app browser mock QA verified the Storage connection panel and refresh at a narrow viewport. Production connection, desktop rendering, and production console/network inspection remain unverified.
 
 ## Phase 7 deliverables
 
@@ -44,7 +45,7 @@
 
 ## Shared Storage Phase S1/S2 — 2026-10-27
 
-Shared Storage S1/S2 เสร็จใน checkout แยก `issuedesk/garage/storage/`: `/v3` internal manager API, logical folder/file tree, migration/backfill, name policy, copy verification, Trash/restore/purge และ operation records; `/v2` auth/response contract คงเดิมหลัง migration. `pnpm test` 27/27 และ IssueDesk lint ผ่านด้วย memory SQLite/fake S3; S2 migration ยังไม่ได้ apply กับ service runtime และไม่มี deployment/production verification. Nexora Phase 8 เริ่มต่อแล้วและมีรายงานแยก [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md)
+Shared Storage S1/S2 เสร็จใน checkout แยก `issuedesk/garage/storage/`: `/v3` internal manager API, logical folder/file tree, migration/backfill, name policy, copy verification, Trash/restore/purge และ operation records; `/v2` auth/response contract คงเดิมหลัง migration. `pnpm test` 27/27 และ IssueDesk lint ผ่านด้วย memory SQLite/fake S3. เอกสาร S2 เป็น historical local snapshot; Phase 9.1 brief ล่าสุดรายงาน S1/S2 production deployment and direct `/v3` capabilities HTTP 200, not re-verified in this Nexora local work. [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md)
 
 ## Nexora Phase 8 — 2026-10-27
 
@@ -58,9 +59,11 @@ See [Phase 8 report](docs/PHASE_8.md), [production provisioning guide](docs/PROD
 
 เพิ่ม AuthProvider/useAuth, same-origin `/api/auth/*` client, `/login`, protected workspace routing, session restore และ Header sign out/user identity. `FilesProvider`, fixture state และ upload simulation ยังไม่เชื่อม Storage API; รายละเอียด QA และ manual production smoke test อยู่ใน `docs/PHASE_8_5.md`.
 
-## งานถัดไป: Phase 9 (ยังไม่เริ่ม)
+## Phase 9.1 — Storage Client + Mount Integration
 
-หลัง review Phase 8.5 ให้เริ่มวางแผนเชื่อม File Browser กับ Nexora Storage API เป็นงานใหม่; อย่าขยาย Phase 8.5 ไปเชื่อม FilesProvider หรือเปลี่ยน production.
+เพิ่ม `src/services/storage.js`, `StorageProvider`, `useStorage` และ connection summary ใน Storage page. Bootstrap เรียก `/api/storage/v1/storages`, เลือก active mount แรกตาม backend order แล้วโหลด capabilities/usage; 401 ส่งต่อให้ AuthProvider หมด session. Usage failure ไม่ทำให้ connection ล้มเหลว. Local lint/test/build/UI mock QA ผ่าน; production deploy และ smoke test ยังรอ operator.
+
+รายละเอียดและ smoke-test checklist อยู่ใน [docs/PHASE_9_1.md](docs/PHASE_9_1.md). Phase 9.2 ยังไม่เริ่ม; File Browser ยังใช้ข้อมูล demo.
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -88,7 +91,8 @@ See [Phase 8 report](docs/PHASE_8.md), [production provisioning guide](docs/PROD
 - `src/components/files/`: File Browser, demo grid, dialogs, preview และ upload queue UI
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, Settings
 - `src/data/files.js`: fixtures; metadata ตัวอย่างไม่ใช่สถานะ Storage จริง
-- `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: frontend authentication state/client; ยังไม่มี Storage API client
+- `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: frontend authentication state/client
+- `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated storage discovery and connection state client
 - `README.md`, `AGENTS.md`, `docs/DESIGN_SYSTEM.md`: project status, working conventions และ UI foundation
 - `docs/STORAGE_API_AUDIT.md`, `docs/STORAGE_ARCHITECTURE.md`, `docs/STORAGE_API_V1_PROPOSAL.md`, `docs/PHASE_8.md`, `docs/PHASE_8_5.md`, `docs/PRODUCTION_PROVISIONING.md`: source audit, API contract, phase reports and provisioning guide
 

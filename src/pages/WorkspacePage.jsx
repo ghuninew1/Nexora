@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Activity, Files, FolderClock, HardDrive, Heart, Share2, ShieldCheck, Trash2, UploadCloud, Users } from "lucide-react";
+import { Activity, Files, FolderClock, HardDrive, Heart, RefreshCw, Share2, ShieldCheck, Trash2, UploadCloud, Users } from "lucide-react";
 import { getPageInfo } from "../components/navigation/navigation";
 import { Button } from "../components/ui/button";
 import { cx } from "../utils/cx";
 import { useFilesData } from "../context/FilesProvider";
+import { useStorage } from "../hooks/useStorage";
 import useFiles from "../hooks/useFiles";
 import ThemeToggle from "../theme/ThemeToggle";
 import DemoFileGrid from "../components/files/DemoFileGrid";
@@ -79,19 +80,43 @@ function TrashPage({ page, browser }) {
   </div>;
 }
 
-function StoragePage({ page, navigate }) {
+function StoragePage({ page }) {
+  const storage = useStorage();
+  const { status, activeStorage, capabilities, usage, error, refresh } = storage;
+  const statusLabel = status === "ready" ? "Connected" : status === "loading" ? "Checking connection" : status === "empty" ? "No active storage" : "Unavailable";
+  const description = status === "ready"
+    ? "Nexora can reach this storage through its secure server-side connection. File Browser content and upload progress are still demo data."
+    : status === "empty"
+      ? "No active storage mount is available for this account. File Browser content and upload progress remain demo data."
+      : status === "unavailable"
+        ? (error || "Storage could not be reached. Try refreshing the connection.")
+        : "Checking the storage mount assigned to this account.";
+  const capabilityLabels = [
+    ["list", "Browse"], ["stat", "Read metadata"], ["upload", "Upload"], ["download", "Download"], ["createFolder", "Create folders"],
+    ["rename", "Rename"], ["move", "Move"], ["copy", "Copy"], ["trash", "Trash"], ["restore", "Restore"],
+    ["permanentDelete", "Permanent delete"], ["preview", "Preview"], ["share", "Share"], ["rangeRead", "Range reads"],
+  ];
   return <div className={cx("flex flex-col gap-6")}>
     <PageHeading eyebrow="Connections" title={page.label} description="Review storage connection status for this Nexora workspace." />
     <section className={cx("glass-surface p-5 sm:p-6")}>
       <div className={cx("flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between")}>
-        <div className={cx("flex items-start gap-4")}><span className={cx("glass-control flex size-12 shrink-0 items-center justify-center rounded-xl text-muted-foreground")}><HardDrive className={cx("size-5")} /></span><div><div className={cx("flex flex-wrap items-center gap-2")}><h2 className={cx("text-base font-semibold")}>Storage provider</h2><span className={cx("rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground")}>Not connected</span></div><p className={cx("mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground")}>A server-side Storage API has not been configured. File entries and upload progress elsewhere in Nexora are demo data and do not reflect provider usage.</p></div></div>
-        <Button variant="outline" onClick={() => navigate("/settings")}>View settings</Button>
+        <div className={cx("flex items-start gap-4")}><span className={cx("glass-control flex size-12 shrink-0 items-center justify-center rounded-xl text-muted-foreground")}><HardDrive className={cx("size-5")} /></span><div><div className={cx("flex flex-wrap items-center gap-2")}><h2 className={cx("text-base font-semibold")}>{activeStorage?.name || "Storage provider"}</h2><span className={cx("rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground")} role="status" aria-live="polite">{statusLabel}</span></div><p className={cx("mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground")}>{description}</p></div></div>
+        <Button variant="outline" onClick={() => void refresh()} disabled={status === "loading"} aria-busy={status === "loading"}><RefreshCw data-icon="inline-start" />{status === "loading" ? "Checking…" : "Refresh connection"}</Button>
       </div>
       <div className={cx("mt-6 grid gap-3 border-t border-border pt-5 sm:grid-cols-3")}>
-        <div><p className={cx("text-xs text-muted-foreground")}>Provider</p><p className={cx("mt-1 text-sm font-medium")}>Unavailable</p></div>
-        <div><p className={cx("text-xs text-muted-foreground")}>Capacity</p><p className={cx("mt-1 text-sm font-medium")}>Not reported</p></div>
-        <div><p className={cx("text-xs text-muted-foreground")}>Last sync</p><p className={cx("mt-1 text-sm font-medium")}>Not available</p></div>
+        <div><p className={cx("text-xs text-muted-foreground")}>Storage type</p><p className={cx("mt-1 text-sm font-medium")}>{activeStorage?.providerLabel || "Unavailable"}</p></div>
+        <div><p className={cx("text-xs text-muted-foreground")}>Usage</p><p className={cx("mt-1 text-sm font-medium")}>{usage.status === "available" && usage.usedBytes !== null ? `${usage.usedBytes.toLocaleString()} bytes used` : "Not reported"}</p></div>
+        <div><p className={cx("text-xs text-muted-foreground")}>Access</p><p className={cx("mt-1 text-sm font-medium")}>{activeStorage ? (activeStorage.readOnly ? "Read only" : "Read and write") : "Not available"}</p></div>
       </div>
+      {status === "ready" && capabilities && <div className={cx("mt-5 border-t border-border pt-5")}>
+        <div className={cx("flex flex-wrap items-baseline justify-between gap-2")}><h3 className={cx("text-sm font-semibold")}>Storage capabilities</h3><p className={cx("text-xs text-muted-foreground")}>Reported by the connected storage service</p></div>
+        <ul className={cx("mt-3 flex flex-wrap gap-2")} aria-label="Storage capabilities">
+          {capabilityLabels.map(([key, label]) => <li key={key} className={cx("rounded-full border px-2.5 py-1 text-xs", capabilities[key] ? "border-primary/30 bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
+            {label}: {capabilities[key] ? "Available" : "Unavailable"}
+          </li>)}
+          {capabilities.readOnly && <li className={cx("rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground")}>Read only</li>}
+        </ul>
+      </div>}
     </section>
     <div className={cx("glass-surface flex items-start gap-3 p-4")}><ShieldCheck className={cx("mt-0.5 size-4 shrink-0 text-muted-foreground")} /><p className={cx("text-sm text-muted-foreground")}>Provider credentials and file operations belong on a reviewed server-side integration. They are not stored in this frontend.</p></div>
   </div>;
