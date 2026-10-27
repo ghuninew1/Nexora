@@ -10,7 +10,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/index.css` owns design tokens and Liquid Glass primitives. Base UI/shadcn wrappers live in `src/components/ui/`.
 - `src/data/files.js` is demo data. `FilesProvider` keeps file state, favorites, recents, and Trash in memory across routes; these demo changes reset when the tab is refreshed. Uploaded browser `File` objects remain local to the current page session.
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
-- `functions/_lib/` owns Pages API routing, PBKDF2 password verification, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
+- `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
 - Phase 8.5 connects frontend authentication only; `FilesProvider`, `useFiles`, fixtures, and upload simulation remain demo-only until Phase 9.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
@@ -70,6 +70,7 @@ Check this map against actual files when changing the architecture; update READM
 - Keep long breadcrumbs usable on narrow screens and honor `prefers-reduced-motion` for animation and transitions.
 - Preserve `Button` Base UI semantics, variants, `ref`, render/slot composition, state-based className callbacks, and caller event handlers when extending the shared component.
 - Use the shared `Button` for actions and retain its IssueDesk-referenced Liquid Glass hover behavior; button sheen and pointer light should contrast with light and dark button surfaces; avoid one-off button styling that bypasses the shared variants.
+- Never log auth request bodies, credentials, passwords, password hashes, salts, cookies, session tokens, authorization headers, or raw secrets. Use the shared password helper for all user creation and verification.
 
 ## File Browser behavior
 

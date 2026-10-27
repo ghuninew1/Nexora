@@ -14,7 +14,7 @@
 
 All workspace routes are protected: `/`, `/files`, `/dashboard`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings`, and unknown workspace paths. `/login` is public. Loading state shows a small session-check screen; app shell/demo content is not mounted until authentication succeeds. An authenticated visit to `/login` redirects to its safe internal return path when present, otherwise `/files`.
 
-Unauthenticated route redirects preserve only an internal pathname/search/hash in React Router state. External, protocol-relative, backslash-containing, and `/login` destinations are rejected. Successful login posts the exact Phase 8 JSON `{ email, password }`; the server performs email normalization. A generic message covers invalid/inactive accounts, with a separate rate-limit message and a generic temporary-service error. Password is cleared after success and is never logged.
+Unauthenticated route redirects preserve only an internal pathname/search/hash in React Router state. External, protocol-relative, backslash-containing, and `/login` destinations are rejected. Successful login posts the exact Phase 8 JSON `{ email, password }`; the server performs email normalization. A generic message covers invalid/inactive accounts, with a separate rate-limit message and a generic temporary-service error. The password input state is cleared before the login request is dispatched.
 
 The Header displays the API-provided display name with deterministic initials and a Sign out action. Logout makes a same-origin `POST /api/auth/logout`; it never edits the HttpOnly cookie. A failed logout keeps the user signed in and shows a safe retry message.
 
@@ -26,7 +26,22 @@ The Header displays the API-provided display name with deterministic initials an
 - Return navigation uses an origin-checked internal path; no open redirect.
 - Initial bootstrap gates all protected routes and mounts no AppShell while loading or unauthenticated.
 - Login shows only safe messages selected from known error codes; it does not expose backend response text, stack traces, or account existence details.
+- `AuthContext` receives only the safe identity object returned by the auth client; password/hash/salt/session/cookie/authorization fields are discarded.
 - Existing demo file state remains local/in-memory and is not connected to Storage API.
+
+## Security incident follow-up — 2026-10-27
+
+The operator reported that a production authentication smoke test succeeded after PBKDF2 was reduced to 100,000 iterations, but the submitted password then appeared in authentication logs. The source audit of this checkout found no `console.*` call, logger middleware, request/body dump, or error serialization in the frontend auth flow, Pages auth routes, request parser, password helpers, or `AuthProvider`. The Pages API wrapper maps unexpected errors to a fixed safe response without logging them. Therefore the reported production log has not been reproduced or tied to the currently checked-in runtime; verify the deployed revision and the exact Cloudflare log source before treating production as cleared.
+
+Remediation in this checkout:
+
+- Clear the Login password state before dispatch and pass only the temporary submit value to the auth service. Unexpected auth errors map to an allowlisted safe message; raw response text and arbitrary error messages are not shown.
+- Preserve the backend's public-user allowlist and generic login errors. Regression coverage now checks that a unique disposable password is absent from the login response and auth console calls, and that returned user/context fields exclude password, hash, salt, session, cookie, and authorization data.
+- Replace the local admin script's separate 600,000-iteration Node PBKDF2 implementation with the same `hashPassword`/validation helpers used by login and remote provisioning. Its Wrangler stdout/stderr are suppressed so SQL or hash details cannot reach provisioning output.
+- Remove the frontend auth test assertion that compared the whole request body (which could print the password in a failing assertion); it now checks field names and values with non-sensitive assertion messages.
+- PBKDF2-HMAC-SHA-256 uses one shared configuration: 100,000 iterations. Hash creation and verification use the same helper.
+
+Sensitive logging audit result: current application source contains no auth-path console logger. The only remaining explicit console calls are the production provisioning scripts; their success output contains non-secret metadata and their errors are generic. The local provisioning command no longer forwards Wrangler output. No passwords, hashes, salts, session tokens, cookies, Authorization headers, Storage credentials, or raw environment values are intentionally logged by the audited source.
 
 ## Unsupported features and production notes
 
@@ -37,9 +52,10 @@ The operator supplied that production D1, admin and mount records, Shared Storag
 ## Validation
 
 - `pnpm lint`: passed.
-- `pnpm test`: passed; Node tests cover auth request contract, unauthenticated vs unavailable session responses, safe messages, response filtering, logout behavior, and internal return-path validation alongside Phase 8 backend/provisioning tests.
+- `pnpm test`: passed, 37/37; Node tests cover auth request contract, unauthenticated vs unavailable session responses, safe messages, response filtering, login response/console secrecy with a unique disposable password, logout behavior, internal return-path validation, and shared 100,000-iteration provisioning hashes.
 - `pnpm build`: passed.
 - `git diff --check`: passed.
+- Security smoke: entered a unique disposable QA password on local `/login`; the input cleared before dispatch and the page showed only the generic temporary error. Browser console error/warn logs were empty, and the Vite server console showed no request/body output. The Vite-only server does not serve Pages Functions, so successful browser auth was not exercised; the successful login handler path was tested separately against in-memory D1 with console capture. No production password or production endpoint was used.
 - Local browser smoke test used a temporary localhost-only mock auth endpoint and a disposable QA identity: unauthenticated `/settings` redirected to sign in, successful login returned to `/settings`, workspace displayed `QA Operator`, authenticated `/login` redirected to `/files`, and sign out returned to `/login`. A wrong-password attempt displayed only “Email or password is incorrect.” A mocked 503 rendered the unavailable gate without workspace content and still allowed the user to reach the sign-in form. The login layout was checked at the default desktop viewport and 390 × 844. No production URL, account, or secret was used.
 - No React component test framework exists in the project; no new dependency was added. Production login, expired-cookie behavior on the deployed app, mobile navigation/interaction, and supported browser matrix remain operator/manual smoke tests.
 

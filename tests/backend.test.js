@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { before, after, test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
@@ -127,10 +128,39 @@ test('login returns a secure HttpOnly cookie and stores only a hash of the rando
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM sessions WHERE token_hash = ?').get(await sha256Hex(token)).count, 1);
 });
 
+test('login responses and auth console output omit submitted passwords and private user fields', async () => {
+  const password = `qa-login-${randomUUID()}`;
+  const email = `${randomUUID()}@example.test`;
+  await createUser({ db: env.DB, email, displayName: 'Disposable QA', password });
+
+  const methods = ['debug', 'error', 'info', 'log', 'warn'];
+  const originalMethods = new Map(methods.map((method) => [method, console[method]]));
+  const consoleCalls = [];
+  for (const method of methods) console[method] = (...args) => consoleCalls.push(args);
+
+  let response;
+  let responseText;
+  try {
+    response = await login(email, password);
+    responseText = await response.text();
+  } finally {
+    for (const method of methods) console[method] = originalMethods.get(method);
+  }
+
+  assert.ok(response.status === 200, 'Disposable QA login should succeed.');
+  assert.ok(!responseText.includes(password), 'Login response must omit submitted credentials.');
+  const publicUser = JSON.parse(responseText).data.user;
+  assert.deepEqual(Object.keys(publicUser).sort(), ['displayName', 'email', 'id', 'role']);
+  assert.equal(consoleCalls.length, 0, 'Auth login must not write request credentials or user records to console.');
+});
+
 test('invalid credentials and inactive users cannot authenticate', async () => {
-  const bad = await login('owner@example.test', 'wrong horse battery staple');
+  const submittedPassword = `invalid-login-${randomUUID()}`;
+  const bad = await login('owner@example.test', submittedPassword);
   assert.equal(bad.status, 401);
-  assert.equal((await bad.json()).error.code, 'UNAUTHENTICATED');
+  const badResponseText = await bad.text();
+  assert.ok(!badResponseText.includes(submittedPassword), 'Invalid-login response must omit submitted credentials.');
+  assert.equal(JSON.parse(badResponseText).error.code, 'UNAUTHENTICATED');
   const inactive = await createUser({ db: env.DB, email: 'inactive@example.test', displayName: 'Inactive', password: 'correct horse battery staple' });
   sqlite.prepare('UPDATE users SET active = 0 WHERE id = ?').run(inactive.id);
   const denied = await login('inactive@example.test', 'correct horse battery staple');

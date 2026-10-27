@@ -58,7 +58,7 @@ Pages ใช้ `AppLayout` ร่วมกับ `AppShell` และ `<Outlet 
 
 รายการงานถัดไป, Storage/API guardrails และ acceptance criteria อยู่ใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
 
-ผลตรวจ frontend, source audit, API contract, Phase 8 implementation, Phase 8.5 auth และ provisioning CLI อยู่ใน [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md), [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md), [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md), [`docs/PHASE_8.md`](docs/PHASE_8.md), [`docs/PHASE_8_5.md`](docs/PHASE_8_5.md) และ [`docs/PRODUCTION_PROVISIONING.md`](docs/PRODUCTION_PROVISIONING.md). Phase 8.5 ใช้ local mock สำหรับ UI; ไม่มี production login/provisioning/deploy
+ผลตรวจ frontend, source audit, API contract, Phase 8 implementation, Phase 8.5 auth และ provisioning CLI อยู่ใน [`docs/STORAGE_API_AUDIT.md`](docs/STORAGE_API_AUDIT.md), [`docs/STORAGE_ARCHITECTURE.md`](docs/STORAGE_ARCHITECTURE.md), [`docs/STORAGE_API_V1_PROPOSAL.md`](docs/STORAGE_API_V1_PROPOSAL.md), [`docs/PHASE_8.md`](docs/PHASE_8.md), [`docs/PHASE_8_5.md`](docs/PHASE_8_5.md) และ [`docs/PRODUCTION_PROVISIONING.md`](docs/PRODUCTION_PROVISIONING.md). Phase 8.5 ใช้ local mock สำหรับ UI; operator รายงาน production login smoke test และ password logging issue แต่ source ปัจจุบันยังระบุ origin ของ production log ไม่ได้
 
 ## แนวทางข้อมูลและ Storage
 
@@ -78,7 +78,7 @@ IssueDesk เชื่อมกับ Shared Storage Service แยกต่า�
 - **Phase 8 — Backend Foundation:** Pages Functions, D1 schema, session auth, mount ownership, server-only Shared Storage `/v3` client, `/api/storage/v1/*`, Favorites/Recent persistence และ backend tests เสร็จ; frontend demo ไม่ได้เปลี่ยน
 - **UI follow-up:** ปรับ Sidebar ให้เต็มความสูงและ responsive, สลับโลโก้ตามสถานะพับ/ขยาย, เพิ่ม Liquid Glass hover ให้รายการ File Browser และปุ่มดาว Favorites แบบกดตรงหน้าไฟล์/โฟลเดอร์; glass effect ของ shared Button ใช้สีตัวอักษรเพื่อให้เห็นทั้งบนปุ่มพื้นขาวและพื้นเข้ม; ตรวจ interaction และ List/Grid/เมนู Sidebar บนหน้าจอมือถือแล้ว ส่วน desktop/console และ QA ที่ค้างให้ดูใน [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md)
 - **Production provisioning CLI:** เพิ่มคำสั่ง admin และ Storage mount แบบ explicit `--remote`, tests แบบไม่ต่อ remote และคู่มือ operator; production infra/migrations/secrets ตาม operator ยืนยันแล้ว แต่ CLI ไม่ได้ใช้สร้าง records. Frontend ยังเป็น demo จนถึง Phase 9
-- **Phase 8.5 — Frontend Authentication:** เพิ่ม AuthProvider, useAuth, session bootstrap, protected workspace routes, login/logout และ identity ใน Header; Storage/files ยังคง demo จนถึง Phase 9. ดู [รายงาน Phase 8.5](docs/PHASE_8_5.md)
+- **Phase 8.5 — Frontend Authentication:** เพิ่ม AuthProvider, useAuth, session bootstrap, protected workspace routes, login/logout และ identity ใน Header; security follow-up ปรับการเก็บ password ระหว่าง login, error allowlist, tests ป้องกันข้อมูลลับรั่วใน response/logs และใช้ PBKDF2 100,000 รอบร่วมกัน; Storage/files ยังคง demo จนถึง Phase 9. ดู [รายงาน Phase 8.5](docs/PHASE_8_5.md)
 
 ## Coding conventions
 

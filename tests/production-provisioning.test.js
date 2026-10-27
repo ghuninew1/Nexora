@@ -19,7 +19,7 @@ test('production provisioning uses the same email normalization as login', () =>
 
 test('production admin password hashing uses the Phase 8 PBKDF2 encoding', async () => {
   const hash = await hashPassword('a sufficiently long secret');
-  assert.match(hash, /^pbkdf2-sha256\$600000\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+$/u);
+  assert.ok(/^pbkdf2-sha256\$100000\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+$/u.test(hash), 'Admin password hashes must use the shared 100000-iteration format.');
   assert.equal(await verifyPassword('a sufficiently long secret', hash), true);
 });
 
@@ -28,7 +28,7 @@ test('admin SQL inserts only an active admin and refuses normalized duplicates',
     id: 'uuid-1',
     email: 'admin@example.test',
     displayName: 'Site Admin',
-    passwordHash: 'pbkdf2-sha256$600000$salt$digest',
+    passwordHash: 'pbkdf2-sha256$100000$salt$digest',
     now: 123,
   });
   assert.match(sql, /'admin', 1, 123, 123/u);

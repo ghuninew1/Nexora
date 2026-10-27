@@ -39,7 +39,7 @@ The browser supplies a Nexora `storageId` and logical `objectId`. The function l
 
 ## Authentication and bootstrap
 
-- `POST /api/auth/login`: validates same-origin and JSON, verifies PBKDF2-HMAC-SHA-256 at 600,000 iterations using [Cloudflare Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/), rejects inactive users, and creates a 32-byte random session token. The work factor follows the [OWASP Password Storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); production plan CPU behavior still needs validation.
+- `POST /api/auth/login`: validates same-origin and JSON, verifies PBKDF2-HMAC-SHA-256 at 100,000 iterations using [Cloudflare Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/), rejects inactive users, and creates a 32-byte random session token. `functions/_lib/password.js` is the shared hash/verify configuration used by both admin provisioning commands.
 - D1 stores only SHA-256(token); the raw token exists only in the Secure, HttpOnly, SameSite=Lax, Path=/ cookie. Session lifetime is 14 days; login removes expired sessions and caps active sessions to 10 per user.
 - `POST /api/auth/logout` revokes the session and clears the cookie. `GET /api/auth/me` resolves the current active user from the session.
 - Failed logins are rate-limited at eight per 15 minutes by hashed email or IP. Unknown-user and wrong-password paths both perform the password derivation.

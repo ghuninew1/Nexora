@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Eye, EyeOff, LoaderCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { safeSignInErrorMessage } from '../services/auth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { cx } from '../utils/cx';
@@ -21,13 +22,15 @@ export default function Login() {
   async function handleSubmit(event) {
     event.preventDefault();
     if (isSubmitting) return;
+    const submittedPassword = password;
+    setPassword('');
+    setShowPassword(false);
     setIsSubmitting(true);
     setError('');
     try {
-      await login(email, password);
-      setPassword('');
+      await login(email, submittedPassword);
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : 'Sign-in is temporarily unavailable. Try again later.');
+      setError(safeSignInErrorMessage(authError));
     } finally {
       setIsSubmitting(false);
     }

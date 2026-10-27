@@ -1,5 +1,11 @@
 const UNAVAILABLE_MESSAGE = "We couldn't verify your session. Check your connection and try again.";
 const SIGN_IN_UNAVAILABLE_MESSAGE = "Sign-in is temporarily unavailable. Try again later.";
+const SAFE_SIGN_IN_MESSAGES = new Set([
+  'Email or password is incorrect.',
+  'Too many sign-in attempts. Wait a few minutes and try again.',
+  'Check your email and password, then try again.',
+  SIGN_IN_UNAVAILABLE_MESSAGE,
+]);
 
 function safeUser(value) {
   if (!value || typeof value !== 'object'
@@ -22,6 +28,12 @@ function signInError(code) {
   if (code === 'RATE_LIMITED') return 'Too many sign-in attempts. Wait a few minutes and try again.';
   if (code === 'INVALID_INPUT') return 'Check your email and password, then try again.';
   return SIGN_IN_UNAVAILABLE_MESSAGE;
+}
+
+export function safeSignInErrorMessage(error) {
+  return error instanceof Error && SAFE_SIGN_IN_MESSAGES.has(error.message)
+    ? error.message
+    : SIGN_IN_UNAVAILABLE_MESSAGE;
 }
 
 export async function getCurrentUser({ fetchImpl = fetch, signal } = {}) {

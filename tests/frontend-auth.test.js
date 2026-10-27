@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getCurrentUser, getSafeReturnTo, signIn, signOut } from '../src/services/auth.js';
+import { getCurrentUser, getSafeReturnTo, safeSignInErrorMessage, signIn, signOut } from '../src/services/auth.js';
 
 test('session bootstrap treats 401 as unauthenticated and uses the same-origin cookie', async () => {
   let request;
@@ -18,8 +18,12 @@ test('session bootstrap treats 401 as unauthenticated and uses the same-origin c
 test('session bootstrap returns only public identity fields and distinguishes server failures', async () => {
   const user = await getCurrentUser({ fetchImpl: async () => Response.json({ data: { user: {
     id: 'internal-id', email: 'owner@example.test', displayName: 'Workspace Owner', role: 'admin', avatarUrl: 'unexpected',
+    password: 'private test value', passwordHash: 'private test value', password_hash: 'private test value',
+    salt: 'private test value', sessionToken: 'private test value', session_token: 'private test value',
+    authorization: 'private test value', cookie: 'private test value',
   } } }) });
-  assert.deepEqual(user, { email: 'owner@example.test', displayName: 'Workspace Owner', role: 'admin' });
+  assert.deepEqual(Object.keys(user).sort(), ['displayName', 'email', 'role']);
+  assert.ok(user.email === 'owner@example.test' && user.displayName === 'Workspace Owner' && user.role === 'admin', 'Session bootstrap should expose only safe identity fields.');
 
   await assert.rejects(getCurrentUser({ fetchImpl: async () => Response.json({ error: { message: 'private server detail' } }, { status: 503 }) }), {
     message: "We couldn't verify your session. Check your connection and try again.",
@@ -42,18 +46,31 @@ test('login sends the Phase 8 request shape and keeps invalid credentials generi
   assert.equal(request.options.method, 'POST');
   assert.equal(request.options.credentials, 'same-origin');
   assert.equal(request.options.headers['Content-Type'], 'application/json');
-  assert.deepEqual(JSON.parse(request.options.body), { email: 'Owner@Example.Test', password: 'private password' });
-  assert.deepEqual(user, { email: 'owner@example.test', displayName: 'Owner', role: 'user' });
+  const submittedBody = JSON.parse(request.options.body);
+  assert.deepEqual(Object.keys(submittedBody).sort(), ['email', 'password']);
+  assert.ok(submittedBody.email === 'Owner@Example.Test', 'Login should submit the entered email.');
+  assert.ok(submittedBody.password === 'private password', 'Login should submit the password without asserting or printing its value.');
+  assert.deepEqual(Object.keys(user).sort(), ['displayName', 'email', 'role']);
+  assert.ok(user.email === 'owner@example.test' && user.displayName === 'Owner' && user.role === 'user', 'Login should return only safe identity fields.');
 
-  await assert.rejects(signIn('owner@example.test', 'wrong password', { fetchImpl: async () => Response.json({ error: {
-    code: 'UNAUTHENTICATED', message: 'Do not expose this backend text',
-  } }, { status: 401 }) }), { message: 'Email or password is incorrect.' });
+  const submittedPassword = 'unique-qa-login-secret';
+  let failedLoginError;
+  try {
+    await signIn('owner@example.test', submittedPassword, { fetchImpl: async () => Response.json({ error: {
+      code: 'UNAUTHENTICATED', message: submittedPassword,
+    } }, { status: 401 }) });
+  } catch (error) {
+    failedLoginError = error;
+  }
+  assert.ok(failedLoginError instanceof Error && failedLoginError.message === 'Email or password is incorrect.', 'Invalid-login errors must remain generic and omit submitted credentials.');
+  assert.ok(!safeSignInErrorMessage(new Error(submittedPassword)).includes(submittedPassword), 'Unknown auth errors must map to a safe message.');
   await assert.rejects(signIn('owner@example.test', 'password', { fetchImpl: async () => Response.json({ error: { code: 'RATE_LIMITED' } }, { status: 429 }) }), {
     message: 'Too many sign-in attempts. Wait a few minutes and try again.',
   });
   await assert.rejects(signIn('owner@example.test', 'password', { fetchImpl: async () => { throw new TypeError('private network detail'); } }), {
     message: 'Sign-in is temporarily unavailable. Try again later.',
   });
+  assert.equal(safeSignInErrorMessage(new Error('private test password')), 'Sign-in is temporarily unavailable. Try again later.');
 });
 
 test('logout uses a same-origin POST and does not require browser cookie access', async () => {
