@@ -28,7 +28,7 @@ try {
   await writeFile(file, sql, { mode: 0o600 });
   const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
   await new Promise((resolve, reject) => {
-    const child = spawn(command, ['exec', 'wrangler', 'd1', 'execute', 'nexora-local', '--local', `--file=${file}`], { stdio: 'inherit' });
+    const child = spawn(command, ['exec', 'wrangler', 'd1', 'execute', 'nexora-db', '--local', `--file=${file}`], { stdio: 'inherit' });
     child.once('error', reject);
     child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`Local admin provisioning exited with status ${code}.`)));
   });
