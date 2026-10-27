@@ -2,6 +2,10 @@
 
 ตรวจ source ใน checkout IssueDesk ณ 2026-10-27 โดยอ้างอิง `functions/api/storage/`, `functions/api/storage-health.js`, `functions/api/qr-logos/` และ `garage/storage/src/` ไม่อ่าน `.env`, credential หรือไฟล์ฐานข้อมูล/ข้อมูล Storage ที่ runtime ใช้อยู่ เอกสารนี้เป็นผลจาก source code เท่านั้น ไม่ยืนยันว่า remote secrets, Cloudflare Access policy, container, Garage หรือ production deployment มีสถานะเดียวกับ checkout
 
+## S1 implementation delta (2026-10-27)
+
+ตาราง audit ด้านล่างเก็บ baseline ก่อน S1 เพื่ออ้างอิง ไม่ใช่คำอธิบาย implementation ล่าสุด: routes ย้ายจาก `src/index.js` ไป `src/app.js`; SDK อยู่หลัง Storage Manager/registry/Garage Provider; download เปลี่ยนจาก `transformToByteArray()` เป็น stream พร้อม deadline/cancellation; upload ยัง buffered Auth/SQL/schema/endpoint contract เดิมยังคงอยู่ ดู [S1 report](STORAGE_PHASE_S1.md) สำหรับสถานะล่าสุด ไม่มี public capabilities/folder API เพิ่ม และยังไม่ได้ deploy
+
 ## ภาพรวม API ที่พบ
 
 - IssueDesk เป็น Cloudflare Pages Functions และมี D1 binding `DB` สำหรับ business metadata

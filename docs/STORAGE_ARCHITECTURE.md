@@ -1,6 +1,6 @@
 # Nexora Storage Architecture Proposal
 
-สถานะ: proposal สำหรับ Phase 7 เท่านั้น ยังไม่มีการ implement, migration, connection หรือเปลี่ยน Shared Storage Service
+สถานะ: Nexora architecture ยังเป็น proposal; Shared Storage S1 ได้ implement เฉพาะ service foundation ใน checkout แยกแล้ว ดู [S1 report](STORAGE_PHASE_S1.md) ยังไม่มี Nexora backend/migration/connection หรือ production deployment; หยุดรอ S2 review
 
 ## Architecture ปัจจุบันจาก source
 
@@ -31,7 +31,7 @@ Nexora Pages Functions / server API
     ├── Storage Manager: authz, registry, validation, capabilities, orchestration
     └── service-to-service auth (server secret only)
                 ▼
-        Shared Storage API v1 / Storage Manager
+        Shared Storage internal /v2 (compatible) / Storage Manager
                 ▼
           Provider Contract
              ├── Garage provider (first)
@@ -186,7 +186,7 @@ Browser
 
 ## Streaming review and Cloudflare fit
 
-The current Storage Service buffers upload and download bodies in memory (`formData` -> `arrayBuffer` -> `Buffer`, and `transformToByteArray`). IssueDesk generic upload also parses `request.formData()` before forwarding. Current source therefore is not ready for arbitrarily large files or streaming without changes in both layers.
+Before S1 the Storage Service buffered both directions. S1 now streams downloads through the Garage Provider with cancellation and a total provider deadline; upload still uses `formData` -> `arrayBuffer` -> `Buffer`. IssueDesk generic upload also parses `request.formData()` before forwarding. Upload therefore remains unsuitable for arbitrarily large files; true upload streaming needs a separately reviewed multipart parser/protocol path in both layers. See the S1 report for tested behavior and production verification limits.
 
 Target should count bytes as streams pass through and enforce limits before commit; use provider-native streaming/multipart operations and verify checksum/size at finalize. For downloads, return upstream `ReadableStream` directly with sanitized headers and handle range requests only if each provider implements them. Avoid an API design that requires a complete file in Worker heap.
 
@@ -201,7 +201,7 @@ SMB is future-only. Keep public endpoints provider-neutral and make adapters con
 1. `wrangler.jsonc`, `functions/`, `migrations/`: add a Nexora-owned D1 binding and first ordered schema only after approval; do not reuse IssueDesk database or deploy remote migrations as part of local implementation.
 2. `src/services/storage.js` plus `functions/api/storage/v1/`: typed/validated same-origin client and server routes for mounts, list/stat, folders and capabilities; consistent error envelope, session/authz and ownership.
 3. `functions/_middleware.js` or a narrowly shared auth module: Nexora session, CSRF/origin policy, request IDs, bounded error mapping; do not copy IssueDesk auth blindly.
-4. Server-only `functions/lib/storage/` registry/manager/provider contract modules; add first Garage adapter using approved Shared Storage API v1 and secrets only in server bindings.
+4. Server-only `functions/lib/storage/` registry/manager/provider contract modules; add first Garage adapter using reviewed Shared Storage internal API (existing /v2 compatibility retained) and secrets only in server bindings.
 5. `src/context/FilesProvider.jsx`, `src/hooks/useFiles.js`, file dialogs/components: replace demo operations incrementally with API state/loading/error/retry while preserving a demo mode and selection semantics until migration is complete.
 6. Upload/download/preview: implement streaming and operation lifecycle before raising upload limits; check runtime plan and upstream service; support cancellation, retries, checksum and partial cleanup.
 7. Favorites/Recent/Trash first, then shares only after access policy approval; integrate capability-driven controls.

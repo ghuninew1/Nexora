@@ -1,6 +1,6 @@
 # `/api/storage/v1/*` Contract Proposal
 
-สถานะ: ออกแบบเพื่อ review เท่านั้น ไม่ได้ implement ใน Phase 7 และไม่ใช่ endpoint ที่ deploy แล้ว
+สถานะ: Nexora-facing API proposal เท่านั้น ยังไม่ implement/deploy Shared Storage S1 เพิ่มเฉพาะ internal manager/provider โดยคง `/v2`; ไม่ได้สร้าง `/api/storage/v1/*` หรือ Shared Storage public API v1 ดู [S1 report](STORAGE_PHASE_S1.md)
 
 ## Principles
 

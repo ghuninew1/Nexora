@@ -35,7 +35,13 @@
 - Project ไม่มี root test script
 - QA ที่ยังไม่ครบตามรายการด้านบนต้องตรวจแยกก่อนสรุปว่า UI ผ่านทุก flow/viewport
 
-## งานถัดไป: Phase 8 (รอ approval)
+## Shared Storage Phase S1 — 2026-10-27
+
+S1 ได้รับอนุญาตแยกตามคำสั่งล่าสุดและ implement ใน `issuedesk/garage/storage/` เท่านั้น: app factory, Storage Manager/registry/Garage Provider, safe headers, bounded timeout/cancellation และ download stream; upload ยัง buffer ทั้งไฟล์ คง SQL ownership, app credential, logical file ID และ `/v2` responses เดิม Tests 12/12 ผ่านในพื้นที่ทดสอบชั่วคราวโดยใช้ production SQLite schema แบบ memory, fake S3 และ HTTP loopback disconnect ไม่แตะ DB/objects/secrets จริง รายละเอียด files/capabilities/security/limitations และ checks อยู่ใน [รายงาน S1](docs/STORAGE_PHASE_S1.md)
+
+หยุดรอ review/คำสั่ง **Phase S2 — Shared Storage File Manager Operations** ก่อนเริ่ม ยังไม่ deploy/ตรวจ Garage, Cloudflare Access หรือ IssueDesk end-to-end; ไม่ได้ implement Nexora backend, migrations หรือ `/api/storage/v1/*` การอนุญาต S1 ไม่ได้อนุญาต Nexora Phase 8
+
+## งานถัดไป: Phase 8 (รอ approval หลัง S1/S2)
 
 เมื่อได้รับอนุมัติ Phase 8 ให้เริ่มจาก D1/schema/auth boundary และ server-side Storage Manager/Provider Contract ตามข้อเสนอ จากนั้นจึงเพิ่ม Garage adapter และค่อยเปลี่ยน frontend ออกจาก demo state
 
