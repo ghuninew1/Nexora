@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { cx } from "../utils/cx";
 import { useFilesData } from "../context/FilesProvider";
 import { useStorage } from "../hooks/useStorage";
-import { useDemoFiles, useFiles } from "../hooks/useFiles";
+import useFiles, { useDemoFiles } from "../hooks/useFiles";
 import ThemeToggle from "../theme/ThemeToggle";
 import DemoFileGrid from "../components/files/DemoFileGrid";
 import FilePreviewDialog from "../components/files/FilePreviewDialog";

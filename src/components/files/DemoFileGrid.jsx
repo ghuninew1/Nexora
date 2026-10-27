@@ -22,7 +22,7 @@ export default function DemoFileGrid({ files, emptyTitle, emptyDescription, onOp
         </div>
         <button type="button" onClick={() => onOpen(file)} className={cx("mt-4 block min-w-0 max-w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
           <span className={cx("block truncate text-sm font-medium text-foreground")}>{file.name}</span>
-        </button>}
+        </button>
         <div className={cx("mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground")}>
           <span>{file.size ?? (file.type === "folder" ? "Folder" : "File")}</span>
           <span aria-hidden="true">·</span>
