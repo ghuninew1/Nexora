@@ -44,10 +44,10 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
       <span className={cx(view === "grid" ? "text-xs text-muted-foreground" : "hidden text-right text-sm text-muted-foreground sm:block")}>{file.size ?? "—"}</span>
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={cx(view === "grid" ? "absolute right-2 top-2" : "absolute right-2 top-2 sm:static")} aria-label={`Actions for ${file.name}`}><MoreHorizontal /></Button>} />
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-auto">
           {!isFolder && <DropdownMenuItem onClick={() => onPreview(file)}><Eye />Preview</DropdownMenuItem>}
           {!isFolder && <DropdownMenuItem disabled={!file.sourceFile} onClick={() => onDownload(file)}><Download />Download</DropdownMenuItem>}
-          <DropdownMenuItem onClick={() => onToggleFavorite(file.id)}><Star />{favorite ? "Remove from favorites" : "Add to favorites"}</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onToggleFavorite(file.id)}><Star />{favorite ? "Remove favorites" : "Add favorites"}</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onRename(file)}><Pencil />Rename</DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={() => onDelete(file)}><Trash2 />Delete</DropdownMenuItem>
         </DropdownMenuContent>
