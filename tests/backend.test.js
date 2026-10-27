@@ -608,6 +608,10 @@ test('copy preserves safe S2 error codes and classifies provider and transport f
     assert.equal(response.status, status === 502 ? 503 : status);
     assert.equal(payload.error.code, code);
     assert.ok(lines.some((line) => line.includes(`result=${diagnostic}`)));
+    if (status === 502) {
+      assert.ok(lines.some((line) => line.includes('result=upstream-http-error status=502 body=json code=PROVIDER_UNAVAILABLE')));
+      assert.ok(lines.some((line) => line.includes('result=provider-error source=upstream-code')));
+    }
     assert.doesNotMatch(lines.join('\n'), /sensitive provider internals|private_project_alpha|server-app-secret|server-access-secret/u);
   }
 
@@ -623,6 +627,21 @@ test('copy preserves safe S2 error codes and classifies provider and transport f
   assert.equal(transport.status, 503);
   assert.ok(transportLines.some((line) => line.includes('result=fetch-error type=TypeError redirect=manual')));
   assert.doesNotMatch(transportLines.join('\n'), /private network details|private_project_alpha|server-app-secret/u);
+});
+
+test('copy distinguishes non-JSON upstream 502 from a Shared Storage provider error body', async () => {
+  const lines = [];
+  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
+    logger: { warn(line) { lines.push(line); } },
+    fetchImpl: async (url) => new URL(url).pathname.endsWith('/capabilities')
+      ? Response.json({ success: true, capabilities: { copy: true } })
+      : new Response('<html>private gateway detail</html>', { status: 502, headers: { 'Content-Type': 'text/html' } }),
+  });
+  assert.equal(response.status, 503);
+  assert.ok(lines.includes('[storage-upstream] operation=copy result=upstream-http-error status=502 body=other code=unknown'));
+  assert.ok(lines.includes('[storage-upstream] operation=copy result=provider-error source=http-status'));
+  assert.doesNotMatch(lines.join('\n'), /private gateway detail|private_project_alpha|server-app-secret/u);
 });
 
 test('copy classifies timeout and malformed successful responses without exposing upstream data', async () => {

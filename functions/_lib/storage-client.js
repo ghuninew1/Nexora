@@ -9,6 +9,11 @@ const CAPABILITY_BINDING_NAMES = [
 ];
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_TRUSTED_REDIRECTS = 3;
+const SAFE_UPSTREAM_ERROR_CODES = new Set([
+  'UNAUTHENTICATED', 'FORBIDDEN', 'NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT',
+  'CAPABILITY_UNAVAILABLE', 'UPLOAD_TOO_LARGE', 'OPERATION_TOO_LARGE', 'QUOTA_EXCEEDED',
+  'TRANSFER_INCOMPLETE', 'PROVIDER_UNAVAILABLE', 'INTERNAL_ERROR',
+]);
 
 function diagnostic(logger, operation, message) {
   if (!['capabilities', 'copy'].includes(operation)) return;
@@ -164,9 +169,13 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
         const payload = await readBoundedJson(result.response);
         const code = normalizeUpstreamError(payload, result.response.status);
         if (result.operation === 'copy') {
-          diagnostic(logger, result.operation, `result=upstream-http-error status=${result.response.status}`);
+          const rawCode = payload?.error?.code;
+          const upstreamCode = SAFE_UPSTREAM_ERROR_CODES.has(rawCode) ? rawCode : 'unknown';
+          const contentType = (result.response.headers.get('Content-Type') || '').split(';', 1)[0].trim().toLowerCase();
+          const bodyType = contentType === 'application/json' || contentType.endsWith('+json') ? 'json' : 'other';
+          diagnostic(logger, result.operation, `result=upstream-http-error status=${result.response.status} body=${bodyType} code=${upstreamCode}`);
           diagnostic(logger, result.operation, code === 'PROVIDER_UNAVAILABLE'
-            ? 'result=provider-error'
+            ? `result=provider-error source=${upstreamCode === 'PROVIDER_UNAVAILABLE' ? 'upstream-code' : 'http-status'}`
             : `result=operation-error code=${code}`);
         } else diagnostic(logger, result.operation, `result=http-error status=${result.response.status}`);
         throw new ApiError(code, statusFor(code));

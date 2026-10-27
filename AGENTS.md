@@ -25,7 +25,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
 - `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`: remote File Browser list/navigation/create-folder UI and isolated demo domain state for other workspace views.
-- `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, and value-free capability-upstream diagnostics with manual same-origin redirect policy.
+- `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, and value-free capability/Copy-upstream diagnostics with manual trusted-origin redirect policy.
 - `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata.
 - `scripts/create-admin.mjs`: local-only first-admin provisioning via Wrangler `--local`.
 - `scripts/create-admin-remote.mjs`, `scripts/create-storage-mount-remote.mjs`: explicit production-only provisioning commands; both target `nexora-db` using Wrangler `--remote`.
