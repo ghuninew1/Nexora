@@ -2,11 +2,14 @@
 
 อัปเดตล่าสุด: 2026-10-27
 
-เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.3; แยกผล local validation ออกจากสถานะ remote ที่ operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลัง Phase 9.3.1; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
 - Phase 1–6 เสร็จในขอบเขต frontend/demo: Liquid Glass foundation, app shell, File Browser และหน้า Dashboard, Recent, Favorites, Shared, Trash, Storage, Settings
+- Phase 9.3 production operations และ Copy fix ผ่านตามที่ผู้ใช้ยืนยันใน brief วันที่ 2026-10-27; ไม่ได้ deploy หรือทดสอบ production ซ้ำใน Phase 9.3.1
+- Codex workflow: [Nexora project skill](.agents/skills/nexora-project/SKILL.md); `AGENTS.md` remains the detailed source for repository rules.
+- Phase 9.3.1 เพิ่ม bounded in-memory listing cache, stale-while-revalidate, cursor-aware dedupe, metadata breadcrumbs และ selective mutation invalidation. Final validation: `pnpm lint` passed; `pnpm test` 81/81; `pnpm build` passed; `git diff --check` passed. Local File Browser rendering was blocked at the auth gate because the local auth API is unavailable; no production endpoint or deploy was used.
 - Phase 6 เพิ่ม labels/focus, keyboard/touch behavior, duplicate-name validation, responsive breadcrumbs, progressbar semantics และ reduced-motion support
 - Phase 7: `pnpm lint` และ `pnpm build` ผ่านหลังแก้ lint errors/warnings ใน preview lifecycle, FilesProvider restore helper และ hook dependencies
 - Browser: ตรวจ route `/dashboard`, `/files`, `/recent`, `/favorites`, `/shared`, `/trash`, `/storage`, `/settings` และ unknown route ใน in-app browser ขนาดแคบประมาณ 576 px; ยืนยัน mobile navigation menu, search, list/grid, folder/breadcrumb, create folder, move to Trash, restore, preview sample state, theme Light/Dark/System, Tab focus ring และปิด preview dialog ได้
@@ -78,9 +81,13 @@ Dashboard, Recent, Favorites, Shared, Trash และ local demo operations rema
 
 File Browser adds capability-gated upload, streamed download, rename, move and copy through `/api/storage/v1/*`. The client sends only Nexora mount and logical object IDs; server derives the owner-scoped Shared Storage project and checks capabilities/readOnly before mutations. Upload queue runs at most two real transfers and reports state without fabricated byte progress. Rename/move retain IDs; copy returns new IDs and finishes synchronously under the Shared Storage S2 100-object limit. Folder destinations load lazily. Delete/Trash/restore/permanent delete, preview, bulk operations, SMB and Phase 9.4 are out of scope.
 
-Production smoke results reported by the user: upload/download/rename/move pass; Copy fails with `PROVIDER_UNAVAILABLE`. The supplied Copy trace confirms D1 mount resolution and capability check pass, then Nexora receives HTTP 502 from the configured upstream; this rules out Nexora fetch exception/timeout and its redirect-follow branch for that attempt. The `result=provider-error` label currently means the upstream status/body normalized to provider unavailable; it does not reveal whether the 502 is a Shared Storage JSON error or an edge response. Source audit confirms Nexora sends `POST /v3/projects/:projectId/objects/:objectId/copy` with JSON `{parentId}` and server-only auth. Copy now follows only same-origin 307/308 while preserving method/body, but that is not the branch seen in the supplied trace. New diagnostics log only content-type class and an allowlisted upstream error code (never body text, IDs, URLs, headers or secrets), to distinguish an S2 `PROVIDER_UNAVAILABLE` from an unrecognized gateway 502 after redeploy.
+At the time this phase report was written, production Copy returned `PROVIDER_UNAVAILABLE`; the supplied trace and source audit below describe that historical incident and remediation. A later user-provided brief dated 2026-10-27 confirms the Copy provider issue was fixed and verified in production along with upload/download/rename/move. The later confirmation supersedes the incident status; this checkout did not independently access production.
 
-The Shared Storage S2 source implements copy synchronously: it validates source/destination and duplicate name, then copies file bytes through Garage Get → Put → Head → Get/checksum, then commits new logical IDs. Missing source/destination, duplicate names, oversized trees and database failures have distinct safe codes. Unknown Garage S3 failures normalize to `PROVIDER_UNAVAILABLE`; the source code alone cannot identify which Garage request failed in production. The full S2 `pnpm test` suite passed 27/27 and includes copy coverage for copied bytes, new IDs, source retention and nested folder copy. Nexora final validation passed: `pnpm lint`, `pnpm test` (74/74), `pnpm build`, and `git diff --check`. Browser mock QA had the prior isolated sign-in 500; no production deploy or data changes were made. Do not mark Phase 9.3 complete until the production Copy stop conditions in [docs/PHASE_9_3.md](docs/PHASE_9_3.md) pass.
+The Shared Storage S2 source implements copy synchronously: it validates source/destination and duplicate name, then copies file bytes through Garage Get → Put → Head → Get/checksum, then commits new logical IDs. Missing source/destination, duplicate names, oversized trees and database failures have distinct safe codes. Unknown Garage S3 failures normalize to `PROVIDER_UNAVAILABLE`; the source code alone cannot identify which Garage request failed in production. The full S2 `pnpm test` suite passed 27/27 and includes copy coverage for copied bytes, new IDs, source retention and nested folder copy. At the time, Nexora local validation passed `pnpm lint`, `pnpm test` (74/74), `pnpm build`, and `git diff --check`; browser mock QA had the prior isolated sign-in 500. See [docs/PHASE_9_3.md](docs/PHASE_9_3.md) for the historical incident and operator confirmation note.
+
+## Phase 9.3.1 — File Browser Performance & Caching
+
+`src/utils/remote-files-cache.js` owns session-memory listing and public breadcrumb metadata caches. Keys scope each logical folder by Nexora storage ID; root is explicit. Cache lifetime is 20 seconds, bounded to 60 listing folders with LRU eviction and up to 600 metadata entries per mount. Fresh entries render without network calls; stale entries render immediately and revalidate. First-page revalidation retains loaded cursor pages only if the first cursor remains stable. Request dedupe includes cursor; generation checks keep late results from replacing the active folder while allowing safe results to populate cache. Auth/user/storage changes clear the cache and abort its in-flight requests. Create/upload/rename/move/copy invalidate affected parents; upload refresh is coalesced over 120 ms. No provider data or binary is cached. See [docs/PHASE_9_3_1.md](docs/PHASE_9_3_1.md) for implementation policy and QA status.
 
 ## Acceptance criteria ก่อนเรียกว่าเชื่อม Storage จริง
 
@@ -116,7 +123,7 @@ The Shared Storage S2 source implements copy synchronously: it validates source/
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md` และ `docs/PHASE_9_3.md`, จากนั้นตรวจ `git status --short`. Phase 9.3 upload/download/rename/move ผ่าน production ตามผู้ใช้รายงาน แต่ Copy ยังไม่ผ่านและ root cause production ยังต้องยืนยันจาก safe logs หลัง deploy. ห้ามเริ่ม Preview, Phase 9.3.1 หรือ Phase 9.4.
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, `docs/PHASE_9_2.md`, `docs/PHASE_9_3.md` และ `docs/PHASE_9_3_1.md`, จากนั้นตรวจ `git status --short`. Phase 9.3.1 source และ unit tests เสร็จ; ก่อน release ให้รัน lint/test/build/diff และทำ browser/Network QA ตาม checklist. Phase 9.3 production success เป็นข้อมูลที่ผู้ใช้ยืนยัน; รอบนี้ไม่ได้ deploy. ห้ามเริ่ม Preview, Trash/Restore หรือ Phase 9.4.
 
 ## กติกาการดูแลเอกสาร
 

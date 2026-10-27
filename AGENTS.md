@@ -12,7 +12,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
-- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy. Dashboard, Recent, Favorites, Shared, Trash and their fixtures remain demo-only.
+- Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory listing cache. Dashboard, Recent, Favorites, Shared, Trash and their fixtures remain demo-only.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
 
 ## Project map
@@ -24,7 +24,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/context/FilesProvider.jsx`, `src/context/files-context.js`: in-memory demo state plus remote File Browser state context.
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, Shared, Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
-- `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`: remote File Browser list/navigation/create-folder UI and isolated demo domain state for other workspace views.
+- `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`, `src/utils/remote-files-cache.js`: remote File Browser list/navigation/create-folder UI, bounded session cache and isolated demo domain state for other workspace views.
 - `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, and value-free capability/Copy-upstream diagnostics with manual trusted-origin redirect policy.
 - `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata.
 - `scripts/create-admin.mjs`: local-only first-admin provisioning via Wrangler `--local`.
@@ -43,10 +43,12 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/PHASE_8_5.md`: frontend auth routes, session lifecycle, security review, validation, and manual production smoke test.
 - `docs/PHASE_9_1.md`: storage client/provider, safe mount bootstrap, capability/usage state, validation, production smoke test, and Phase 9.2 boundary.
 - `docs/PHASE_9_3.md`: real file operations, current Copy production incident, safe diagnostics, validation, and deployment smoke checklist.
+- `docs/PHASE_9_3_1.md`: source-derived listing latency path, in-memory cache policy, invalidation, tests, and browser/production QA checklist.
 - `docs/PHASE_9_2.md`: real File Browser listing, folder navigation, create-folder scope, local validation, QA and production boundary.
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
 - `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: Shared Storage implementation in the separate IssueDesk checkout. The historical S2 report predates the Phase 9.1 brief's operator-reported production deployment; Nexora must not infer live state from source docs.
 - `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2, Phase 8 backend, Phase 8.5 frontend auth, and remaining Phase 9 scope.
+- `.agents/skills/nexora-project/SKILL.md`: project-scoped Codex workflow, supplementing the detailed repository rules here.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
 
@@ -90,6 +92,7 @@ Check this map against actual files when changing the architecture; update READM
 - Trash restore/permanent delete in the workspace remain local demo operations; label them clearly and confirm permanent deletion. Connected File Browser delete/Trash is not implemented.
 - Shared entries are illustrative fixture metadata. Do not claim that Nexora creates shares, permissions, or access links until a reviewed server API exists.
 - Storage status comes from the authenticated Nexora storage API; usage/capacity must say unavailable or not reported unless authoritative metrics are returned. Never present fixture totals as live provider usage.
+- File Browser listing cache is session-scoped in memory, keyed by storage plus logical parent (with an explicit root identity), bounded to 60 folders, and stale after 20 seconds. Keep request dedupe cursor-specific, clear on auth/storage scope changes, and selectively invalidate affected parents after mutations. Never cache bytes or provider internals.
 - Do not claim preview is available in the connected File Browser or for entries without source bytes. Upload/download are available only through capability-gated connected Storage operations; demo entries still have no source bytes.
 
 ## Dependencies and commands

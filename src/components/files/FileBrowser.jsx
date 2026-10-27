@@ -67,6 +67,7 @@ function FileBrowser() {
           <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Trash and preview are unavailable</span>
         </div>
         {browser.notice && <p className={cx("rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite">{browser.notice}</p>}
+        {browser.revalidationError && <div className={cx("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><span>{browser.revalidationError}</span><Button type="button" variant="ghost" size="sm" onClick={() => void browser.refreshCurrentFolder()}>Refresh</Button></div>}
         <FileToolbar
           selectedCount={selectedCount}
           onNewFolder={() => setNewFolderOpen(true)}

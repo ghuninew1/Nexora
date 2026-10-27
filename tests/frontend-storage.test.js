@@ -21,6 +21,7 @@ import {
   StorageApiError,
 } from '../src/services/storage.js';
 import { appendBreadcrumb, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../src/utils/storage-files.js';
+import { FOLDER_LIST_CACHE_TTL_MS, MAX_FOLDER_CACHE_ENTRIES, RemoteFilesCache } from '../src/utils/remote-files-cache.js';
 
 const mount = {
   storageId: 'mount_123',
@@ -346,4 +347,117 @@ test('folder breadcrumbs use logical IDs and reject route state from another sto
   assert.equal(normalizeFileBrowserRouteState(routeState, 'mount_other', 'folder_b'), null);
   assert.equal(normalizeFileBrowserRouteState(routeState, 'mount_123', 'folder_c'), null);
   assert.equal(normalizeFileBrowserRouteState({ ...routeState, breadcrumbs: [...nestedPath, nestedPath[1]] }, 'mount_123', 'folder_a'), null);
+});
+
+function listingItem(objectId, parentId, name = objectId, type = 'folder') {
+  return { objectId, parentId, name, type, sizeBytes: null, mimeType: null, createdAt: null, modifiedAt: null };
+}
+
+test('folder cache scopes root and folders by storage and returns a fresh listing without fetching', async () => {
+  let now = 1_000;
+  const cache = new RemoteFilesCache({ now: () => now });
+  const page = { items: [listingItem('folder_a', null, 'Projects')], nextCursor: null };
+  let calls = 0;
+  await cache.fetchPage('mount_a', null, null, async () => { calls += 1; return page; });
+  assert.deepEqual(cache.get('mount_a', null).items, page.items);
+  assert.equal(cache.isFresh(cache.get('mount_a', null)), true);
+  assert.equal(cache.get('mount_b', null), null);
+  assert.equal(cache.get('mount_a', 'folder_a'), null);
+  now += FOLDER_LIST_CACHE_TTL_MS;
+  assert.equal(cache.isFresh(cache.get('mount_a', null)), false);
+  assert.equal(calls, 1);
+});
+
+test('same-folder and same-cursor requests share one in-flight fetch', async () => {
+  const cache = new RemoteFilesCache();
+  let calls = 0;
+  let resolveRequest;
+  const loader = () => {
+    calls += 1;
+    return new Promise((resolve) => { resolveRequest = resolve; });
+  };
+  const first = cache.fetchPage('mount_a', 'folder_a', 'cursor_1', loader);
+  const second = cache.fetchPage('mount_a', 'folder_a', 'cursor_1', loader);
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  resolveRequest({ items: [listingItem('file_a', 'folder_a', 'A.txt', 'file')], nextCursor: null });
+  assert.deepEqual(await first, await second);
+  assert.equal(cache.get('mount_a', 'folder_a').items.length, 1);
+});
+
+test('different cursors for the same folder never share an in-flight request', async () => {
+  const cache = new RemoteFilesCache();
+  let calls = 0;
+  const resolvers = [];
+  const loader = () => {
+    calls += 1;
+    return new Promise((resolve) => resolvers.push(resolve));
+  };
+  const first = cache.fetchPage('mount_a', 'folder_a', 'cursor_1', loader);
+  const second = cache.fetchPage('mount_a', 'folder_a', 'cursor_2', loader);
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  resolvers[0]({ items: [listingItem('file_a', 'folder_a', 'A.txt', 'file')], nextCursor: 'cursor_2' });
+  resolvers[1]({ items: [listingItem('file_b', 'folder_a', 'B.txt', 'file')], nextCursor: null });
+  await Promise.all([first, second]);
+  assert.deepEqual(cache.get('mount_a', 'folder_a').items.map((item) => item.objectId), ['file_a', 'file_b']);
+});
+
+test('pagination keeps cursor pages when the first-page anchor is stable and resets when it changes', () => {
+  let now = 1;
+  const cache = new RemoteFilesCache({ now: () => now });
+  cache.setPage('mount_a', null, null, { items: [listingItem('folder_a', null)], nextCursor: 'cursor_1' });
+  cache.setPage('mount_a', null, 'cursor_1', { items: [listingItem('folder_b', null)], nextCursor: 'cursor_2' });
+  assert.deepEqual(cache.get('mount_a', null).items.map((item) => item.objectId), ['folder_a', 'folder_b']);
+  now += 1;
+  cache.setPage('mount_a', null, null, { items: [listingItem('folder_a', null, 'Renamed')], nextCursor: 'cursor_1' });
+  assert.deepEqual(cache.get('mount_a', null).items.map((item) => item.name), ['Renamed', 'folder_b']);
+  cache.setPage('mount_a', null, null, { items: [listingItem('folder_a', null, 'Latest')], nextCursor: 'cursor_new' });
+  assert.deepEqual(cache.get('mount_a', null).items.map((item) => item.objectId), ['folder_a']);
+  assert.equal(cache.get('mount_a', null).nextCursor, 'cursor_new');
+});
+
+test('cache exposes only known logical breadcrumb metadata and isolates metadata by storage', () => {
+  const cache = new RemoteFilesCache();
+  cache.rememberObjects('mount_a', [
+    listingItem('folder_a', null, 'Projects'),
+    listingItem('folder_b', 'folder_a', 'Nexora'),
+  ]);
+  assert.deepEqual(cache.getBreadcrumbs('mount_a', 'folder_b', rootBreadcrumbs()[0]), [
+    { objectId: null, label: 'My Files' },
+    { objectId: 'folder_a', label: 'Projects' },
+    { objectId: 'folder_b', label: 'Nexora' },
+  ]);
+  assert.equal(cache.getBreadcrumbs('mount_b', 'folder_b', rootBreadcrumbs()[0]), null);
+  assert.equal(cache.getBreadcrumbs('mount_a', 'unknown', rootBreadcrumbs()[0]), null);
+});
+
+test('cache invalidation and clear remove listings, metadata and prevent late requests from repopulating after logout', async () => {
+  const cache = new RemoteFilesCache();
+  cache.setPage('mount_a', null, null, { items: [listingItem('folder_a', null)], nextCursor: null });
+  cache.setPage('mount_a', 'folder_a', null, { items: [listingItem('folder_b', 'folder_a')], nextCursor: null });
+  cache.invalidate('mount_a', null);
+  assert.equal(cache.get('mount_a', null), null);
+  assert.notEqual(cache.get('mount_a', 'folder_a'), null);
+
+  let resolveRequest;
+  const pending = cache.fetchPage('mount_a', null, null, () => new Promise((resolve) => { resolveRequest = resolve; }));
+  await Promise.resolve();
+  cache.clear();
+  resolveRequest({ items: [listingItem('folder_c', null)], nextCursor: null });
+  await pending;
+  assert.equal(cache.get('mount_a', null), null);
+  assert.equal(cache.getBreadcrumbs('mount_a', 'folder_a', rootBreadcrumbs()[0]), null);
+});
+
+test('folder cache uses a bounded least-recently-used entry count', () => {
+  const cache = new RemoteFilesCache({ maxEntries: 2 });
+  cache.setPage('mount_a', null, null, { items: [], nextCursor: null });
+  cache.setPage('mount_a', 'folder_a', null, { items: [], nextCursor: null });
+  cache.get('mount_a', null);
+  cache.setPage('mount_a', 'folder_b', null, { items: [], nextCursor: null });
+  assert.equal(cache.get('mount_a', null) !== null, true);
+  assert.equal(cache.get('mount_a', 'folder_a'), null);
+  assert.equal(cache.get('mount_a', 'folder_b') !== null, true);
+  assert.equal(MAX_FOLDER_CACHE_ENTRIES, 60);
 });

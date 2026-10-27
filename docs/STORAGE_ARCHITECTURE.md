@@ -1,8 +1,10 @@
 # Nexora Storage Architecture Proposal
 
-สถานะ: Nexora architecture proposal has a local Phase 8 implementation. Pages Functions, D1 schema, session auth, owner-scoped mount model and `/api/storage/v1/*` are implemented and locally validated. Production D1/secrets/Access/Storage mount/deployment remain unconfigured. Shared Storage S2 migration remains unapplied to its runtime.
+สถานะ: This architecture proposal captured the Phase 8 implementation boundary. A user-provided Phase 9.3 brief dated 2026-10-27 later confirms Nexora production Storage operations and the Shared Storage Copy fix were verified. This repository does not independently verify current production bindings, migrations or deployment state; consult the phase reports for their dated evidence.
 
 ## Architecture ปัจจุบันจาก source
+
+Nexora File Browser frontend now keeps a bounded in-memory cache of normalized public listings for the authenticated app session. Cache keys include public `storageId` plus logical `parentId` (root has a dedicated sentinel); the cache is not part of the provider contract and never holds provider references or object bytes. See [Phase 9.3.1](PHASE_9_3_1.md) for TTL, pagination, invalidation, and QA policy.
 
 ```text
 IssueDesk browser

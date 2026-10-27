@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useStorage } from './useStorage';
@@ -17,6 +17,7 @@ import {
 } from '../services/storage';
 import { appendBreadcrumb, isValidObjectId, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../utils/storage-files';
 import useUploadQueue from './useUploadQueue';
+import { RemoteFilesCache } from '../utils/remote-files-cache';
 
 const EMPTY_BROWSER_STATE = {
   storageId: null,
@@ -27,6 +28,7 @@ const EMPTY_BROWSER_STATE = {
   error: null,
   paginationStatus: 'idle',
   paginationError: null,
+  revalidationError: null,
 };
 
 function routeStateFor(storageId, breadcrumbs, notice = null) {
@@ -53,20 +55,25 @@ export default function useRemoteFilesState() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { status: storageStatus, activeStorage, capabilities, error: storageError } = useStorage();
-  const { expireSession } = useAuth();
+  const { expireSession, status: authStatus, user } = useAuth();
   const [browserState, setBrowserState] = useState(EMPTY_BROWSER_STATE);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [mutatingIds, setMutatingIds] = useState(() => new Set());
   const [operationFeedback, setOperationFeedback] = useState(null);
   const [notice, setNotice] = useState('');
-  const listControllerRef = useRef(null);
-  const paginationControllerRef = useRef(null);
   const createControllerRef = useRef(null);
   const generationRef = useRef(0);
   const previousStorageIdRef = useRef(null);
   const currentListingRef = useRef(null);
   const loadFirstPageRef = useRef(null);
   const operationControllersRef = useRef(new Map());
+  const cacheRef = useRef(null);
+  if (!cacheRef.current) cacheRef.current = new RemoteFilesCache();
+  const previousCacheScopeRef = useRef({ storageId: null, userEmail: null, authStatus: null });
+  const currentAuthScopeRef = useRef({ authStatus, userEmail: user?.email ?? null });
+  const uploadRefreshTimerRef = useRef(null);
+  const listingTimingRef = useRef(null);
+  currentAuthScopeRef.current = { authStatus, userEmail: user?.email ?? null };
   const requestedFolderId = searchParams.get('folder');
   const storageId = activeStorage?.storageId ?? null;
   const isFilesRoute = location.pathname === '/files';
@@ -75,21 +82,56 @@ export default function useRemoteFilesState() {
     routeState,
     storageId,
     requestedFolderId,
-  ), [routeState, storageId, requestedFolderId]);
+  ) ?? (storageId && requestedFolderId
+    ? cacheRef.current.getBreadcrumbs(storageId, requestedFolderId, rootBreadcrumbs()[0])
+    : null), [routeState, storageId, requestedFolderId]);
   const validFolderId = requestedFolderId === null
     || (isValidObjectId(requestedFolderId) && Boolean(routeBreadcrumbs));
   const folderId = validFolderId && storageId ? requestedFolderId : null;
   const breadcrumbs = routeBreadcrumbs ?? rootBreadcrumbs();
-  const displayState = browserState.storageId === storageId && browserState.folderId === folderId
+  const cachedListing = storageId ? cacheRef.current.get(storageId, folderId) : null;
+  const displayState = useMemo(() => browserState.storageId === storageId && browserState.folderId === folderId
+    && (cachedListing || ['loading', 'refreshing', 'error'].includes(browserState.status))
     ? browserState
-    : EMPTY_BROWSER_STATE;
+    : cachedListing
+      ? { ...EMPTY_BROWSER_STATE, storageId, folderId, items: cachedListing.items,
+        nextCursor: cachedListing.nextCursor, status: cachedListing.items.length ? 'ready' : 'empty' }
+      : EMPTY_BROWSER_STATE, [browserState, storageId, folderId, cachedListing]);
   currentListingRef.current = { storageId, folderId, isFilesRoute };
+
+  useLayoutEffect(() => {
+    const timing = listingTimingRef.current;
+    if (!import.meta.env.DEV || !timing || timing.storageId !== browserState.storageId
+      || timing.folderId !== browserState.folderId || !['ready', 'empty'].includes(browserState.status)) return;
+    listingTimingRef.current = null;
+    console.debug('[nexora:file-list]', {
+      requestMs: Math.round(timing.requestMs),
+      responseToCommitMs: Math.round(performance.now() - timing.responseAt),
+      firstPage: true,
+      itemCount: browserState.items.length,
+    });
+  }, [browserState]);
+
+  useEffect(() => {
+    const previous = previousCacheScopeRef.current;
+    const nextUserEmail = authStatus === 'authenticated' ? user?.email ?? null : null;
+    if (previous.authStatus !== null && (authStatus !== 'authenticated'
+      || previous.userEmail !== nextUserEmail
+      || (previous.storageId && storageId && previous.storageId !== storageId))) {
+      cacheRef.current.clear();
+      setBrowserState(EMPTY_BROWSER_STATE);
+    }
+    previousCacheScopeRef.current = { storageId, userEmail: nextUserEmail, authStatus };
+  }, [authStatus, user?.email, storageId]);
+
+  useEffect(() => () => {
+    if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current);
+    cacheRef.current.clear();
+  }, []);
 
   useEffect(() => {
     if (!isFilesRoute || storageStatus !== 'ready' || !storageId) return;
     if (previousStorageIdRef.current !== null && previousStorageIdRef.current !== storageId) {
-      listControllerRef.current?.abort();
-      paginationControllerRef.current?.abort();
       createControllerRef.current?.abort();
       generationRef.current += 1;
       previousStorageIdRef.current = storageId;
@@ -102,8 +144,6 @@ export default function useRemoteFilesState() {
 
   useEffect(() => {
     if (!isFilesRoute || storageStatus !== 'ready' || !storageId || validFolderId) return;
-    listControllerRef.current?.abort();
-    paginationControllerRef.current?.abort();
     generationRef.current += 1;
     setNotice('That folder link could not be verified. Showing My Files.');
     setSearchParams({}, { replace: true, state: routeStateFor(
@@ -113,38 +153,51 @@ export default function useRemoteFilesState() {
     ) });
   }, [isFilesRoute, storageStatus, storageId, validFolderId, setSearchParams]);
 
-  const loadFirstPage = useCallback(async ({ refreshing = false } = {}) => {
+  const loadFirstPage = useCallback(async ({ refreshing = false, force = false } = {}) => {
     if (!storageId || storageStatus !== 'ready') return false;
-    listControllerRef.current?.abort();
-    paginationControllerRef.current?.abort();
-    const controller = new AbortController();
-    listControllerRef.current = controller;
     const generation = ++generationRef.current;
-    const isCurrent = () => !controller.signal.aborted && generationRef.current === generation;
-    if (refreshing) {
+    const isCurrent = () => generationRef.current === generation;
+    const cached = cacheRef.current.get(storageId, folderId);
+    if (cached && !force) {
+      setBrowserState({
+        storageId, folderId, items: cached.items, nextCursor: cached.nextCursor,
+        status: cached.items.length ? (cacheRef.current.isFresh(cached) ? 'ready' : 'refreshing') : (cacheRef.current.isFresh(cached) ? 'empty' : 'refreshing'),
+        error: null, paginationStatus: 'idle', paginationError: null, revalidationError: null,
+      });
+      if (cacheRef.current.isFresh(cached)) return true;
+    } else if (refreshing || cached) {
       setBrowserState((current) => current.storageId === storageId && current.folderId === folderId
-        ? { ...current, status: 'refreshing', error: null, paginationStatus: 'idle', paginationError: null }
+        ? { ...current, status: 'refreshing', error: null, revalidationError: null,
+          paginationStatus: 'idle', paginationError: null }
         : current);
     }
 
     try {
-      const page = await listStorageObjects(storageId, { parentId: folderId, limit: 50, signal: controller.signal });
+      const requestStartedAt = performance.now();
+      const page = await cacheRef.current.fetchPage(storageId, folderId, null, (signal) => listStorageObjects(
+        storageId, { parentId: folderId, limit: 50, signal },
+      ));
+      const responseAt = performance.now();
       if (!isCurrent()) return false;
+      const result = cacheRef.current.get(storageId, folderId);
+      listingTimingRef.current = { storageId, folderId, requestMs: responseAt - requestStartedAt, responseAt };
       setBrowserState({
         storageId,
         folderId,
-        items: page.items,
-        nextCursor: page.nextCursor,
-        status: page.items.length === 0 ? 'empty' : 'ready',
+        items: result?.items ?? page.items,
+        nextCursor: result?.nextCursor ?? page.nextCursor,
+        status: (result?.items ?? page.items).length === 0 ? 'empty' : 'ready',
         error: null,
         paginationStatus: 'idle',
         paginationError: null,
+        revalidationError: null,
       });
       setNotice('');
       return true;
     } catch (error) {
-      if (!isCurrent()) return false;
+      if (!isCurrent() || error?.name === 'AbortError') return false;
       if (error instanceof StorageApiError && error.status === 401) {
+        cacheRef.current.clear();
         expireSession();
         return false;
       }
@@ -153,7 +206,13 @@ export default function useRemoteFilesState() {
         setSearchParams({}, { replace: true, state: routeStateFor(storageId, rootBreadcrumbs(), 'That folder is no longer available. Showing My Files.') });
         return false;
       }
-      setBrowserState({
+      const stillCached = cacheRef.current.get(storageId, folderId);
+      setBrowserState(stillCached ? {
+        storageId, folderId, items: stillCached.items, nextCursor: stillCached.nextCursor,
+        status: stillCached.items.length ? 'ready' : 'empty', error: null,
+        paginationStatus: 'idle', paginationError: null,
+        revalidationError: 'Could not refresh this folder. Showing saved results.',
+      } : {
         storageId,
         folderId,
         items: [],
@@ -162,6 +221,7 @@ export default function useRemoteFilesState() {
         error: error instanceof Error ? error.message : 'Storage is temporarily unavailable. Try again.',
         paginationStatus: 'idle',
         paginationError: null,
+        revalidationError: null,
       });
       return false;
     }
@@ -169,10 +229,20 @@ export default function useRemoteFilesState() {
 
   loadFirstPageRef.current = loadFirstPage;
 
-  const refreshAfterUpload = useCallback((task) => {
+  const refreshAfterUpload = useCallback((task, result) => {
+    if (currentAuthScopeRef.current.authStatus !== 'authenticated') return;
+    cacheRef.current.invalidate(task.storageId, task.parentId);
+    if (result?.file) cacheRef.current.rememberObjects(task.storageId, [result.file]);
     const current = currentListingRef.current;
     if (current?.isFilesRoute && current.storageId === task.storageId && current.folderId === task.parentId) {
-      void loadFirstPageRef.current?.({ refreshing: true });
+      setBrowserState((state) => state.storageId === task.storageId && state.folderId === task.parentId
+        ? { ...state, status: 'refreshing', revalidationError: null }
+        : state);
+      if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current);
+      uploadRefreshTimerRef.current = setTimeout(() => {
+        uploadRefreshTimerRef.current = null;
+        void loadFirstPageRef.current?.({ refreshing: true, force: true });
+      }, 120);
     }
   }, []);
   const uploadQueue = useUploadQueue({
@@ -207,7 +277,7 @@ export default function useRemoteFilesState() {
     });
   }, [canUseCapability, addFiles, storageId, folderId, capabilities]);
 
-  const runObjectOperation = useCallback(async ({ file, capability, refreshFolderId, successMessage, run }) => {
+  const runObjectOperation = useCallback(async ({ file, capability, affectedFolders, successMessage, run, onResult }) => {
     if (!canUseCapability(capability)) return { error: 'FORBIDDEN' };
     if (operationControllersRef.current.has(file.objectId)) return { error: 'IN_PROGRESS' };
     const controller = new AbortController();
@@ -218,11 +288,13 @@ export default function useRemoteFilesState() {
     try {
       const result = await run(controller.signal);
       if (controller.signal.aborted) return { error: 'CANCELLED' };
+      for (const parentId of affectedFolders ?? []) cacheRef.current.invalidate(operationStorageId, parentId);
+      onResult?.(result);
       setOperationFeedback({ type: 'success', message: successMessage });
       const current = currentListingRef.current;
       if (current?.isFilesRoute && current.storageId === operationStorageId
-        && current.folderId === refreshFolderId) {
-        await loadFirstPageRef.current?.({ refreshing: true });
+        && (affectedFolders ?? []).includes(current.folderId)) {
+        await loadFirstPageRef.current?.({ refreshing: true, force: true });
       }
       return { ok: true, result };
     } catch (error) {
@@ -248,46 +320,70 @@ export default function useRemoteFilesState() {
     return runObjectOperation({
       file,
       capability: 'rename',
-      refreshFolderId: folderId,
+      affectedFolders: [file.parentId ?? null],
       successMessage: 'Renamed successfully.',
       run: (signal) => renameStorageObject(storageId, file.objectId, name.trim(), { signal }),
+      onResult: (object) => {
+        cacheRef.current.rememberObjects(storageId, [object]);
+        const current = location.state?.fileBrowser;
+        if (current?.storageId === storageId && current.breadcrumbs?.some((item) => item.objectId === object.objectId)) {
+          const next = { ...current, breadcrumbs: current.breadcrumbs.map((item) => item.objectId === object.objectId ? { ...item, label: object.name } : item) };
+          setSearchParams(searchParams, { replace: true, state: { ...location.state, fileBrowser: next } });
+        }
+      },
     });
-  }, [runObjectOperation, storageId, folderId]);
+  }, [runObjectOperation, storageId, location.state, searchParams, setSearchParams]);
 
   const moveObject = useCallback((file, parentId) => runObjectOperation({
     file,
     capability: 'move',
-    refreshFolderId: folderId,
+    affectedFolders: [file.parentId ?? null, parentId ?? null],
     successMessage: 'Moved successfully.',
     run: (signal) => moveStorageObject(storageId, file.objectId, parentId, { signal }),
-  }), [runObjectOperation, storageId, folderId]);
+    onResult: (object) => cacheRef.current.rememberObjects(storageId, [object]),
+  }), [runObjectOperation, storageId]);
 
   const copyObject = useCallback((file, parentId) => runObjectOperation({
     file,
     capability: 'copy',
-    refreshFolderId: parentId,
+    affectedFolders: [parentId ?? null],
     successMessage: 'Copied successfully.',
     run: (signal) => copyStorageObject(storageId, file.objectId, parentId, { signal }),
+    onResult: (result) => cacheRef.current.rememberObjects(storageId, [result.object]),
   }), [runObjectOperation, storageId]);
 
   const downloadObject = useCallback((file) => runObjectOperation({
     file,
     capability: 'download',
-    refreshFolderId: undefined,
+    affectedFolders: [],
     successMessage: `Downloading ${file.name}.`,
     run: (signal) => startStorageObjectDownload(storageId, file.objectId, { signal }),
   }), [runObjectOperation, storageId]);
 
   const operationStorageRef = useRef(storageId);
+  const operationAuthRef = useRef({ authStatus, userEmail: user?.email ?? null });
   useEffect(() => {
+    const previousAuth = operationAuthRef.current;
+    const userEmail = user?.email ?? null;
+    if (previousAuth.authStatus === 'authenticated'
+      && (authStatus !== 'authenticated' || previousAuth.userEmail !== userEmail)) {
+      cancelAllUploads();
+      createControllerRef.current?.abort();
+      generationRef.current += 1;
+      for (const controller of operationControllersRef.current.values()) controller.abort();
+      operationControllersRef.current.clear();
+      setMutatingIds(new Set());
+    }
+    operationAuthRef.current = { authStatus, userEmail };
     if (operationStorageRef.current && storageId && operationStorageRef.current !== storageId) {
       cancelAllUploads();
+      cacheRef.current.clear();
       for (const controller of operationControllersRef.current.values()) controller.abort();
       operationControllersRef.current.clear();
       setMutatingIds(new Set());
     }
     operationStorageRef.current = storageId;
-  }, [storageId, cancelAllUploads]);
+  }, [storageId, cancelAllUploads, authStatus, user?.email]);
 
   useEffect(() => () => {
     for (const controller of operationControllersRef.current.values()) controller.abort();
@@ -296,8 +392,6 @@ export default function useRemoteFilesState() {
 
   useEffect(() => {
     if (!isFilesRoute || storageStatus !== 'ready' || !storageId || !validFolderId) {
-      listControllerRef.current?.abort();
-      paginationControllerRef.current?.abort();
       createControllerRef.current?.abort();
       generationRef.current += 1;
       return undefined;
@@ -308,8 +402,6 @@ export default function useRemoteFilesState() {
     });
     return () => {
       scheduled.abort();
-      listControllerRef.current?.abort();
-      paginationControllerRef.current?.abort();
       createControllerRef.current?.abort();
       generationRef.current += 1;
     };
@@ -340,27 +432,27 @@ export default function useRemoteFilesState() {
     setSearchParams({}, { state: routeStateFor(storageId, rootBreadcrumbs()) });
   }, [storageId, setSearchParams]);
 
-  const refreshCurrentFolder = useCallback(() => loadFirstPage({ refreshing: true }), [loadFirstPage]);
+  const refreshCurrentFolder = useCallback(() => loadFirstPage({ refreshing: true, force: true }), [loadFirstPage]);
 
   const loadMore = useCallback(async () => {
     if (!storageId || !displayState.nextCursor || displayState.paginationStatus === 'loading') return;
-    paginationControllerRef.current?.abort();
-    const controller = new AbortController();
-    paginationControllerRef.current = controller;
     const generation = generationRef.current;
     const cursor = displayState.nextCursor;
     setBrowserState((current) => current.storageId === storageId && current.folderId === folderId
       ? { ...current, paginationStatus: 'loading', paginationError: null }
       : current);
     try {
-      const page = await listStorageObjects(storageId, { parentId: folderId, cursor, limit: 50, signal: controller.signal });
-      if (controller.signal.aborted || generation !== generationRef.current) return;
+      const page = await cacheRef.current.fetchPage(storageId, folderId, cursor, (signal) => listStorageObjects(
+        storageId, { parentId: folderId, cursor, limit: 50, signal },
+      ));
+      if (generation !== generationRef.current) return;
+      const cached = cacheRef.current.get(storageId, folderId);
       setBrowserState((current) => current.storageId === storageId && current.folderId === folderId
-        ? { ...current, items: mergeStorageObjects(current.items, page.items), nextCursor: page.nextCursor,
-          status: mergeStorageObjects(current.items, page.items).length === 0 ? 'empty' : 'ready', paginationStatus: 'idle', paginationError: null }
+        ? { ...current, items: cached?.items ?? mergeStorageObjects(current.items, page.items), nextCursor: cached?.nextCursor ?? page.nextCursor,
+          status: (cached?.items ?? mergeStorageObjects(current.items, page.items)).length === 0 ? 'empty' : 'ready', paginationStatus: 'idle', paginationError: null }
         : current);
     } catch (error) {
-      if (controller.signal.aborted || generation !== generationRef.current) return;
+      if (generation !== generationRef.current || error?.name === 'AbortError') return;
       if (error instanceof StorageApiError && error.status === 401) {
         expireSession();
         return;
@@ -393,7 +485,8 @@ export default function useRemoteFilesState() {
     try {
       await createStorageFolder(storageId, { name, parentId: folderId }, { signal: controller.signal });
       if (controller.signal.aborted || generation !== generationRef.current) return { error: 'CANCELLED' };
-      await loadFirstPage({ refreshing: true });
+      cacheRef.current.invalidate(storageId, folderId);
+      await loadFirstPage({ refreshing: true, force: true });
       return { ok: true };
     } catch (error) {
       if (controller.signal.aborted || error?.name === 'AbortError') return { error: 'CANCELLED' };
@@ -414,6 +507,7 @@ export default function useRemoteFilesState() {
     nextCursor: displayState.nextCursor,
     paginationStatus: displayState.paginationStatus,
     paginationError: displayState.paginationError,
+    revalidationError: displayState.revalidationError ?? null,
     notice: location.state?.fileBrowserNotice || notice,
     canCreateFolder: canUseCapability('createFolder'),
     canUpload: canUseCapability('upload'),
