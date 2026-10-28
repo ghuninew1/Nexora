@@ -7,7 +7,7 @@ import { randomToken, sha256Hex } from '../functions/_lib/password.js';
 
 async function fixture() {
   const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_backend_foundation.sql', '0002_public_shares.sql']) db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+  for (const file of ['0001_backend_foundation.sql', '0002_public_shares.sql', '0003_activity_events.sql']) db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
   const env = { DB: { prepare(sql) { return { bind(...args) { return {
     async first() { return db.prepare(sql).get(...args) ?? null; }, async all() { return { results: db.prepare(sql).all(...args) }; },
     async run() { return { meta: db.prepare(sql).run(...args) }; },
@@ -68,6 +68,11 @@ test('create stores only hash, duplicates do not rotate, owner listing/get seria
   const row = f.db.prepare('SELECT * FROM public_shares').get(); assert.equal(row.token_hash, await sha256Hex(secret)); assert.ok(!JSON.stringify(row).includes(secret));
   const dup = await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId: 'single' } }); assert.equal(dup.status, 200); assert.equal((await dup.json()).data.publicPath, undefined);
   const listed = await (await f.call('/api/shares')).json(); assert.equal(listed.data.shares.length, 1);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE user_id = 'alice' AND action = 'share_create'").get().n, 1);
+  const activity = f.db.prepare("SELECT * FROM activity_events WHERE user_id = 'alice' AND action = 'share_create'").get();
+  assert.equal(activity.object_name, 'single.txt');
+  assert.equal(activity.metadata_json, JSON.stringify({ shareId: p.share.id }));
+  assert.ok(!JSON.stringify(activity).includes(secret));
   assert.equal((await (await f.call('/api/shares', { user: 'bob' })).json()).data.shares.length, 0);
   for (const method of ['GET', 'DELETE']) assert.equal((await f.call(`/api/shares/${p.share.id}`, { user: 'bob', method })).status, 404);
   const serialized = JSON.stringify(listed); for (const word of ['private-', 'private_', 'token_hash', secret]) assert.ok(!serialized.includes(word));
@@ -123,6 +128,9 @@ test('replace invalidates old capability; revoke is owner-only and idempotent', 
   for (let i = 0; i < 2; i++) assert.equal((await f.call(`/api/shares/${p.share.id}`, { method: 'DELETE' })).status, 200);
   for (const suffix of ['', '/objects', '/objects/single/download', '/objects/single/preview']) assert.equal((await f.call(next + suffix, { user: null })).status, 404);
   assert.equal((await f.call(`/api/shares/${p.share.id}/replace`, { method: 'POST' })).status, 409);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE user_id = 'alice' AND action = 'share_create'").get().n, 1);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE user_id = 'alice' AND action = 'share_replace'").get().n, 1);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE user_id = 'alice' AND action = 'share_revoke'").get().n, 1);
   f.db.close();
 });
 

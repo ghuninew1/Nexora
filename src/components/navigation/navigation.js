@@ -1,4 +1,4 @@
-import { Files, FolderClock, Heart, LayoutDashboard, Settings, Share2, HardDrive, Trash2 } from "lucide-react";
+import { Files, FolderClock, Heart, LayoutDashboard, Settings, Share2, HardDrive, Trash2, Activity } from "lucide-react";
 
 export const navigationGroups = [
     { label: "Workspace", items: [
@@ -6,6 +6,7 @@ export const navigationGroups = [
         { to: "/files", label: "My Files", icon: Files, description: "Browse and organize your files and folders." },
         { to: "/recent", label: "Recent", icon: FolderClock, description: "Your recently accessed files, in one place." },
         { to: "/favorites", label: "Favorites", icon: Heart, description: "Keep your important files close at hand." },
+        { to: "/activity", label: "Activity", icon: Activity, description: "Review your successful file and sharing actions." },
     ] },
     { label: "Library", items: [
         { to: "/shared", label: "Shared", icon: Share2, description: "Manage your public file and folder links." },

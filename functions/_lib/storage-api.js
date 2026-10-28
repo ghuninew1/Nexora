@@ -1,6 +1,7 @@
 import { requireStorageMount, requireObjectId } from './authorization.js';
 import { ApiError, json, normalizeUpstreamError, readJson, statusFor } from './http.js';
 import { createStorageClient, normalizeCapabilities, normalizeObject, readBoundedJson } from './storage-client.js';
+import { findActivitySnapshot, recordActivity } from './activity.js';
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_BYTES = 1024 * 1024;
@@ -284,6 +285,8 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const payload = await callJson(client, request, writable, '/objects/folders', { method: 'POST', body: JSON.stringify({ name, parentId }), contentType: 'application/json' });
     const object = normalizeObject(payload?.object);
     if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+    await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'create_folder',
+      objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId }, { logger });
     return json({ folder: object }, 201);
   }
   if (route === 'files' && method === 'POST' && restTail.length === 0) {
@@ -298,6 +301,8 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const payload = await callJson(client, request, writable, '/files', { method: 'POST', body: limitStream(request.body, safeMaximum + MAX_MULTIPART_OVERHEAD), contentType });
     const object = normalizeObject(payload?.object);
     if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+    await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'upload',
+      objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId }, { logger });
     return json({ file: object, operationId: typeof payload?.operationId === 'string' ? payload.operationId : null }, 201);
   }
   if (route === 'files' && restTail.length === 2 && restTail[1] === 'download' && method === 'GET') {
@@ -321,9 +326,13 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       const body = await readJson(request);
       const name = validateName(body.name);
       await requireCapability(client, request, writable, 'rename');
+      const previous = await findActivitySnapshot(env.DB, user.id, writable.id, objectId);
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}`, { method: 'PATCH', body: JSON.stringify({ name }), contentType: 'application/json' });
       const object = normalizeObject(payload?.object);
       if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+      await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'rename',
+        objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId,
+        metadata: { previousName: previous?.object_name, newName: object.name } }, { logger });
       return json({ object });
     }
     if (suffix[0] === 'download' && suffix.length === 1 && method === 'GET') {
@@ -353,9 +362,13 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       if (!Object.hasOwn(body, 'parentId') || (body.parentId !== null && typeof body.parentId !== 'string')) throw new ApiError('INVALID_INPUT', 400);
       if (body.parentId) requireObjectId(body.parentId);
       await requireCapability(client, request, writable, 'move');
+      const destination = body.parentId ? await findActivitySnapshot(env.DB, user.id, writable.id, body.parentId) : null;
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}/move`, { method: 'POST', body: JSON.stringify({ parentId: body.parentId }), contentType: 'application/json' });
       const object = normalizeObject(payload?.object);
       if (!object) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+      await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'move',
+        objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId,
+        destinationParentId: object.parentId, metadata: { destinationName: destination?.object_name } }, { logger });
       return json({ object });
     }
     if (suffix[0] === 'copy' && suffix.length === 1 && method === 'POST') {
@@ -370,6 +383,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
         copyDiagnostic(logger, `result=operation-error code=${code} stage=capability-check`);
         throw error;
       }
+      const destination = parentId ? await findActivitySnapshot(env.DB, user.id, writable.id, parentId) : null;
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}/copy`, {
         method: 'POST', body: JSON.stringify({ parentId }), contentType: 'application/json', operation: 'copy',
       });
@@ -379,6 +393,9 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
         throw new ApiError('PROVIDER_UNAVAILABLE', 502);
       }
       copyDiagnostic(logger, 'result=success');
+      await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'copy',
+        objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId,
+        destinationParentId: object.parentId, metadata: { destinationName: destination?.object_name } }, { logger });
       return json({ object, operationId: typeof payload?.operationId === 'string' ? payload.operationId : null }, 201);
     }
     if (suffix.length === 0 && method === 'DELETE') {
@@ -386,6 +403,8 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       const payload = await callJson(client, request, writable, `/objects/${encodeURIComponent(objectId)}`, { method: 'DELETE' });
       const object = normalizeObject(payload?.object);
       if (!object || object.objectId !== objectId) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+      await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'trash',
+        objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId }, { logger });
       return json({ object });
     }
   }
@@ -412,15 +431,22 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const payload = await callJson(client, request, writable, `/trash/${encodeURIComponent(objectId)}/restore`, { method: 'POST', body: JSON.stringify(body), contentType: 'application/json' });
     const object = normalizeObject(payload?.object);
     if (!object || object.objectId !== objectId) throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+    const destination = object.parentId ? await findActivitySnapshot(env.DB, user.id, writable.id, object.parentId) : null;
+    await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'restore',
+      objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId,
+      destinationParentId: object.parentId, metadata: { destinationName: destination?.object_name } }, { logger });
     return json({ object });
   }
   if (route === 'trash' && restTail.length === 2 && restTail[1] === 'permanent' && method === 'DELETE') {
     const writable = await requireStorageMount(env.DB, user, mountId, { mutation: true });
     const objectId = requireObjectId(restTail[0]);
     await requireCapability(client, request, writable, 'permanentDelete');
+    const snapshot = await findActivitySnapshot(env.DB, user.id, writable.id, objectId);
     const payload = await callJson(client, request, writable, `/trash/${encodeURIComponent(objectId)}/permanent`, { method: 'DELETE' });
     const operationId = typeof payload?.operationId === 'string' && /^[A-Za-z0-9_-]{1,128}$/u.test(payload.operationId)
       ? payload.operationId : null;
+    await recordActivity(env.DB, user, { storageMountId: writable.id, storageName: writable.name, action: 'delete_permanent',
+      objectId, objectName: snapshot?.object_name ?? null, objectType: snapshot?.object_type ?? null, parentId: snapshot?.parent_id ?? null }, { logger });
     return json({ operationId, deleted: true });
   }
   if (route === 'operations' && restTail.length === 1 && method === 'GET') {
@@ -480,11 +506,16 @@ export async function handleFavoritesApi({ request, env, user, parts, fetchImpl 
     const payload = await client.jsonRequest({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}` });
     const object = normalizeObject(payload?.object || payload?.data?.object);
     if (!object) throw new ApiError('NOT_FOUND', 404);
-    await env.DB.prepare('INSERT INTO favorites (user_id, storage_mount_id, object_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
+    const inserted = await env.DB.prepare('INSERT INTO favorites (user_id, storage_mount_id, object_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
       .bind(user.id, mount.id, objectId, Date.now()).run();
+    if (inserted.meta?.changes) await recordActivity(env.DB, user, { storageMountId: mount.id, storageName: mount.name, action: 'favorite',
+      objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId });
     return json({ favorite: { storageId: mount.id, objectId, createdAt: new Date().toISOString() } }, 201);
   }
-  await env.DB.prepare('DELETE FROM favorites WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?').bind(user.id, mount.id, objectId).run();
+  const snapshot = await findActivitySnapshot(env.DB, user.id, mount.id, objectId);
+  const removed = await env.DB.prepare('DELETE FROM favorites WHERE user_id = ? AND storage_mount_id = ? AND object_id = ?').bind(user.id, mount.id, objectId).run();
+  if (removed.meta?.changes) await recordActivity(env.DB, user, { storageMountId: mount.id, storageName: mount.name, action: 'unfavorite',
+    objectId, objectName: snapshot?.object_name ?? null, objectType: snapshot?.object_type ?? null, parentId: snapshot?.parent_id ?? null });
   return json({ removed: true });
 }
 

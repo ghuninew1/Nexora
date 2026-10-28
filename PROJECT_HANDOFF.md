@@ -148,6 +148,8 @@ For one selected object, the File Browser toolbar offers the same Preview, Favor
 
 ทุกครั้งที่แก้ source หรือ behavior ให้ซิงก์ `README.md`, `AGENTS.md` และ `PROJECT_HANDOFF.md` ในงานรอบเดียวกัน โดยบันทึก scope, สถานะ demo/backend และผลตรวจจริง; แยกสิ่งที่ยังไม่ได้ตรวจหรือยังไม่ได้รับอนุมัติออกจากรายการที่เสร็จแล้ว
 
+- Phase 9.8 adds server-side Activity records for successful authenticated file, Favorites, and public-share mutations, an authenticated owner-scoped cursor API, 180-day/500-event retention, and protected `/activity` UI. Bulk actions log successful objects individually. See `docs/PHASE_9_8.md`; browser QA and production migration/deployment remain pending.
+
 ## Phase 9.6 — Current handoff (2026-10-28)
 
 Implemented locally: owner `/api/shares` list/create/get/revoke, explicit secret rotation at `POST /api/shares/:id/replace`, anonymous `/api/public/shares/:id/:secret` metadata/objects/download/preview, Share dialog plus single-selection action, persistent `/shared`, and public `/s/:shareId/:secret` outside authentication/workspace providers.
@@ -167,3 +169,10 @@ Metrics remain unavailable: Nexora `/usage` returns `status: unavailable` with n
 Checks passed: `pnpm lint`, `pnpm test` (118/118), `pnpm exec vite build --configLoader runner --outDir /tmp/nexora-phase-97-build`, and `git diff --check`. Browser/mobile and production verification are pending. No remote migration, deployment, D1, Storage data, secrets, or Cloudflare configuration was changed. See [Phase 9.7 report](docs/PHASE_9_7.md).
 
 Pre-existing changes to package.json, pnpm-lock.yaml and pnpm-workspace.yaml were preserved. Dependencies were hydrated from the existing lockfile without changing versions. No commit/push/deploy/remote migration/secrets or production Storage changes occurred.
+
+
+## Phase 9.8 — Current handoff (2026-10-28)
+
+Local implementation adds `migrations/0003_activity_events.sql`, centralized best-effort writer/API in `functions/_lib/activity.js`, mutation/share integration, and protected `/activity` page. Events are session-owner scoped and success-only; metadata is action-allowlisted and excludes secrets. Retention is 500/user and 180 days. Bulk Move/Trash reuses per-object routes with no duplicate batch records. Dashboard activity panel was intentionally skipped.
+
+`pnpm lint`, `pnpm test` (125/125), standard `pnpm build`, and `git diff --check` passed. Browser QA is not claimed. Production migration/deployment and live provider behavior remain unverified; no production state was touched.

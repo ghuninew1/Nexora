@@ -10,6 +10,7 @@ import { ApiError } from '../functions/_lib/http.js';
 import { sha256Hex, randomToken } from '../functions/_lib/password.js';
 
 const migration = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
+const activityMigration = readFileSync(new URL('../migrations/0003_activity_events.sql', import.meta.url), 'utf8');
 const origin = 'https://nexora.example.test';
 const storageId = 'mount_alpha';
 const projectId = 'private_project_alpha';
@@ -97,6 +98,7 @@ async function login(email = 'owner@example.test', password = 'correct horse bat
 before(async () => {
   sqlite = new DatabaseSync(':memory:');
   sqlite.exec(migration);
+  sqlite.exec(activityMigration);
   env = { DB: d1(sqlite), STORAGE_API_URL: 'https://storage.example.test', STORAGE_APP_SECRET: 'server-app-secret',
     CF_ACCESS_CLIENT_ID: 'server-access-id', CF_ACCESS_CLIENT_SECRET: 'server-access-secret' };
   handler = createApiHandler({ fetchImpl: upstreamResponse, logger: silentLogger });
@@ -114,7 +116,7 @@ after(() => sqlite?.close());
 
 test('D1 migration creates separate account, session, mount, favorite, and bounded recent tables', () => {
   const tables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name);
-  for (const name of ['users', 'sessions', 'login_attempts', 'storage_mounts', 'favorites', 'recent_access']) assert.ok(tables.includes(name));
+  for (const name of ['users', 'sessions', 'login_attempts', 'storage_mounts', 'favorites', 'recent_access', 'activity_events']) assert.ok(tables.includes(name));
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM pragma_table_info('storage_mounts') WHERE name = 'shared_storage_project_id'").get().count, 1);
 });
 
@@ -523,6 +525,12 @@ test('folder create, rename, move, copy, Trash, restore, permanent delete, and o
   assert.equal((await restored.json()).data.object.objectId, 'object_trashed');
   const purged = await request(`/api/storage/v1/storages/${storageId}/trash/object_trashed/permanent`, { method: 'DELETE', headers: { Origin: origin } });
   assert.equal((await purged.json()).data.operationId, 'operation_delete');
+  const recordedActions = sqlite.prepare('SELECT action FROM activity_events WHERE user_id = ?').all(user.id).map((row) => row.action);
+  for (const action of ['create_folder', 'rename', 'move', 'copy', 'trash', 'restore', 'delete_permanent']) assert.ok(recordedActions.includes(action), action);
+  const eventCount = recordedActions.length;
+  const failedRename = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}`, { method: 'PATCH', headers: jsonHeaders, body: JSON.stringify({ name: '../bad' }) });
+  assert.equal(failedRename.status, 400);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM activity_events WHERE user_id = ?').get(user.id).count, eventCount);
   const operation = await request(`/api/storage/v1/storages/${storageId}/operations/operation_alpha`);
   const operationText = await operation.text();
   assert.match(operationText, /completed/u);
@@ -731,6 +739,7 @@ test('file operations enforce Shared Storage capabilities server-side before mut
 });
 
 test('Trash, Restore, and Permanent Delete enforce their own capabilities server-side', async () => {
+  const eventCount = sqlite.prepare('SELECT COUNT(*) AS count FROM activity_events WHERE user_id = ?').get(user.id).count;
   const cases = [
     { path: `/api/storage/v1/storages/${storageId}/objects/${objectId}`, method: 'DELETE', capability: 'trash' },
     { path: `/api/storage/v1/storages/${storageId}/trash/${objectId}/restore`, method: 'POST', capability: 'restore', headers: { 'Content-Type': 'application/json' }, body: '{}' },
@@ -752,6 +761,7 @@ test('Trash, Restore, and Permanent Delete enforce their own capabilities server
     assert.match(await response.text(), /CAPABILITY_UNAVAILABLE/u);
     assert.equal(mutationCalls, 0, item.capability);
   }
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM activity_events WHERE user_id = ?').get(user.id).count, eventCount);
 });
 
 test('upload forwards a bounded stream without materializing file bytes in Nexora', async () => {
@@ -771,6 +781,7 @@ test('upload forwards a bounded stream without materializing file bytes in Nexor
   assert.equal(response.status, 201);
   assert.ok(upstreamBody instanceof ReadableStream);
   assert.equal((await response.json()).data.file.objectId, 'file_new');
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM activity_events WHERE user_id = ? AND action = 'upload' AND object_id = 'file_new'").get(user.id).count, 1);
   const tooLarge = await request(`/api/storage/v1/storages/${storageId}/files`, { method: 'POST', headers: {
     Origin: origin, 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': String(27 * 1024 * 1024),
   }, body: new ReadableStream({ start(controller) { controller.close(); } }) });
@@ -927,6 +938,9 @@ test('favorites verify mount ownership and object existence, and deduplicate', a
   assert.equal(Object.hasOwn(favorites[0], 'shared_storage_project_id'), false);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ? AND object_id = ?').get(user.id, objectId).count, recentCountBeforeList);
   assert.equal((await request('/api/favorites/mount_other/object_foreign', { method: 'POST', headers: { Origin: origin } })).status, 404);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM activity_events WHERE user_id = ? AND action = 'favorite' AND object_id = ?").get(user.id, objectId).count, 1);
+  assert.equal((await request(`/api/favorites/${storageId}/${objectId}`, { method: 'DELETE', headers: { Origin: origin } })).status, 200);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM activity_events WHERE user_id = ? AND action = 'unfavorite' AND object_id = ?").get(user.id, objectId).count, 1);
 });
 
 test('Recent explicit access upserts by owner, mount and logical object ID', async () => {

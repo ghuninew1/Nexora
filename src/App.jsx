@@ -11,6 +11,7 @@ import LoginRoute from "./components/auth/LoginRoute";
 
 import SharedPage from './pages/SharedPage';
 import PublicSharePage from './pages/PublicSharePage';
+import ActivityPage from './pages/ActivityPage';
 import { SharesProvider } from './context/SharesProvider';
 import { useAuth } from './hooks/useAuth';
 
@@ -26,7 +27,8 @@ function WorkspaceRoutes() {
               <Route index element={<Navigate to="/files" replace />} />
               <Route path="/files" element={<Files />} />
               <Route path="/shared" element={<SharedPage />} />
-              {navigationItems.filter((item) => !['/files', '/shared'].includes(item.to)).map((item) => (
+              <Route path="/activity" element={<ActivityPage />} />
+              {navigationItems.filter((item) => !['/files', '/shared', '/activity'].includes(item.to)).map((item) => (
                 <Route key={item.to} path={item.to} element={<WorkspacePage />} />
               ))}
               <Route path="*" element={<WorkspacePage />} />

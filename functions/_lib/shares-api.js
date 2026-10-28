@@ -3,6 +3,7 @@ import { ApiError, fail, json, readJson } from './http.js';
 import { randomToken, sha256Hex } from './password.js';
 import { createStorageClient, normalizeObject } from './storage-client.js';
 import { previewObjectResponse, streamResponse } from './storage-api.js';
+import { findActivitySnapshot, recordActivity } from './activity.js';
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const SECRET = /^[A-Za-z0-9_-]{43}$/u;
@@ -96,6 +97,8 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
     const row = await env.DB.prepare('SELECT * FROM public_shares WHERE user_id = ? AND storage_mount_id = ? AND object_id = ? AND revoked_at IS NULL')
       .bind(user.id, mount.id, objectId).first();
     if (!row) throw unavailable();
+    if (row.id === id) await recordActivity(env.DB, user, { storageMountId: mount.id, storageName: mount.name, action: 'share_create',
+      objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId, metadata: { shareId: row.id } });
     return json({ share: ownerShare({ ...row, storage_name: mount.name }, object),
       ...(row.id === id ? { publicPath: `/s/${id}/${secret}` } : {}) }, row.id === id ? 201 : 200);
   }
@@ -103,8 +106,12 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
     const row = await owned(env.DB, user, parts[2]);
     if (parts.length === 3 && method === 'GET') return json({ share: await hydrate(ctx, row) });
     if (parts.length === 3 && method === 'DELETE') {
+      const snapshot = await findActivitySnapshot(env.DB, user.id, row.storage_mount_id, row.object_id);
       await env.DB.prepare('UPDATE public_shares SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE id = ? AND user_id = ?')
         .bind(Date.now(), Date.now(), row.id, user.id).run();
+      if (row.revoked_at === null) await recordActivity(env.DB, user, { storageMountId: row.storage_mount_id, storageName: row.storage_name,
+        action: 'share_revoke', objectId: row.object_id, objectName: snapshot?.object_name ?? null,
+        objectType: snapshot?.object_type ?? null, parentId: snapshot?.parent_id ?? null, metadata: { shareId: row.id } });
       return json({ revoked: true });
     }
     if (parts.length === 4 && parts[3] === 'replace' && method === 'POST') {
@@ -117,6 +124,8 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
       const result = await env.DB.prepare('UPDATE public_shares SET token_hash = ?, updated_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND token_hash = ?')
         .bind(hash, Date.now(), row.id, user.id, row.token_hash).run();
       if (!result.meta?.changes) throw new ApiError('NAME_CONFLICT', 409);
+      await recordActivity(env.DB, user, { storageMountId: mount.id, storageName: mount.name, action: 'share_replace',
+        objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId, metadata: { shareId: row.id } });
       return json({ share: ownerShare(row, object), publicPath: `/s/${row.id}/${secret}` });
     }
   }

@@ -3,6 +3,7 @@ import { authenticate, login, sessionCookie, serializeUser, logout } from './aut
 import { requireUser } from './authorization.js';
 import { ApiError, decodePath, fail, json, readJson, requireJsonContentType, requireSameOrigin } from './http.js';
 import { handleFavoritesApi, handleRecentApi, handleStorageApi } from './storage-api.js';
+import { handleActivityApi } from './activity.js';
 
 async function handleAuth({ request, env, parts }) {
   const method = request.method.toUpperCase();
@@ -43,6 +44,10 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
         return await handleSharesApi({ request, env, user, parts, fetchImpl });
       }
       if (parts[1] === 'auth') return await handleAuth({ request, env, parts });
+      if (parts[1] === 'activity') {
+        const user = await requireUser(request, env);
+        return await handleActivityApi({ request, env, user, parts });
+      }
       if (parts[1] === 'storage' && parts[2] === 'v1') {
         const user = await requireUser(request, env);
         if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
