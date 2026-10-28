@@ -53,6 +53,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
 - `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: Shared Storage implementation in the separate IssueDesk checkout. The historical S2 report predates the Phase 9.1 brief's operator-reported production deployment; Nexora must not infer live state from source docs.
 - `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2, Phase 8 backend, Phase 8.5 frontend auth, and remaining Phase 9 scope.
+- `docs/PHASE_10_0.md`: source/config production-readiness audit and explicit live-verification gates; local source evidence does not prove Cloudflare deployment, remote migration, or secret configuration.
 - `.agents/skills/nexora-project/SKILL.md`: project-scoped Codex workflow, supplementing the detailed repository rules here.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
@@ -68,6 +69,7 @@ Check this map against actual files when changing the architecture; update READM
 7. Do not modify or deploy remote infrastructure, D1 data, Storage data, or secrets without explicit authorization.
 8. When work changes the UI or file behavior, keep README, this file, and design notes aligned with the resulting source.
 9. After every project change, synchronize `README.md`, `AGENTS.md`, and `PROJECT_HANDOFF.md` with the resulting source, current scope, and checks actually completed. Keep pending QA and unapproved backend work clearly marked; do not claim a check passed before running it.
+10. Production readiness reports must distinguish source-derived configuration from live platform state. Never print or read secret values for inventory; do not deploy, migrate, rotate, or modify production resources without explicit authorization.
 
 ## React, JSX, and styling conventions
 
@@ -165,7 +167,7 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 
 ## Nexora v1 release baseline
 
-- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Do not start Phase 10 or add deferred features without a new request.
+- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Phase 10.0 is active under the user's 2026-10-28 request; do not add deferred features beyond its production-readiness scope.
 - Account creation is administrator-provisioned; do not describe a public self-service registration route. Keep production implementation, user-reported smoke tests, and local validation distinct.
 - Backup/recovery design exists in `docs/BACKUP_RECOVERY.md`; automated backup and an isolated restore drill are not implemented/completed. Never claim recovery proven without an actual isolated restore.
 - Runtime SQLite artifacts in adjacent IssueDesk are no longer tracked; do not read or delete local DB/WAL/SHM files during Git hygiene checks. `garage/garage.toml` has since been removed from the adjacent IssueDesk index while preserving its local ignored copy; its example template uses a placeholder. Changes are staged/uncommitted and history was not rewritten; historical RPC secret material remains a follow-up. Do not print it or rotate production credentials without a separately authorized task.

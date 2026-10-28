@@ -1,0 +1,39 @@
+# Phase 10.0 — Production Readiness
+
+Updated: 2026-10-28
+
+## Status
+
+**Source/config audit complete; production readiness is blocked pending live verification.** This checkout is clean at the v1 baseline before the phase. The phase did not change application runtime code, UI, architecture, dependencies, D1, secrets, Storage, or deployment. No production behavior is claimed as verified.
+
+## Source and configuration audit
+
+- `wrangler.jsonc` targets Pages output `dist/`, project `nexora`, and D1 binding `DB` / database `nexora-db`, with migrations in `migrations/`. It enables observability and source map upload. The configured D1 ID is present in the repository config; it is not proof that the active Cloudflare account or deployed Pages project uses that same resource.
+- The checked-in migration chain is `0001_backend_foundation.sql`, `0002_public_shares.sql`, and `0003_activity_events.sql`. Prior handoff records production D1/migration provisioning as operator-confirmed but explicitly says Phase 9.6/9.8 migrations were not verified in production. Phase 9.2/9.3 production smoke tests are historical user-reported results, not evidence for the current source revision.
+- Pages Functions use `env.DB` and require Storage integration bindings `STORAGE_API_URL`, `STORAGE_APP_SECRET`, `CF_ACCESS_CLIENT_ID`, and `CF_ACCESS_CLIENT_SECRET`. `STORAGE_TIMEOUT_MS` and `STORAGE_MAX_UPLOAD_BYTES` are optional and fall back to source defaults. The project’s local `.dev.vars` file was detected but not opened. No secret values were read or printed. Production binding presence, URL, token validity, and Cloudflare Access policy cannot be inferred from local files.
+- Nexora calls the configured Storage API over HTTPS, sends the app bearer secret and Cloudflare Access service-token headers server-side, follows only bounded same-origin redirects for approved requests, and does not expose those credentials to the browser. The origin must be the intended Access-protected Storage API endpoint and its service token must be valid for the corresponding Access application.
+- Auth uses same-origin mutation checks; no permissive CORS policy is configured in the source. Session cookies are `Secure`, `HttpOnly`, `SameSite=Lax`, and scoped to `/`. The configured cookie requires HTTPS in production. `public/_headers` adds `no-referrer`, `nosniff`, and `no-store` for `/s/*`; a global CSP/HSTS/permissions policy is not present. Public share capability paths may appear in platform request logs unless those logs are configured to redact them.
+- `STORAGE_MAX_UPLOAD_BYTES` defaults to 25 MiB; the separate Storage API’s upstream buffering/provider limits and production request limits still need an end-to-end upload check.
+
+## Live checks attempted
+
+Read-only Wrangler checks were attempted for remote D1 migration status, Pages secret inventory, and Pages deployments. All failed before returning account data because the stored Cloudflare auth token had expired and could not be refreshed: the Cloudflare auth server was unreachable. Wrangler also could not write its log under the host Preferences directory. The secret inventory produced no secret values. Therefore deployment identity/status, production binding names/presence, and applied remote migrations remain **unknown**.
+
+## Readiness gates
+
+Do not deploy this source or run production mutations until the operator confirms all of the following against the intended Cloudflare account and Pages project:
+
+1. Current production deployment points to the intended source/revision and Pages project.
+2. Remote D1 is the configured Nexora database and migrations 0001–0003 are applied. If 0002 or 0003 is missing, review a separate migration plan and backup/recovery window before any rollout; applying migrations changes production schema/data state.
+3. Required Pages bindings are present for the production environment. Review only binding names/presence in reports, never values. Confirm the Access service token is authorized for the configured upstream endpoint.
+4. HTTPS/custom-domain and Cloudflare Access routing reach Nexora and the Storage API as intended. Confirm API requests are same-origin from the app and do not depend on browser CORS.
+5. After an approved deployment/migration, run the full smoke path from the approved production QA account: login, list mount/root/folder, upload, preview, download, rename, move, copy, favorite, trash, restore, share/public download, activity, and upload cancel/retry. Verify logs contain no unexpected 4xx/5xx and do not expose credentials or public capability URLs.
+
+Production deployment, D1 migration, production smoke testing, secrets inspection/rotation, and live Storage calls were not completed. No runtime correction was justified by the available local evidence; changing endpoint, migrations, cookie policy, CORS, or security headers without live context could break existing production behavior.
+
+## Local validation
+
+- `pnpm lint`: passed.
+- `pnpm test`: passed, 125/125.
+- `pnpm build`: default command could not create Vite's temporary config file under `node_modules/.vite-temp` due to host filesystem permission (`EPERM`). Equivalent production build passed with `pnpm exec vite build --configLoader runner --outDir /tmp/nexora-phase-100-build` (2,331 modules).
+- `git diff --check`: passed after documentation updates.
