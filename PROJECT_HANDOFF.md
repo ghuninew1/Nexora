@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-28
 
-เอกสารนี้สรุปสถานะ Nexora หลัง implementation Phase 9.6; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
+**Current status: Nexora v1 — Feature Complete.** ส่วนสรุป v1 ท้ายเอกสารเป็น handoff ปัจจุบัน; รายงาน phase ด้านล่างเป็นประวัติและแยก local validation จาก production evidence.
 
 ## สถานะปัจจุบัน
 
@@ -185,3 +185,14 @@ Added `docs/BACKUP_RECOVERY.md` and `docs/PHASE_9_9.md`. Audit identifies Nexora
 Open HIGH findings in the adjacent IssueDesk repo: a tracked literal Garage RPC secret and tracked runtime SQLite/WAL/SHM artifacts under the Compose data mount. Contents were not read; production use is unknown. The checkout was not modified because scope forbids Garage/Storage/Docker work. Treat secret material as exposed and have the owning operator confirm, rotate/remove through a separately approved change, and clean database artifacts/history.
 
 Backup policy/runbook specifies 7 daily/4 weekly/3 monthly, off-device copy/3-2-1 target, checksums, isolated restore-first ordering, and end-to-end validation. No backup job, tooling, production change or restore drill exists yet. Rate limiting beyond login, published Compose port exposure, and app-wide security headers remain documented follow-ups; RPO/RTO and deployment controls require operator decisions. The unstaged ActivityPage edit was preserved.
+
+
+## Nexora v1 — Feature Complete (authoritative handoff, 2026-10-28)
+
+The source baseline is feature-complete for v1. Package version is already `1.0.0`; no tag, commit, deploy, or release action was made. The product includes administrator-provisioned login/session routes (no public self-registration), protected connected File Browser with object lifecycle and safe preview, Favorites/Recent, partial-success Bulk Move/Trash, retry/cancel upload queue, owner-managed public view/download shares, separate Activity, and Dashboard/Storage with “Not reported” usage unless the provider returns authoritative metrics. See [docs/V1_RELEASE.md](docs/V1_RELEASE.md).
+
+Final verification: `pnpm lint` passed; `pnpm test` passed 125/125; `pnpm build` passed; `git diff --check` passed. Browser QA was not run in this finalization. Source/local checks do not verify production deployment. User-reported 9.2/9.3 production smoke tests are historical; Phase 9.6/9.8 migrations and later local code were not deployed/verified here.
+
+Backup/recovery design is documented in [docs/BACKUP_RECOVERY.md](docs/BACKUP_RECOVERY.md); automated backup is absent, isolated restore has not been drilled, and production restore was not performed. Garage replication factor 1 remains. In adjacent IssueDesk, Storage API runtime SQLite/WAL/SHM artifacts are no longer tracked and ignored; their historical data classification still needs operator confirmation. `garage/garage.toml` has been removed from the adjacent IssueDesk index while its local ignored operator copy was preserved. The tracked example was scrubbed to an explicit placeholder and verified without printing values. These changes are staged/uncommitted there. Prior history may contain RPC secret material; treat it as exposed, confirm production use, and rotate only in a separately approved Garage operation. No history rewrite was done. No secret rotation, remote D1, QNAP/Docker action, migration, deploy, or production data change was performed.
+
+Deferred: Global Search, backup automation and isolated restore drill, optional sharing and bulk capabilities, version history, WebDAV/SMB, resumable upload, advanced metrics, and multi-node Garage. RPO/RTO, backup destination/schedule, platform rate-limits/headers, direct service port exposure and edge log redaction remain operator decisions. Do not start Phase 10 automatically.

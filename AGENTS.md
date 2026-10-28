@@ -161,3 +161,11 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - Backup/recovery is an infrastructure/operator responsibility. Never run production export, restore, migration, service stop, QNAP/Docker command, secret rotation, cutover, or delete without explicit user authorization and verified target. Restore tests start in disposable infrastructure; never import over existing production data by default.
 - Treat Nexora D1, Storage API SQLite metadata, Garage metadata and Garage object blocks as separate authoritative components with cross-system dependencies. Use SQLite Online Backup API for live WAL databases; never raw-copy a live `.db` as the default. Garage metadata and data must be a coordinated recovery set.
 - Consult `docs/BACKUP_RECOVERY.md` before proposing operational commands and `docs/PHASE_9_9.md` for known findings. Do not repeat or persist secret values.
+
+
+## Nexora v1 release baseline
+
+- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Do not start Phase 10 or add deferred features without a new request.
+- Account creation is administrator-provisioned; do not describe a public self-service registration route. Keep production implementation, user-reported smoke tests, and local validation distinct.
+- Backup/recovery design exists in `docs/BACKUP_RECOVERY.md`; automated backup and an isolated restore drill are not implemented/completed. Never claim recovery proven without an actual isolated restore.
+- Runtime SQLite artifacts in adjacent IssueDesk are no longer tracked; do not read or delete local DB/WAL/SHM files during Git hygiene checks. `garage/garage.toml` has since been removed from the adjacent IssueDesk index while preserving its local ignored copy; its example template uses a placeholder. Changes are staged/uncommitted and history was not rewritten; historical RPC secret material remains a follow-up. Do not print it or rotate production credentials without a separately authorized task.

@@ -1,6 +1,10 @@
 # Nexora
 
-Nexora เป็นเว็บจัดการไฟล์บน private cloud โดยใช้ **React + Vite + Tailwind CSS v4 + React Router 7** และ Base UI components เป้าหมายด้านภาพและการจัดวางใช้ IssueDesk เป็น reference ส่วนข้อมูลและ business logic ยังเป็นของ Nexora
+Nexora เป็นเว็บจัดการไฟล์บน private cloud โดยใช้ **React + Vite + Tailwind CSS v4 + React Router 7** และ Base UI components เป้าหมายด้านภาพและการจัดวางใช้ IssueDesk เป็น reference ส่วนข้อมูลและ business logic ยังเป็นของ Nexora.
+
+## Nexora v1 — Feature Complete
+
+ขอบเขต v1 ครอบคลุม authentication แบบ admin-provisioned, connected File Browser และ lifecycle, Favorites/Recent/Bulk operations, public read/download shares, Activity, Dashboard/Storage และ operational backup/recovery runbook. Package version ปัจจุบันคือ `1.0.0`. ดู capability, production boundary, limitations และ deferred roadmap ที่ [V1 Release Baseline](docs/V1_RELEASE.md). “Feature Complete” หมายถึง scope ใน source; ไม่ได้ยืนยัน production deployment หรือ recovery drill.
 
 ## Shared Storage S1/S2 and Nexora Phase 8
 
@@ -108,3 +112,6 @@ Local checks: `pnpm lint`, `pnpm test` (117/117), `pnpm build`, `git diff --chec
 ## Phase 9.9 — Backup & Recovery
 
 Added a source-derived data inventory and operator runbook for D1, Storage API SQLite, Garage metadata/object data, retention, checksums, restore order and validation. No backup/restore, QNAP, Docker, remote D1, deployment, or secret operation was run. The audit documents high findings in the adjacent IssueDesk checkout (tracked Garage RPC secret and tracked runtime SQLite/WAL/SHM artifacts); operator confirmation/remediation is required there. See [Phase 9.9](docs/PHASE_9_9.md) and [Backup & Recovery runbook](docs/BACKUP_RECOVERY.md).
+
+
+Release baseline: [Nexora v1 — Feature Complete](docs/V1_RELEASE.md). Backup automation, isolated restore drill and production rollout remain operator work.
