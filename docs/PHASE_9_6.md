@@ -23,6 +23,7 @@ The initial audit documented that even `shareId + secret` cannot recover a hash-
 - Create returns publicPath once. Duplicate create returns the existing share with no secret and does not rotate it. Atomic partial-index conflict handling prevents duplicate active records.
 - Replace is an explicitly confirmed owner action. A compare-and-swap against the current hash rejects concurrent replacements/revocation conflicts; the old URL immediately fails subsequent requests.
 - Copy/Open use a session-memory map separate from storage listing cache. Refresh, workspace unmount or owner/session transition discards it. No localStorage/sessionStorage/IndexedDB token persistence. An owner who saved an old link may keep using it until revoke/replace; after memory loss this UI requires replacement to copy a new link.
+- Shared keeps Copy Link and Open visible for links whose expiry has not passed while the capability is still available in session memory; expired or revoked links hide those actions.
 - Owner list/get never returns token_hash. No capability values, request bodies or URLs are added to diagnostics/logging.
 
 ## Authenticated API

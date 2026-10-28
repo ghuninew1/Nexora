@@ -99,7 +99,7 @@ IssueDesk เชื่อมกับ Shared Storage Service แยกต่า�
 
 ## Phase 9.6 — Public links (local implementation)
 
-File Browser มี Share ในเมนูรายการและ toolbar เมื่อเลือกหนึ่งรายการ; `/shared` อ่าน persistent records จาก D1 พร้อม bounded hydration/pagination, Copy/Open สำหรับลิงก์ที่ยังอยู่ใน memory, Manage/Replace/Revoke และ Open in Files. หน้า `/s/:shareId/:secret` แยกจาก auth/workspace รองรับ metadata, direct-child folder browsing, Preview และ streamed Download; ไม่มีสิทธิ์เขียนหรือ private sharing.
+File Browser มี Share ในเมนูรายการและ toolbar เมื่อเลือกหนึ่งรายการ; `/shared` อ่าน persistent records จาก D1 พร้อม bounded hydration/pagination, แสดง Copy/Open ต่อไปตราบใดที่ลิงก์ยังไม่หมดอายุและ secret ยังอยู่ใน memory, Manage/Replace/Revoke และ Open in Files. หน้า `/s/:shareId/:secret` แยกจาก auth/workspace รองรับ metadata, direct-child folder browsing, Preview และ streamed Download; ไม่มีสิทธิ์เขียนหรือ private sharing.
 
 Migrations คือ `migrations/0002_public_shares.sql` และ `migrations/0004_public_share_expiry.sql` (ยังไม่ได้ apply production). ตอนสร้าง/เปลี่ยนลิงก์ เลือกหมดอายุได้ 1 ชั่วโมง, 1 วัน, 1 เดือน (30 วัน), หรือตลอดไป; public API ปฏิเสธลิงก์หมดอายุ. Token ใช้ random 256 bits และเก็บ SHA-256 hash เท่านั้น ผู้ใช้เลือกแนวทางให้ Copy/Open ใช้ secret ใน memory; หลัง refresh ให้ยืนยัน **Replace link** เพื่อออก secret ใหม่และหยุดลิงก์เก่า ไม่มีการเก็บ token ใน localStorage/sessionStorage หรือฐานข้อมูลแบบ plaintext.
 
