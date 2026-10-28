@@ -8,6 +8,8 @@ import { useStorage } from "../hooks/useStorage";
 import useFiles from "../hooks/useFiles";
 import ThemeToggle from "../theme/ThemeToggle";
 import DeleteDialog from "../components/files/DeleteDialog";
+import StorageFilePreviewDialog from "../components/files/StorageFilePreviewDialog";
+import { MAX_TEXT_PREVIEW_BYTES } from "../utils/storage-preview";
 
 function PageHeading({ eyebrow, title, description, action }) {
   return <div className={cx("flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between")}>
@@ -63,7 +65,7 @@ function RecentItemRow({ item, browser, compact = false }) {
     </div>
     <div className={cx("flex flex-wrap gap-1 sm:shrink-0")}>
       {isFolder ? <Button type="button" variant="outline" size={compact ? "sm" : "default"} disabled={!isCurrentStorage} onClick={() => browser.openRecentFolder(item)} aria-label={`Open folder ${item.name}`}><Folder data-icon="inline-start" />Open folder</Button> : <>
-        <Button type="button" variant="outline" size={compact ? "sm" : "default"} disabled={!canPreview} onClick={() => void browser.openPreview(item)} aria-label={`Preview ${item.name}`}><Eye data-icon="inline-start" />Preview</Button>
+        {canPreview && <Button type="button" variant="outline" size={compact ? "sm" : "default"} onClick={() => void browser.openPreview(item)} aria-label={`Preview ${item.name}`}><Eye data-icon="inline-start" />Preview</Button>}
         <Button type="button" variant="ghost" size={compact ? "sm" : "default"} disabled={!isCurrentStorage || !browser.canDownload || isPending} onClick={() => void browser.downloadObject(item)} aria-label={`Download ${item.name}`}><Download data-icon="inline-start" />Download</Button>
         {item.parentId !== undefined && <Button type="button" variant="ghost" size={compact ? "sm" : "default"} disabled={!isCurrentStorage} onClick={() => browser.openContainingFolder(item)} aria-label={`Open containing folder for ${item.name}`}>Open folder</Button>}
       </>}
@@ -76,7 +78,10 @@ function RecentPanel({ browser, items, compact = false, emptyTitle = "Nothing he
   if (["loading", "refreshing", "idle"].includes(browser.recentStatus)) return <div className={cx("glass-surface flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><LoaderCircle className={cx("size-4 animate-spin motion-reduce:animate-none")} />Loading Recent activity…</div>;
   if (browser.recentStatus === "error") return <div className={cx("glass-surface flex flex-col items-start gap-3 p-5")} role="alert"><p className={cx("text-sm text-destructive")}>{browser.recentError}</p><Button type="button" variant="outline" onClick={() => void browser.refreshRecent()}>Try again<RefreshCw /></Button></div>;
   if (items.length === 0) return <div className={cx("glass-surface flex min-h-40 flex-col items-center justify-center px-6 text-center")}><h2 className={cx("text-sm font-semibold")}>{emptyTitle}</h2><p className={cx("mt-1 max-w-sm text-sm text-muted-foreground")}>Open a connected folder, preview a file, or download it to see it here.</p></div>;
-  return <div className={cx("flex flex-col gap-3")}>{items.map((item) => <RecentItemRow key={`${item.storageId}:${item.objectId}`} item={item} browser={browser} compact={compact} />)}</div>;
+  return <div className={cx("flex flex-col gap-3")}>
+    {items.map((item) => <RecentItemRow key={`${item.storageId}:${item.objectId}`} item={item} browser={browser} compact={compact} />)}
+    <StorageFilePreviewDialog preview={browser.preview} onOpenChange={(open) => { if (!open) browser.closePreview(); }} onDownload={(file) => void browser.downloadObject(file)} maxTextPreviewBytes={MAX_TEXT_PREVIEW_BYTES} />
+  </div>;
 }
 
 function formatUsage(usage) {
@@ -142,6 +147,8 @@ function ListingPage({ page }) {
             : files.map((file) => <article key={`${file.storageId}:${file.objectId}`} className={cx("glass-surface flex min-w-0 items-center gap-3 p-4")}>
               <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}>{file.type === "folder" ? <Folder className={cx("size-5")} aria-hidden="true" /> : <File className={cx("size-5")} aria-hidden="true" />}</span>
               <div className={cx("min-w-0 flex-1")}><p className={cx("truncate text-sm font-medium")}>{file.name}</p><p className={cx("mt-1 truncate text-xs text-muted-foreground")}>{file.storageName} · {file.type === "folder" ? "Folder" : file.size ?? "File"}</p></div>
+              {file.type === "folder" ? <Button type="button" variant="outline" size="sm" disabled={file.storageId !== connected.storageId} onClick={() => connected.openRecentFolder(file)} aria-label={`Open folder ${file.name}`}><Folder data-icon="inline-start" />Open folder</Button>
+                : file.parentId !== undefined && <Button type="button" variant="ghost" size="sm" disabled={file.storageId !== connected.storageId} onClick={() => connected.openContainingFolder(file)} aria-label={`Open containing folder for ${file.name}`}>Open folder</Button>}
               <Button type="button" variant="ghost" size="icon-lg" className={cx("min-h-11 min-w-11 shrink-0 text-amber-500")} onClick={() => void connected.toggleFavorite(file)} aria-label={`Remove ${file.name} from Favorites`} title="Remove from Favorites"><Heart className={cx("fill-amber-400")} aria-hidden="true" /></Button>
             </article>)}
     </section>}

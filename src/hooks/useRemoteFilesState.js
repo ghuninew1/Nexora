@@ -1044,7 +1044,11 @@ export default function useRemoteFilesState() {
     canPermanentDelete: canUseCapability('permanentDelete'),
     readOnly: Boolean(activeStorage?.readOnly || capabilities?.readOnly),
     preview,
-    canPreviewFile: (file) => Boolean(canUseCapability('download') && getStoragePreviewSpec(file)),
+    canPreviewFile: (file) => {
+      const spec = getStoragePreviewSpec(file);
+      return Boolean(canUseCapability('download') && spec
+        && (!Number.isSafeInteger(file?.sizeBytes) || file.sizeBytes <= spec.maxBytes));
+    },
     openPreview,
     closePreview,
     maxTextPreviewBytes: MAX_TEXT_PREVIEW_BYTES,

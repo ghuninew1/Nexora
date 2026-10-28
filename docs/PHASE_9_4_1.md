@@ -10,7 +10,7 @@ Connect actions for one selected object to the existing row action flows, repair
 - For exactly one selected object, the toolbar now offers Preview for supported files, Favorite/Unfavorite, Copy, Move, Move to Trash, and Clear Selection. Copy/Move reuse the existing destination dialog and capabilities. Preview still loads only when requested. Multiple selection exposes no object mutation actions.
 - Row and toolbar Favorite actions call the same authenticated service. The existing D1 `favorites` table and `/api/favorites` routes are reused; no table or duplicate endpoint was added.
 - The existing GET route returned only IDs. It now hydrates favorites through the owner-scoped mount's existing storage project mapping, returns normalized logical object metadata, and removes stale references when the upstream object is confirmed missing. Provider project IDs and provider fields are not returned. Favorite listing does not write Recent history.
-- Favorites page now shows loading, error/retry, empty and connected data states, with an action to remove an item. It has no demo fixture fallback.
+- Favorites page shows loading, error/retry, empty and connected data states, with actions to remove an item and open its folder in File Browser. File rows can open their containing folder when hydrated parent metadata is available. Folder navigation uses the validated Recent route-state flow. It has no demo fixture fallback.
 - The earlier `useFiles` default import in `WorkspacePage.jsx` is retained so the Trash page hook can resolve correctly.
 
 ## Local validation
