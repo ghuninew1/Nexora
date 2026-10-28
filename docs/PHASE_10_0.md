@@ -2,6 +2,8 @@
 
 Updated: 2026-10-28
 
+> Follow-up: see [Phase 10.0.1](PHASE_10_0_1.md). The operator has since confirmed production migrations 0001–0003 applied; this does not change the other live-verification blockers. Do not reapply migrations solely for verification.
+
 ## Status
 
 **Source/config audit complete; production readiness is blocked pending live verification.** This checkout is clean at the v1 baseline before the phase. The phase did not change application runtime code, UI, architecture, dependencies, D1, secrets, Storage, or deployment. No production behavior is claimed as verified.
@@ -17,14 +19,14 @@ Updated: 2026-10-28
 
 ## Live checks attempted
 
-Read-only Wrangler checks were attempted for remote D1 migration status, Pages secret inventory, and Pages deployments. All failed before returning account data because the stored Cloudflare auth token had expired and could not be refreshed: the Cloudflare auth server was unreachable. Wrangler also could not write its log under the host Preferences directory. The secret inventory produced no secret values. Therefore deployment identity/status, production binding names/presence, and applied remote migrations remain **unknown**.
+Read-only Wrangler checks were attempted for remote D1 migration status, Pages secret inventory, and Pages deployments. All failed before returning account data because the environment could not reach Cloudflare; Wrangler also could not write its log under the host Preferences directory. The secret inventory produced no secret values. Deployment identity/status and production binding names/presence remain **unknown**. Migration status was subsequently operator-confirmed on 2026-10-28; see Phase 10.0.1. The confirmation is not a live platform query.
 
 ## Readiness gates
 
-Do not deploy this source or run production mutations until the operator confirms all of the following against the intended Cloudflare account and Pages project:
+Do not deploy this source or run production mutations until the following gates are resolved against the intended Cloudflare account and Pages project:
 
 1. Current production deployment points to the intended source/revision and Pages project.
-2. Remote D1 is the configured Nexora database and migrations 0001–0003 are applied. If 0002 or 0003 is missing, review a separate migration plan and backup/recovery window before any rollout; applying migrations changes production schema/data state.
+2. Remote D1 is the configured Nexora database. Operator confirmed migrations 0001–0003 applied on 2026-10-28; see Phase 10.0.1. Do not reapply them solely for verification. If new contradictory evidence appears, stop and prepare a separate reviewed plan before any migration.
 3. Required Pages bindings are present for the production environment. Review only binding names/presence in reports, never values. Confirm the Access service token is authorized for the configured upstream endpoint.
 4. HTTPS/custom-domain and Cloudflare Access routing reach Nexora and the Storage API as intended. Confirm API requests are same-origin from the app and do not depend on browser CORS.
 5. After an approved deployment/migration, run the full smoke path from the approved production QA account: login, list mount/root/folder, upload, preview, download, rename, move, copy, favorite, trash, restore, share/public download, activity, and upload cancel/retry. Verify logs contain no unexpected 4xx/5xx and do not expose credentials or public capability URLs.

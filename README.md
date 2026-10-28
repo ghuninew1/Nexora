@@ -12,7 +12,7 @@ Shared Storage ใน checkout แยก `issuedesk/garage/storage/` มี File
 
 ## สถานะปัจจุบัน
 
-Phase 10.0 source/config audit เสร็จแล้ว แต่ **production readiness ยังยืนยันไม่ได้**: Wrangler read-only checks ไม่สามารถต่อ Cloudflare ได้เพราะ auth token หมดอายุและ auth server เข้าไม่ถึง จึงยังไม่ทราบ deployment ปัจจุบัน, Pages secret bindings และสถานะ remote migrations. Migration 0002/0003 ยังไม่มีหลักฐานว่า apply บน production; ห้าม deploy จน operator ยืนยัน environment และ migration status. ไม่มี runtime code, production resource หรือ secret ถูกเปลี่ยน. ดู [Phase 10.0](docs/PHASE_10_0.md).
+Phase 10.0.1 live verification ยัง **blocked**: operator ยืนยันว่า production D1 `nexora-db` มี migrations 0001–0003 ครบแล้ว (2026-10-28); ไม่มีการ apply ซ้ำ. การตรวจ Cloudflare และโดเมน production รอบนี้ทำไม่ได้เพราะ DNS/network resolve ไม่ได้ จึงยังไม่ยืนยัน deployment/revision, required binding presence, Access → Storage API connectivity, HTTPS/custom-domain และ same-origin behavior. ดู [Phase 10.0.1](docs/PHASE_10_0_1.md) และ [Phase 10.0](docs/PHASE_10_0.md). ไม่มี production config/data/deployment หรือ secret ถูกเปลี่ยน.
 
 File Browser แสดงรายการจริงจาก mount ที่เลือกผ่าน Nexora same-origin API, เปิดโฟลเดอร์และ breadcrumb ด้วย logical object IDs, โหลดหน้าถัดไป, ค้นหา/เรียงรายการที่โหลดแล้ว, สลับ List/Grid และเลือกหลายรายการได้. Listing cache อยู่ในหน่วยความจำของ authenticated app session, จำกัด 60 folders, ใช้ TTL 20 วินาที และแสดง stale rows ระหว่าง background revalidation. Refresh บังคับอ่านข้อมูลจริง; pagination ใช้ cursor ต่อเนื่องและ reset หน้าถัดไปเมื่อ first-page cursor เปลี่ยน. Search ครอบคลุมเฉพาะรายการที่โหลดแล้ว.
 

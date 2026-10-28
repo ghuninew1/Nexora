@@ -167,7 +167,15 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 
 ## Nexora v1 release baseline
 
-- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Phase 10.0 is active under the user's 2026-10-28 request; do not add deferred features beyond its production-readiness scope.
+- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Phase 10.0.1 is active under the user's 2026-10-28 request; do not add deferred features beyond its production-readiness scope. Read `docs/PHASE_10_0_1.md` for operator-confirmed versus tool-verified gates. Never reapply migrations 0001–0003 solely for verification; operator confirmed them applied on production D1 `nexora-db` on 2026-10-28.
 - Account creation is administrator-provisioned; do not describe a public self-service registration route. Keep production implementation, user-reported smoke tests, and local validation distinct.
 - Backup/recovery design exists in `docs/BACKUP_RECOVERY.md`; automated backup and an isolated restore drill are not implemented/completed. Never claim recovery proven without an actual isolated restore.
 - Runtime SQLite artifacts in adjacent IssueDesk are no longer tracked; do not read or delete local DB/WAL/SHM files during Git hygiene checks. `garage/garage.toml` has since been removed from the adjacent IssueDesk index while preserving its local ignored copy; its example template uses a placeholder. Changes are staged/uncommitted and history was not rewritten; historical RPC secret material remains a follow-up. Do not print it or rotate production credentials without a separately authorized task.
+
+
+## Phase 10.0.1 — Live verification boundary
+
+- Production migration 0001–0003 status is operator-confirmed on 2026-10-28. Never apply or rerun these migrations solely as a verification step.
+- Current live checks are blocked when Cloudflare auth or network/DNS is unavailable. Report the exact failure and minimum operator action; do not workaround by editing source.
+- Inspect only names/presence for production secrets and bindings. Never read, display, or log their values.
+- No production deploy, secret rotation, configuration change, or data mutation without separate authorization. Begin with read-only checks; full smoke paths that create/update/delete production data require explicit approval.
