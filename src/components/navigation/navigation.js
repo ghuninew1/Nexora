@@ -8,7 +8,7 @@ export const navigationGroups = [
         { to: "/favorites", label: "Favorites", icon: Heart, description: "Keep your important files close at hand." },
     ] },
     { label: "Library", items: [
-        { to: "/shared", label: "Shared", icon: Share2, description: "Manage files shared with you and by you." },
+        { to: "/shared", label: "Shared", icon: Share2, description: "Manage your public file and folder links." },
         { to: "/trash", label: "Trash", icon: Trash2, description: "Review and restore deleted files." },
     ] },
     { label: "Manage", items: [

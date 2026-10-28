@@ -1,4 +1,5 @@
 const messages = {
+  SHARE_UNAVAILABLE: 'This shared item is unavailable.',
   UNAUTHENTICATED: 'Sign in to continue.',
   FORBIDDEN: 'You do not have access to this resource.',
   NOT_FOUND: 'The requested resource was not found.',

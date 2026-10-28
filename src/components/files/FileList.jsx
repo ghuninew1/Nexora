@@ -2,7 +2,7 @@ import { cx } from "../../utils/cx";
 import FileEmptyState from "./FileEmptyState";
 import FileListItem from "./FileListItem";
 
-function FileList({ files, selectedIds, query, view, favorites, onSelect, onSelectAll, onOpenFolder, onPreview, onRename, onDownload, onMove, onCopy, onTrash, onToggleFavorite, allowFavorites = false, canCreateFolder = false, capabilities, readOnly = false, mutatingIds, onCreateFolder }) {
+function FileList({ files, selectedIds, query, view, favorites, onSelect, onSelectAll, onOpenFolder, onPreview, onRename, onDownload, onMove, onCopy, onShare, onTrash, onToggleFavorite, allowFavorites = false, canCreateFolder = false, capabilities, readOnly = false, mutatingIds, onCreateFolder }) {
   if (files.length === 0) return <FileEmptyState searching={Boolean(query.trim())} canCreateFolder={canCreateFolder} onCreateFolder={onCreateFolder} />;
   const allSelected = files.every((file) => selectedIds.includes(file.id));
   return (
@@ -14,7 +14,7 @@ function FileList({ files, selectedIds, query, view, favorites, onSelect, onSele
       </div>}
       {view === "grid" && <div className={cx("mb-2 flex justify-end")}><button type="button" onClick={onSelectAll} aria-pressed={allSelected} className={cx("min-h-10 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground")}>{allSelected ? "Deselect all" : "Select all"}</button></div>}
       <div className={cx(view === "grid" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-3" : "")}>
-        {files.map((file) => <FileListItem key={file.id} file={file} selected={selectedIds.includes(file.id)} favorite={favorites.includes(file.id)} view={view} onSelect={onSelect} onOpenFolder={onOpenFolder} onPreview={onPreview} onRename={onRename} onDownload={onDownload} onMove={onMove} onCopy={onCopy} onTrash={onTrash} onToggleFavorite={onToggleFavorite} allowFavorites={allowFavorites} capabilities={capabilities} readOnly={readOnly} busy={mutatingIds.has(file.objectId)} />)}
+        {files.map((file) => <FileListItem key={file.id} file={file} selected={selectedIds.includes(file.id)} favorite={favorites.includes(file.id)} view={view} onSelect={onSelect} onOpenFolder={onOpenFolder} onPreview={onPreview} onRename={onRename} onDownload={onDownload} onMove={onMove} onCopy={onCopy} onShare={onShare} onTrash={onTrash} onToggleFavorite={onToggleFavorite} allowFavorites={allowFavorites} capabilities={capabilities} readOnly={readOnly} busy={mutatingIds.has(file.objectId)} />)}
       </div>
     </div>
   );

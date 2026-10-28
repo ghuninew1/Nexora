@@ -1,3 +1,4 @@
+import { handleSharesApi, handlePublicSharesApi } from './shares-api.js';
 import { authenticate, login, sessionCookie, serializeUser, logout } from './auth.js';
 import { requireUser } from './authorization.js';
 import { ApiError, decodePath, fail, json, readJson, requireJsonContentType, requireSameOrigin } from './http.js';
@@ -30,6 +31,17 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
     try {
       const parts = decodePath(new URL(request.url).pathname);
       if (parts[0] !== 'api') throw new ApiError('NOT_FOUND', 404);
+      if (parts[1] === 'public' && parts[2] === 'shares') {
+        const response = await handlePublicSharesApi({ request, env, parts, fetchImpl });
+        response.headers.set('Referrer-Policy', 'no-referrer');
+        response.headers.set('X-Content-Type-Options', 'nosniff');
+        return response;
+      }
+      if (parts[1] === 'shares') {
+        const user = await requireUser(request, env);
+        if (['POST', 'DELETE'].includes(request.method.toUpperCase())) requireSameOrigin(request);
+        return await handleSharesApi({ request, env, user, parts, fetchImpl });
+      }
       if (parts[1] === 'auth') return await handleAuth({ request, env, parts });
       if (parts[1] === 'storage' && parts[2] === 'v1') {
         const user = await requireUser(request, env);
@@ -48,6 +60,7 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
       }
       throw new ApiError('NOT_FOUND', 404);
     } catch (error) {
+      if (new URL(request.url).pathname.startsWith('/api/public/shares')) return fail('SHARE_UNAVAILABLE', 404);
       if (error instanceof ApiError) return fail(error.code, error.status);
       return fail('INTERNAL_ERROR', 500);
     }

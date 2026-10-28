@@ -1,3 +1,5 @@
+import ShareDialog from './ShareDialog';
+import { useStorage } from '../../hooks/useStorage';
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, FolderOpen, Info } from "lucide-react";
@@ -27,6 +29,9 @@ function FileListLoading() {
 
 function FileBrowser() {
   const browser = useFiles();
+  const { capabilities, activeStorage } = useStorage();
+  const [shareFile, setShareFile] = useState(null);
+  const canShare = file => Boolean(file && !activeStorage?.readOnly && !capabilities?.readOnly && capabilities?.stat && capabilities?.[file.type === "folder" ? "list" : "download"]);
   const navigate = useNavigate();
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
@@ -90,6 +95,8 @@ function FileBrowser() {
           canPreviewSelected={Boolean(selectedFile && browser.canPreviewFile(selectedFile))}
           canMoveSelected={browser.canMove}
           canCopySelected={browser.canCopy}
+          canShareSelected={canShare(selectedFile)}
+          onShareSelected={() => selectedFile && setShareFile({ file: selectedFile, storageId: browser.storageId, folderId: browser.folderId })}
           canTrashSelected={browser.canTrash}
           onPreviewSelected={() => selectedFile && void browser.openPreview(selectedFile)}
           onToggleFavoriteSelected={() => selectedFile && void browser.toggleFavorite(selectedFile)}
@@ -132,10 +139,11 @@ function FileBrowser() {
             onDownload={(file) => void browser.downloadObject(file)}
             onMove={(file) => setDestinationAction({ action: "move", file, key: crypto.randomUUID() })}
             onCopy={(file) => setDestinationAction({ action: "copy", file, key: crypto.randomUUID() })}
+            onShare={(file) => setShareFile({ file, storageId: browser.storageId, folderId: browser.folderId })}
             onTrash={setTrashFile}
             onToggleFavorite={(id) => { const file = browser.currentFiles.find((item) => item.id === id); if (file) void browser.toggleFavorite(file); }}
             allowFavorites
-            capabilities={{ download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}
+            capabilities={{ share: canShare, download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}
             mutatingIds={browser.mutatingIds}
             canCreateFolder={browser.canCreateFolder}
             onCreateFolder={() => setNewFolderOpen(true)}
@@ -145,6 +153,7 @@ function FileBrowser() {
           {browser.paginationStatus === "error" && <Button variant="ghost" onClick={() => void browser.loadMore()}>Try loading more again</Button>}
         </>}
       </section>
+      {shareFile && shareFile.storageId === browser.storageId && shareFile.folderId === browser.folderId && <ShareDialog key={`${shareFile.storageId}:${shareFile.file.objectId}`} file={shareFile.file} storageId={shareFile.storageId} onClose={() => setShareFile(null)} />}
       <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} onCreate={handleCreateFolder} />
       <RenameDialog open={Boolean(renameFile)} onOpenChange={(open) => { if (!open) setRenameFile(null); }} file={renameFile} onRename={handleRename} />
       <FolderDestinationDialog

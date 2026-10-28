@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Copy, File, FileCode2, FileText, Folder, MoreHorizontal, Download, Eye, Pencil, Star, Trash2 } from "lucide-react";
+import { Share2, ArrowRightLeft, Copy, File, FileCode2, FileText, Folder, MoreHorizontal, Download, Eye, Pencil, Star, Trash2 } from "lucide-react";
 import { cx } from "../../utils/cx";
 import { Button } from "../ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
@@ -6,7 +6,7 @@ import { getStoragePreviewSpec } from "../../utils/storage-preview";
 
 const fileIcons = { md: FileCode2, pdf: FileText };
 
-function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy, onTrash }) {
+function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy, onShare, onTrash }) {
   const Icon = file.type === "folder" ? Folder : fileIcons[file.extension] ?? File;
   const isFolder = file.type === "folder";
   const canRename = Boolean(capabilities.rename && !readOnly && !busy);
@@ -59,6 +59,7 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
           {!isFolder && <DropdownMenuItem disabled={!canPreview} onClick={() => onPreview?.(file)}><Eye />Preview</DropdownMenuItem>}
           {!isFolder && <DropdownMenuItem disabled={!canDownload} onClick={() => onDownload?.(file)}><Download />Download</DropdownMenuItem>}
           {allowFavorites && <DropdownMenuItem onClick={() => onToggleFavorite(file.id)}><Star />{favorite ? "Remove favorites" : "Add favorites"}</DropdownMenuItem>}
+          <DropdownMenuItem disabled={!capabilities.share?.(file) || busy} onClick={() => onShare?.(file)}><Share2 />Share</DropdownMenuItem>
           <DropdownMenuItem disabled={!canRename} onClick={() => onRename?.(file)}><Pencil />Rename</DropdownMenuItem>
           <DropdownMenuItem disabled={!canMove} onClick={() => onMove?.(file)}><ArrowRightLeft />Move</DropdownMenuItem>
           <DropdownMenuItem disabled={!canCopy} onClick={() => onCopy?.(file)}><Copy />Copy</DropdownMenuItem>

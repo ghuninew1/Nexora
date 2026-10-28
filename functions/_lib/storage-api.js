@@ -142,7 +142,7 @@ function previewSpec(object) {
   return { kind, mimeType: safeMime, maxBytes: kind === 'text' ? MAX_TEXT_PREVIEW_BYTES : MAX_MEDIA_PREVIEW_BYTES };
 }
 
-function streamResponse(result) {
+export function streamResponse(result) {
   const { response, cleanup, abort, timedOut } = result;
   const reader = response.body?.getReader();
   if (!reader) { cleanup(); throw new ApiError('PROVIDER_UNAVAILABLE', 502); }
@@ -343,30 +343,9 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       const object = await getObject(client, request, mount, objectId);
       if (!object) throw new ApiError('NOT_FOUND', 404);
       if (object.type !== 'file') throw new ApiError('PREVIEW_UNSUPPORTED', 415);
-      const spec = previewSpec(object);
-      if (!spec) throw new ApiError('PREVIEW_UNSUPPORTED', 415);
-      if (!Number.isSafeInteger(object.sizeBytes) || object.sizeBytes < 0) throw new ApiError('PREVIEW_UNSUPPORTED', 415);
-      if (object.sizeBytes > spec.maxBytes) throw new ApiError('PREVIEW_TOO_LARGE', 413);
-      const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download` });
-      if (!result.response.ok) {
-        const payload = await readBoundedJson(result.response);
-        result.cleanup();
-        const code = normalizeUpstreamError(payload, result.response.status);
-        throw new ApiError(code, statusFor(code));
-      }
-      const upstreamMimeType = (result.response.headers.get('Content-Type') || '').split(';', 1)[0].trim().toLowerCase();
-      const upstreamKind = SAFE_PREVIEW_MIME_TYPES.get(upstreamMimeType);
-      if (upstreamMimeType && upstreamMimeType !== 'application/octet-stream' && upstreamKind !== spec.kind) {
-        result.cleanup();
-        throw new ApiError('PREVIEW_UNSUPPORTED', 415);
-      }
-      const contentLength = result.response.headers.get('Content-Length');
-      if (contentLength && /^(0|[1-9][0-9]{0,15})$/u.test(contentLength) && Number(contentLength) > spec.maxBytes) {
-        result.cleanup();
-        throw new ApiError('PREVIEW_TOO_LARGE', 413);
-      }
+      const response = await previewObjectResponse(client, request, mount, object);
       await recordRecentBestEffort(env.DB, user, mount, objectId);
-      return streamPreviewResponse(result, spec);
+      return response;
     }
     if (suffix[0] === 'move' && suffix.length === 1 && method === 'POST') {
       const body = await readJson(request);
@@ -558,4 +537,30 @@ export async function handleRecentApi({ request, env, user, parts, fetchImpl = f
       accessedAt: new Date(accessedAt).toISOString() } }, 200);
   }
   throw new ApiError('NOT_FOUND', 404);
+}
+
+export async function previewObjectResponse(client, request, mount, object) {
+  const spec = previewSpec(object);
+  if (!spec) throw new ApiError('PREVIEW_UNSUPPORTED', 415);
+  if (!Number.isSafeInteger(object.sizeBytes) || object.sizeBytes < 0) throw new ApiError('PREVIEW_UNSUPPORTED', 415);
+  if (object.sizeBytes > spec.maxBytes) throw new ApiError('PREVIEW_TOO_LARGE', 413);
+  const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(object.objectId)}/download` });
+  if (!result.response.ok) {
+    const payload = await readBoundedJson(result.response);
+    result.cleanup();
+    const code = normalizeUpstreamError(payload, result.response.status);
+    throw new ApiError(code, statusFor(code));
+  }
+  const upstreamMimeType = (result.response.headers.get('Content-Type') || '').split(';', 1)[0].trim().toLowerCase();
+  const upstreamKind = SAFE_PREVIEW_MIME_TYPES.get(upstreamMimeType);
+  if (upstreamMimeType && upstreamMimeType !== 'application/octet-stream' && upstreamKind !== spec.kind) {
+    result.abort(); result.cleanup();
+    throw new ApiError('PREVIEW_UNSUPPORTED', 415);
+  }
+  const contentLength = result.response.headers.get('Content-Length');
+  if (contentLength && /^(0|[1-9][0-9]{0,15})$/u.test(contentLength) && Number(contentLength) > spec.maxBytes) {
+    result.abort(); result.cleanup();
+    throw new ApiError('PREVIEW_TOO_LARGE', 413);
+  }
+  return streamPreviewResponse(result, spec);
 }

@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Activity, Download, Eye, File, FileText, Files, Folder, FolderClock, HardDrive, Heart, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, Star, Trash2, Users } from "lucide-react";
+import { Activity, Download, Eye, File, FileText, Files, Folder, FolderClock, HardDrive, Heart, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, Star, Trash2 } from "lucide-react";
 import { getPageInfo } from "../components/navigation/navigation";
 import { Button } from "../components/ui/button";
 import { cx } from "../utils/cx";
-import { useFilesData } from "../context/FilesProvider";
 import { useStorage } from "../hooks/useStorage";
-import useFiles, { useDemoFiles } from "../hooks/useFiles";
+import useFiles from "../hooks/useFiles";
 import ThemeToggle from "../theme/ThemeToggle";
-import DemoFileGrid from "../components/files/DemoFileGrid";
-import FilePreviewDialog from "../components/files/FilePreviewDialog";
 import DeleteDialog from "../components/files/DeleteDialog";
 
 function PageHeading({ eyebrow, title, description, action }) {
@@ -133,20 +130,12 @@ function RecentPage({ page }) {
   </div>;
 }
 
-function ListingPage({ page, browser, openFile }) {
+function ListingPage({ page }) {
   const connected = useFiles();
-  const path = page.to;
-  const favorites = path === "/favorites";
-  const shared = path === "/shared";
-  const files = favorites ? connected.favoriteFiles : browser.files.filter((file) => file.sharedWith || file.sharedByMe);
-  const descriptions = {
-    "/favorites": "Your starred items from connected storage.",
-    "/shared": "Sample sharing records for this workspace. Sharing links and permissions are not connected.",
-  };
+  const files = connected.favoriteFiles;
   return <div className={cx("flex flex-col gap-6")}>
-    <PageHeading eyebrow="Your library" title={page.label} description={descriptions[path]} />
-    {shared && <div className={cx("glass-surface flex items-start gap-3 p-4")}><Users className={cx("mt-0.5 size-4 shrink-0 text-muted-foreground")} /><p className={cx("text-sm text-muted-foreground")}>These are illustrative records only. Nexora has no sharing API or access-control service configured.</p></div>}
-    {favorites ? <section className={cx("flex flex-col gap-3")} aria-label="Favorite files">
+    <PageHeading eyebrow="Your library" title={page.label} description="Your starred items from connected storage." />
+    {<section className={cx("flex flex-col gap-3")} aria-label="Favorite files">
       {connected.favoritesStatus === "loading" || connected.favoritesStatus === "refreshing" ? <div className={cx("glass-surface flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><LoaderCircle className={cx("size-4 animate-spin motion-reduce:animate-none")} />Loading Favorites…</div>
         : connected.favoritesStatus === "error" ? <div className={cx("glass-surface flex flex-col items-start gap-3 p-5")} role="alert"><p className={cx("text-sm text-destructive")}>{connected.favoritesError}</p><Button variant="outline" onClick={() => void connected.refreshFavorites()}>Try again<RefreshCw /></Button></div>
           : files.length === 0 ? <div className={cx("glass-surface flex min-h-64 flex-col items-center justify-center px-6 text-center")}><span className={cx("glass-control flex size-12 items-center justify-center rounded-2xl text-muted-foreground")}><Folder className={cx("size-5")} aria-hidden="true" /></span><h2 className={cx("mt-4 text-sm font-semibold")}>No favorites yet</h2><p className={cx("mt-1 max-w-sm text-sm text-muted-foreground")}>Star a connected file or folder to keep it here.</p></div>
@@ -155,7 +144,7 @@ function ListingPage({ page, browser, openFile }) {
               <div className={cx("min-w-0 flex-1")}><p className={cx("truncate text-sm font-medium")}>{file.name}</p><p className={cx("mt-1 truncate text-xs text-muted-foreground")}>{file.storageName} · {file.type === "folder" ? "Folder" : file.size ?? "File"}</p></div>
               <Button type="button" variant="ghost" size="icon-lg" className={cx("min-h-11 min-w-11 shrink-0 text-amber-500")} onClick={() => void connected.toggleFavorite(file)} aria-label={`Remove ${file.name} from Favorites`} title="Remove from Favorites"><Heart className={cx("fill-amber-400")} aria-hidden="true" /></Button>
             </article>)}
-    </section> : <DemoFileGrid files={files} mode="shared" onOpen={openFile} emptyTitle="Nothing shared here" emptyDescription="Shared items will appear here when sharing is configured." />}
+    </section>}
   </div>;
 }
 
@@ -271,7 +260,7 @@ function SettingsPage({ page }) {
       <div><h2 className={cx("text-sm font-semibold")}>Appearance</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Choose light, dark, or follow your system preference.</p></div><ThemeToggle />
     </section>
     <section className={cx("glass-surface p-5")}>
-      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Recent, Favorites, File Browser, and Trash use connected Nexora data where available. Shared remains an illustrative page; Theme preference is saved locally in this browser.</p></div></div>
+      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Recent, Favorites, File Browser, and Trash use connected Nexora data where available. Shared manages persistent public links; Theme preference is saved locally in this browser.</p></div></div>
     </section>
   </div>;
 }
@@ -280,29 +269,14 @@ export default function WorkspacePage() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const page = getPageInfo(pathname);
-  const browser = useDemoFiles();
-  const { recordAccess } = useFilesData();
-  const [previewFile, setPreviewFile] = useState(null);
-  const openFile = (file) => {
-    if (file.type === "folder") {
-      recordAccess(file.id);
-      navigate("/files", { state: { fileBrowserNotice: "This sample folder is not part of connected storage. Showing My Files." } });
-      return;
-    }
-    recordAccess(file.id);
-    setPreviewFile(file);
-  };
   let screen;
   if (!page) screen = <section className={cx("glass-surface p-8 text-center")}><h1 className={cx("text-xl font-semibold")}>Page not found</h1><Button variant="outline" className={cx("mt-4")} onClick={() => navigate("/files")}>Back to My Files</Button></section>;
   else if (pathname === "/dashboard") screen = <DashboardPage navigate={navigate} />;
   else if (pathname === "/recent") screen = <RecentPage page={page} />;
-  else if (["/favorites", "/shared"].includes(pathname)) screen = <ListingPage page={page} browser={browser} openFile={openFile} />;
+  else if (pathname === "/favorites") screen = <ListingPage page={page} />;
   else if (pathname === "/trash") screen = <TrashPage page={page} />;
   else if (pathname === "/storage") screen = <StoragePage page={page} navigate={navigate} />;
   else if (pathname === "/settings") screen = <SettingsPage page={page} />;
 
-  return <>
-    {screen}
-    <FilePreviewDialog file={previewFile} open={Boolean(previewFile)} onOpenChange={(open) => { if (!open) setPreviewFile(null); }} />
-  </>;
+  return screen;
 }

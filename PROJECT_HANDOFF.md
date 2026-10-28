@@ -2,7 +2,7 @@
 
 อัปเดตล่าสุด: 2026-10-28
 
-เอกสารนี้สรุปสถานะ Nexora หลัง implementation Phase 9.5; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
+เอกสารนี้สรุปสถานะ Nexora หลัง implementation Phase 9.6; แยกผล local validation ออกจากสถานะ remote ที่ผู้ใช้/operator ยืนยัน
 
 ## สถานะปัจจุบัน
 
@@ -24,10 +24,10 @@
 - `pnpm db:migrate:local` apply Nexora migration กับ Wrangler local D1 ได้; `wrangler.jsonc` กำหนด D1 `nexora-db` พร้อม database ID
 - Phase 9.1 เพิ่ม storage discovery/capabilities/usage client และ provider ผ่าน same-origin Nexora API; Storage page แสดง safe connection state. Production deploy/connection ยังไม่ได้ตรวจในงานนี้
 - Phase 9.2 เปลี่ยน File Browser เป็น real listing/navigation ผ่าน Nexora API: root/child listing, cursor pagination, logical-ID breadcrumbs, refresh, loaded-item search/sort และ create-folder ตาม capability
-- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Phase 9.3 operations, Phase 9.3.2 preview, Phase 9.4 Trash lifecycle, Phase 9.4.1 Favorites, and Phase 9.5 Recent use Nexora same-origin APIs when authorized; Share remains demo-only or unavailable.
-- `FilesProvider` demo data ยังคงใช้กับ Shared; Dashboard/Recent ใช้ remote storage state และ D1 Recent API, Favorites ใช้ remote D1/API state และ Trash ใช้ remote state แยกตาม active storage mount
+- File Browser ไม่ใช้ fixture IDs และไม่เชื่อม demo mutations เข้ากับ mount. Phase 9.3 operations, Phase 9.3.2 preview, Phase 9.4 Trash lifecycle, Phase 9.4.1 Favorites, and Phase 9.5 Recent use Nexora same-origin APIs when authorized; Phase 9.6 adds owner-managed persistent public links.
+- `FilesProvider` demo helpers เหลือสำหรับ legacy examples; Shared ใช้ public_shares ใน D1; Dashboard/Recent ใช้ remote storage state และ D1 Recent API, Favorites ใช้ remote D1/API state และ Trash ใช้ remote state แยกตาม active storage mount
 - Upload queue ที่เหลือใน demo จำลอง progress ใน browser; ไม่ส่ง bytes ไป storage
-- Shared แสดง fixture records และ Share action ยังปิดอยู่. Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
+- Shared แสดง persistent public links และ Share action เชื่อม API แล้ว (local). Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
 - Theme เป็น browser preference ใน `localStorage`
 - UI follow-up: Sidebar เต็มความสูงและ responsive; ใช้ `src/assets/logo_full.avif` ตอนขยายและ `src/assets/logo.avif` ตอนพับ; File Browser และการ์ด Recent/Favorites มี Liquid Glass hover; Favorites ใน File Browser ยังคงเป็น demo เฉพาะหน้าที่ใช้ demo state
 - Phase 9.1 validation: lint, 45 tests, build and diff check passed; in-app browser mock QA verified the Storage connection panel and refresh at a narrow viewport. Production connection, desktop rendering, and production console/network inspection remain unverified.
@@ -141,8 +141,20 @@ For one selected object, the File Browser toolbar offers the same Preview, Favor
 
 ## เริ่มงานต่อใน session ใหม่
 
-อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, phase reports ที่เกี่ยวข้อง แล้วตรวจ `git status --short`. Phase 9.5 local checks are recorded in `docs/PHASE_9_5.md`; run rendered preview/mobile/API QA with local auth and a mock storage API before release. Phase 9.5 production behavior remains unverified. รอบนี้ไม่ได้ deploy หรือแก้ข้อมูล production.
+อ่าน `PROJECT_HANDOFF.md`, `AGENTS.md`, `README.md`, phase reports ที่เกี่ยวข้อง แล้วตรวจ `git status --short`. Phase 9.5 local checks are recorded in `docs/PHASE_9_5.md`; Phase 9.6 mock browser QA is recorded in docs/PHASE_9_6.md; remaining live-provider and production QA must be completed before release. Phase 9.5 production behavior remains unverified. รอบนี้ไม่ได้ deploy หรือแก้ข้อมูล production.
 
 ## กติกาการดูแลเอกสาร
 
 ทุกครั้งที่แก้ source หรือ behavior ให้ซิงก์ `README.md`, `AGENTS.md` และ `PROJECT_HANDOFF.md` ในงานรอบเดียวกัน โดยบันทึก scope, สถานะ demo/backend และผลตรวจจริง; แยกสิ่งที่ยังไม่ได้ตรวจหรือยังไม่ได้รับอนุมัติออกจากรายการที่เสร็จแล้ว
+
+## Phase 9.6 — Current handoff (2026-10-28)
+
+Implemented locally: owner `/api/shares` list/create/get/revoke, explicit secret rotation at `POST /api/shares/:id/replace`, anonymous `/api/public/shares/:id/:secret` metadata/objects/download/preview, Share dialog plus single-selection action, persistent `/shared`, and public `/s/:shareId/:secret` outside authentication/workspace providers.
+
+Apply additive `0002_public_shares.sql` only under a separately approved deployment/migration request. One active owner/mount/object record; only token SHA-256 stored. User approved creation-session memory only with explicit Replace after refresh; old links stop working on replacement/revocation. No server plaintext token, browser persistent token, encryption/key setup, expiry, passwords, public writes, user invitations, or provider share capability was added.
+
+Authorization checks mount ownership, stat/list/download capabilities, logical ancestry with 64-hop/cycle bounds and final revalidation. Public metadata omits parent/mount/owner/project/provider references. Preview reuses existing safe streaming policy and never writes Recent; owner Open in Files supplies validated abbreviated route state and is explicit owner access. No folder cache invalidation on sharing mutations.
+
+Checks passed: lint, 117/117 tests, normal build, diff check. Browser QA used a temporary localhost Vite harness, real Nexora handlers, in-memory SQLite and mocked Storage, with file/folder sharing, Copy, public metadata/text Preview/Download, nested navigation, Replace/Revoke, refresh secret loss, Shared, Open in Files, focus/Escape and 390 × 844 wrapping/no horizontal overflow. A navigation-state bug found by QA was fixed and covered by a regression test. Fresh browser tab had no console warnings/errors. Large binaries, provider races, image/PDF rendering and live production remain pending; see [Phase 9.6](docs/PHASE_9_6.md).
+
+Pre-existing changes to package.json, pnpm-lock.yaml and pnpm-workspace.yaml were preserved. Dependencies were hydrated from the existing lockfile without changing versions. No commit/push/deploy/remote migration/secrets or production Storage changes occurred.
