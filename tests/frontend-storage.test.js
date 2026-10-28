@@ -35,6 +35,7 @@ import { appendBreadcrumb, breadcrumbDestination, normalizeFileBrowserRouteState
 import { FOLDER_LIST_CACHE_TTL_MS, MAX_FOLDER_CACHE_ENTRIES, RemoteFilesCache } from '../src/utils/remote-files-cache.js';
 import { getStoragePreviewSpec, MAX_TEXT_PREVIEW_BYTES, MAX_MEDIA_PREVIEW_BYTES } from '../src/utils/storage-preview.js';
 import { PreviewRequestCoordinator } from '../src/utils/preview-request.js';
+import { runBounded } from '../src/utils/run-bounded.js';
 
 const mount = {
   storageId: 'mount_123',
@@ -676,4 +677,23 @@ test('folder cache uses a bounded least-recently-used entry count', () => {
   assert.equal(cache.get('mount_a', 'folder_a'), null);
   assert.equal(cache.get('mount_a', 'folder_b') !== null, true);
   assert.equal(MAX_FOLDER_CACHE_ENTRIES, 60);
+});
+
+test('bulk operation runner bounds concurrency, preserves partial failures, and reports progress', async () => {
+  let active = 0;
+  let maximumActive = 0;
+  const progress = [];
+  const results = await runBounded(['a', 'b', 'c', 'd'], 2, async (item) => {
+    active += 1;
+    maximumActive = Math.max(maximumActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    active -= 1;
+    if (item === 'c') throw new Error('safe-test-failure');
+    return { ok: true, item };
+  }, (completed) => progress.push(completed));
+
+  assert.equal(maximumActive, 2);
+  assert.deepEqual(results.map((result) => result.ok), [true, true, false, true]);
+  assert.equal(results[2].error.message, 'safe-test-failure');
+  assert.deepEqual(progress, [1, 2, 3, 4]);
 });

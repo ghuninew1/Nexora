@@ -39,6 +39,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     while (activeRef.current.size < maxConcurrency && pendingRef.current.length > 0) {
       const task = pendingRef.current.shift();
       if (!task || task.cancelled) continue;
+      task.status = 'uploading';
       const controller = new AbortController();
       task.controller = controller;
       activeRef.current.set(task.id, task);
@@ -54,11 +55,13 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         }))
         .then((result) => {
           if (controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+          task.status = 'success';
           updateItem(task.id, { status: 'success', result });
           try { onCompleteRef.current?.(task, result); } catch { /* refresh errors must not turn a completed upload into a failed transfer */ }
         })
         .catch((error) => {
           const cancelled = controller.signal.aborted || error?.name === 'AbortError';
+          task.status = cancelled ? 'cancelled' : 'error';
           updateItem(task.id, { status: cancelled ? 'cancelled' : 'error', error: cancelled ? null : errorMessage(error) });
           if (error?.code === 'UNAUTHENTICATED') {
             onUnauthorizedRef.current?.();
@@ -118,6 +121,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         error: tooLarge ? errorMessage({ code: 'UPLOAD_TOO_LARGE' }) : invalid ? errorMessage({ code: 'INVALID_INPUT' }) : null,
       };
     });
+    newItems.forEach((item, index) => { tasks[index].status = item.status; });
     const validTasks = tasks.filter((task) => task.file.size > 0
       && !(Number.isSafeInteger(maxUploadBytes) && maxUploadBytes >= 0 && task.file.size > maxUploadBytes));
     pendingRef.current.push(...validTasks);
@@ -133,15 +137,18 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
       task.controller.abort();
       return;
     }
+    if (task.status !== 'queued') return;
     task.cancelled = true;
+    task.status = 'cancelled';
     pendingRef.current = pendingRef.current.filter((pending) => pending.id !== id);
     updateItem(id, { status: 'cancelled', error: null });
   }, [updateItem]);
 
   const retryUpload = useCallback((id) => {
     const task = tasksRef.current.get(id);
-    if (!task || activeRef.current.has(id)) return;
+    if (!task || task.status !== 'error' || activeRef.current.has(id) || pendingRef.current.some((pending) => pending.id === id)) return;
     task.cancelled = false;
+    task.status = 'queued';
     pendingRef.current.push(task);
     updateItem(id, { status: 'queued', error: null });
     queueMicrotask(() => processQueueRef.current?.());
@@ -157,6 +164,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     const pending = pendingRef.current.splice(0);
     for (const task of pending) {
       task.cancelled = true;
+      task.status = 'cancelled';
       updateItem(task.id, { status: 'cancelled', error: null });
     }
     for (const task of activeRef.current.values()) task.controller?.abort();

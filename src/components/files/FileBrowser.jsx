@@ -3,6 +3,7 @@ import { useStorage } from '../../hooks/useStorage';
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, FolderOpen, Info } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { cx } from "../../utils/cx";
 import { Button } from "../ui/button";
 import useFiles from "../../hooks/useFiles";
@@ -37,9 +38,13 @@ function FileBrowser() {
   const [renameFile, setRenameFile] = useState(null);
   const [destinationAction, setDestinationAction] = useState(null);
   const [trashFile, setTrashFile] = useState(null);
+  const [bulkTrashOpen, setBulkTrashOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(null);
   const selectedCount = browser.selectedIds.length;
   const selectedFile = selectedCount === 1 ? browser.currentFiles.find((file) => file.id === browser.selectedIds[0]) : null;
-  const selectedIsBusy = Boolean(selectedFile && browser.mutatingIds.has(selectedFile.objectId));
+  const selectedFiles = browser.currentFiles.filter((file) => browser.selectedIds.includes(file.id));
+  const selectedIsBusy = bulkBusy || selectedFiles.some((file) => browser.mutatingIds.has(file.objectId));
   const isLoading = browser.status === "loading";
   const isRefreshing = browser.status === "refreshing";
   const isReady = browser.status === "ready" || browser.status === "empty" || isRefreshing;
@@ -56,16 +61,38 @@ function FileBrowser() {
     return result;
   }
 
-  async function handleDestination(parentId) {
+  async function handleDestination(parentId, onProgress) {
     if (!destinationAction) return { error: "INVALID_INPUT" };
-    const result = destinationAction.action === "move"
-      ? await browser.moveObject(destinationAction.file, parentId)
-      : await browser.copyObject(destinationAction.file, parentId);
+    const isBulk = Array.isArray(destinationAction.file);
+    const result = isBulk
+      ? await browser.moveObjects(destinationAction.file, parentId, onProgress)
+      : destinationAction.action === "move"
+        ? await browser.moveObject(destinationAction.file, parentId)
+        : await browser.copyObject(destinationAction.file, parentId);
     if (result.ok) {
-      if (destinationAction.action === "move") browser.clearSelection();
+      if (destinationAction.action === "move") {
+        if (isBulk) browser.removeFromSelection(result.succeeded);
+        else browser.clearSelection();
+      }
       setDestinationAction(null);
     }
     return result;
+  }
+
+  async function handleBulkTrash() {
+    if (bulkBusy || !selectedFiles.length) return;
+    setBulkBusy(true);
+    setBulkProgress({ completed: 0, total: selectedFiles.length });
+    try {
+      const result = await browser.trashObjects(selectedFiles, (completed, total) => {
+        setBulkProgress({ completed, total });
+      });
+      if (result.succeeded?.length) browser.removeFromSelection(result.succeeded);
+      setBulkTrashOpen(false);
+    } finally {
+      setBulkBusy(false);
+      setBulkProgress(null);
+    }
   }
 
   async function handleTrash() {
@@ -90,8 +117,8 @@ function FileBrowser() {
         <FileToolbar
           selectedCount={selectedCount}
           selectedFile={selectedFile}
-          selectedFavorite={Boolean(selectedFile && browser.favorites.includes(selectedFile.id))}
           isSelectionBusy={selectedIsBusy}
+          selectedFavorite={Boolean(selectedFile && browser.favorites.includes(selectedFile.id))}
           canPreviewSelected={Boolean(selectedFile && browser.canPreviewFile(selectedFile))}
           canMoveSelected={browser.canMove}
           canCopySelected={browser.canCopy}
@@ -100,9 +127,9 @@ function FileBrowser() {
           canTrashSelected={browser.canTrash}
           onPreviewSelected={() => selectedFile && void browser.openPreview(selectedFile)}
           onToggleFavoriteSelected={() => selectedFile && void browser.toggleFavorite(selectedFile)}
-          onMoveSelected={() => selectedFile && setDestinationAction({ action: "move", file: selectedFile, key: crypto.randomUUID() })}
+          onMoveSelected={() => selectedFiles.length && setDestinationAction({ action: "move", file: selectedFiles.length > 1 ? selectedFiles : selectedFile, key: crypto.randomUUID() })}
           onCopySelected={() => selectedFile && setDestinationAction({ action: "copy", file: selectedFile, key: crypto.randomUUID() })}
-          onTrashSelected={() => selectedFile && setTrashFile(selectedFile)}
+          onTrashSelected={() => selectedCount > 1 ? setBulkTrashOpen(true) : selectedFile && setTrashFile(selectedFile)}
           onNewFolder={() => setNewFolderOpen(true)}
           canCreateFolder={browser.canCreateFolder}
           isCreatingFolder={browser.isCreatingFolder}
@@ -168,6 +195,13 @@ function FileBrowser() {
       />
       <StorageFilePreviewDialog preview={browser.preview} onOpenChange={(open) => { if (!open) browser.closePreview(); }} onDownload={(file) => void browser.downloadObject(file)} maxTextPreviewBytes={browser.maxTextPreviewBytes} />
       <DeleteDialog open={Boolean(trashFile)} onOpenChange={(open) => { if (!open) setTrashFile(null); }} file={trashFile} permanent={false} isPending={Boolean(trashFile && browser.mutatingIds.has(trashFile.objectId))} onDelete={() => void handleTrash()} />
+      <Dialog open={bulkTrashOpen} onOpenChange={(open) => { if (!bulkBusy) setBulkTrashOpen(open); }}>
+        <DialogContent aria-busy={bulkBusy}>
+          <DialogHeader><DialogTitle>Move {selectedFiles.length} items to Trash?</DialogTitle><DialogDescription>Folders and their contents will be moved to Trash. Items are processed independently, so some may succeed if others fail.</DialogDescription></DialogHeader>
+          {bulkBusy && <p className={cx("text-sm text-muted-foreground")} role="status" aria-live="polite">Moving to Trash {bulkProgress?.completed ?? 0} of {bulkProgress?.total ?? selectedFiles.length}…</p>}
+          <DialogFooter><Button type="button" variant="outline" disabled={bulkBusy} onClick={() => setBulkTrashOpen(false)}>Cancel</Button><Button type="button" variant="destructive" disabled={bulkBusy || !browser.canTrash} onClick={() => void handleBulkTrash()}>{bulkBusy ? "Working…" : "Move to Trash"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

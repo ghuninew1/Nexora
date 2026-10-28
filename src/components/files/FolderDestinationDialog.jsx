@@ -27,11 +27,13 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
   const [error, setError] = useState('');
   const [operationError, setOperationError] = useState('');
   const [isPending, setIsPending] = useState(false);
+  const [progress, setProgress] = useState(null);
   const controllerRef = useRef(null);
   const sequenceRef = useRef(0);
   const parentId = breadcrumbs.at(-1)?.objectId ?? null;
   const title = action === 'move' ? 'Move to folder' : 'Copy to folder';
-  const isInvalidDestination = isFolderDestinationInvalid(action, source, parentId, breadcrumbs);
+  const sources = Array.isArray(source) ? source : source ? [source] : [];
+  const isInvalidDestination = sources.some((item) => isFolderDestinationInvalid(action, item, parentId, breadcrumbs));
 
   const loadFolder = useCallback(async (targetParentId, cursor = null) => {
     controllerRef.current?.abort();
@@ -77,9 +79,10 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
   const handleConfirm = async () => {
     if (!isAllowed || isPending || isInvalidDestination) return;
     setIsPending(true);
+    setProgress({ completed: 0, total: Array.isArray(source) ? source.length : 1 });
     setOperationError('');
     try {
-      const result = await onConfirm(parentId);
+      const result = await onConfirm(parentId, (completed, total) => setProgress({ completed, total }));
       if (result?.error) {
         setOperationError(operationMessage(result.error));
         return;
@@ -87,6 +90,7 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
       onOpenChange(false);
     } finally {
       setIsPending(false);
+      setProgress(null);
     }
   };
 
@@ -114,6 +118,8 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
           {isPending ? 'Working…' : action === 'move' ? 'Move here' : 'Copy here'}
         </Button>
       </div>
+
+      {isPending && progress && progress.total > 1 && <p className={cx('text-sm text-muted-foreground')} role="status" aria-live="polite">Moving {progress.completed} of {progress.total}…</p>}
 
       {isInvalidDestination && <p className={cx('text-sm text-muted-foreground')} role="status">A folder cannot be moved into itself, one of its descendants, or its current location.</p>}
       {!isAllowed && <p className={cx('text-sm text-muted-foreground')} role="status">This operation is unavailable for the selected storage.</p>}

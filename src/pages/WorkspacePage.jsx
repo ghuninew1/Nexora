@@ -216,9 +216,9 @@ function StoragePage({ page }) {
   const { status, activeStorage, capabilities, usage, error, refresh } = storage;
   const statusLabel = status === "ready" ? "Connected" : status === "loading" ? "Checking connection" : status === "empty" ? "No active storage" : "Unavailable";
   const description = status === "ready"
-    ? "Nexora can reach this storage through its secure server-side connection. File Browser content and upload progress are still demo data."
+    ? "Nexora can reach this storage through its secure server-side connection. File Browser operations use this mount when the required capability is available; upload progress is reported as status only."
     : status === "empty"
-      ? "No active storage mount is available for this account. File Browser content and upload progress remain demo data."
+      ? "No active storage mount is available for this account. Connect a mount to use the File Browser operations."
       : status === "unavailable"
         ? (error || "Storage could not be reached. Try refreshing the connection.")
         : "Checking the storage mount assigned to this account.";

@@ -17,7 +17,10 @@ function FileToolbar({ canShareSelected, onShareSelected, selectedCount, selecte
       <div className={cx("flex min-w-0 items-center gap-2 overflow-x-auto")}>
         {hasSelection ? <>
           <span className={cx("shrink-0 text-sm font-medium text-foreground")}>{selectedCount} selected</span>
-          {selectedCount === 1 && selectedFile && <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label={`Actions for ${selectedFile.name}`}>
+          {selectedCount > 1 ? <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label="Actions for selected items">
+            <Button variant="ghost" size="sm" onClick={onMoveSelected} disabled={!canMoveSelected || isSelectionBusy} title="Move selected items"><ArrowRightLeft />Move</Button>
+            <Button variant="outline" size="sm" onClick={onTrashSelected} disabled={!canTrashSelected || isSelectionBusy} title="Move selected items to Trash"><Trash2 />Move to Trash</Button>
+          </div> : selectedCount === 1 && selectedFile && <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label={`Actions for ${selectedFile.name}`}>
             {selectedFile.type === "file" && <Button variant="ghost" size="sm" onClick={onPreviewSelected} disabled={!canPreviewSelected || isSelectionBusy} title="Preview selected file"><Eye />Preview</Button>}
             <Button variant="ghost" size="sm" onClick={onToggleFavoriteSelected} disabled={isSelectionBusy} aria-pressed={selectedFavorite} title={selectedFavorite ? "Remove from Favorites" : "Add to Favorites"}><Star className={cx(selectedFavorite && "fill-amber-400 text-amber-500")} />{selectedFavorite ? "Unfavorite" : "Favorite"}</Button>
             <Button variant="ghost" size="sm" onClick={onShareSelected} disabled={!canShareSelected || isSelectionBusy}><Share2 />Share</Button>
@@ -25,7 +28,7 @@ function FileToolbar({ canShareSelected, onShareSelected, selectedCount, selecte
             <Button variant="ghost" size="sm" onClick={onMoveSelected} disabled={!canMoveSelected || isSelectionBusy} title="Move selected item"><ArrowRightLeft />Move</Button>
             <Button variant="outline" size="sm" onClick={onTrashSelected} disabled={!canTrashSelected || isSelectionBusy} title="Move selected item to Trash"><Trash2 />Move to Trash</Button>
           </div>}
-          <Button variant="ghost" size="sm" onClick={onClearSelection}>Clear selection</Button>
+          <Button variant="ghost" size="sm" onClick={onClearSelection} disabled={isSelectionBusy}>Clear selection</Button>
         </> : <>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button disabled={isBusy}><Plus />New<ChevronDown /></Button>} />

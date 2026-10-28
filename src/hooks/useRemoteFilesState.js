@@ -30,6 +30,7 @@ import useUploadQueue from './useUploadQueue';
 import { RemoteFilesCache } from '../utils/remote-files-cache';
 import { getStoragePreviewSpec, MAX_TEXT_PREVIEW_BYTES } from '../utils/storage-preview';
 import { PreviewRequestCoordinator } from '../utils/preview-request';
+import { runBounded } from '../utils/run-bounded';
 
 const EMPTY_BROWSER_STATE = {
   storageId: null,
@@ -99,6 +100,7 @@ export default function useRemoteFilesState() {
   const currentListingRef = useRef(null);
   const loadFirstPageRef = useRef(null);
   const operationControllersRef = useRef(new Map());
+  const bulkOperationRef = useRef(false);
   const trashControllerRef = useRef(null);
   const trashGenerationRef = useRef(0);
   const trashStateRef = useRef(trashState);
@@ -750,6 +752,73 @@ export default function useRemoteFilesState() {
     },
   }), [runObjectOperation, storageId, preview, closePreview, setSearchParams]);
 
+  const runBulkOperation = useCallback(async (files, kind, parentId = null, onProgress) => {
+    const capability = kind === 'move' ? 'move' : 'trash';
+    if (!files.length || !canUseCapability(capability) || bulkOperationRef.current) return { error: 'FORBIDDEN' };
+    bulkOperationRef.current = true;
+    const operationStorageId = storageId;
+    const ids = files.map((file) => file.objectId);
+    setMutatingIds((current) => new Set([...current, ...ids]));
+    setOperationFeedback({ type: 'status', message: kind === 'move' ? `Moving 0 of ${files.length}…` : `Moving to Trash 0 of ${files.length}…` });
+    const affected = new Set();
+    files.forEach((file) => affected.add(file.parentId ?? null));
+    if (kind === 'move') affected.add(parentId ?? null);
+    try {
+      const results = await runBounded(files, 2, async (file) => {
+        try {
+          const object = kind === 'move'
+            ? await moveStorageObject(operationStorageId, file.objectId, parentId)
+            : await trashStorageObject(operationStorageId, file.objectId);
+          return { ok: true, object };
+        } catch (error) {
+          if (error instanceof StorageApiError && error.status === 401) expireSession();
+          return { ok: false, error: error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE' };
+        }
+      }, (count) => {
+        onProgress?.(count, files.length);
+        setOperationFeedback({ type: 'status', message: kind === 'move' ? `Moving ${count} of ${files.length}…` : `Moving to Trash ${count} of ${files.length}…` });
+      });
+      const succeeded = files.filter((_, index) => results[index]?.ok);
+      const failed = files.flatMap((file, index) => results[index]?.ok ? [] : [{
+        objectId: file.objectId,
+        name: file.name,
+        error: results[index]?.error ?? 'PROVIDER_UNAVAILABLE',
+      }]);
+      for (const file of succeeded) {
+        const result = results[files.indexOf(file)];
+        if (kind === 'move') {
+          if (file.type === 'folder') cacheRef.current.removeObjectMetadata(operationStorageId, file.objectId, { includeDescendants: true });
+          cacheRef.current.rememberObjects(operationStorageId, [result.object]);
+        }
+        else {
+          cacheRef.current.removeObjectMetadata(operationStorageId, file.objectId, { includeDescendants: file.type === 'folder' });
+          if (preview?.file?.objectId === file.objectId) closePreview();
+        }
+      }
+      if (kind === 'trash' && succeeded.length) setTrashState((current) => current.storageId === operationStorageId ? { ...EMPTY_TRASH_STATE, storageId: operationStorageId } : current);
+      for (const folderId of affected) cacheRef.current.invalidate(operationStorageId, folderId);
+      const current = currentListingRef.current;
+      if (current?.isFilesRoute && current.storageId === operationStorageId && affected.has(current.folderId)) {
+        await loadFirstPageRef.current?.({ refreshing: true, force: true });
+      }
+      const message = failed.length
+        ? `${succeeded.length} ${kind === 'move' ? 'moved' : 'moved to Trash'}; ${failed.length} failed. ${failed.slice(0, 3).map((item) => `${item.name}: ${operationErrorMessage(item.error, kind)}`).join(' ')}`
+        : `${succeeded.length} ${kind === 'move' ? 'moved successfully.' : 'moved to Trash.'}`;
+      setOperationFeedback({ type: failed.length ? 'error' : 'success', message });
+      return { ok: succeeded.length > 0, succeeded: succeeded.map((file) => file.objectId), failed };
+    } finally {
+      bulkOperationRef.current = false;
+      setMutatingIds((current) => {
+        const next = new Set(current);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  }, [canUseCapability, storageId, expireSession, preview, closePreview]);
+
+  const moveObjects = useCallback((files, parentId, onProgress) => runBulkOperation(files, 'move', parentId, onProgress), [runBulkOperation]);
+  const trashObjects = useCallback((files, onProgress) => runBulkOperation(files, 'trash', null, onProgress), [runBulkOperation]);
+
   const restoreTrashObject = useCallback((file) => runObjectOperation({
     file,
     capability: 'restore',
@@ -1016,6 +1085,8 @@ export default function useRemoteFilesState() {
     copyObject,
     downloadObject,
     trashObject,
+    moveObjects,
+    trashObjects,
     restoreTrashObject,
     permanentlyDeleteTrashObject,
     refreshTrash,
@@ -1029,7 +1100,7 @@ export default function useRemoteFilesState() {
   }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice, activeStorage, capabilities,
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
     operationFeedback, uploadQueue, uploadFiles, cancelUpload, retryUpload, clearFinishedUploads,
-    renameObject, moveObject, copyObject, downloadObject, trashObject, restoreTrashObject, permanentlyDeleteTrashObject,
+    renameObject, moveObject, copyObject, downloadObject, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
     preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,
     favoriteState, refreshFavorites, toggleFavorite, recentState, refreshRecent, recordRecentAccess,
