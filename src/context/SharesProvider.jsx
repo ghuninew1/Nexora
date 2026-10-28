@@ -43,6 +43,6 @@ export function SharesProvider({ children }) {
     } catch (e) { if (signal.aborted) return null; report(e); throw e; } finally { busy.current.delete(key); }
   };
   return <SharesContext.Provider value={{ ...state, links, refresh,
-    create: (storageId, objectId) => mutate(`${storageId}:${objectId}`, options => createShare(storageId, objectId, options)),
-    replace: id => mutate(id, options => replaceShare(id, options)), revoke: id => mutate(id, options => revokeShare(id, options)) }}>{children}</SharesContext.Provider>;
+    create: (storageId, objectId, expiresIn) => mutate(`${storageId}:${objectId}`, options => createShare(storageId, objectId, expiresIn, options)),
+    replace: (id, expiresIn) => mutate(id, options => replaceShare(id, expiresIn, options)), revoke: id => mutate(id, options => revokeShare(id, options)) }}>{children}</SharesContext.Provider>;
 }

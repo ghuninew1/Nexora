@@ -27,8 +27,8 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
 - `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`, `src/utils/remote-files-cache.js`: remote File Browser, Recent and Favorites state; bounded metadata-only folder cache and retained legacy demo helpers.
 - `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, API security headers, and value-free capability/Copy-upstream diagnostics with manual trusted-origin redirect policy.
-- `public/_headers`, `public/theme-init.js`, `index.html`: static-page CSP/security headers and the same-origin theme bootstrap. Preserve `script-src 'self'`, the explicit Cloudflare Insights beacon host allowlist, and the blob frame allowance required for connected PDF previews.
-- `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata. Phase 9.5 reuses this schema; Phase 9.6 adds `migrations/0002_public_shares.sql`.
+- `public/_headers`, `public/theme-init.js`, `index.html`: static-page CSP/security headers and the same-origin theme bootstrap. Preserve `script-src 'self'`, the explicit Cloudflare Insights beacon host allowlist, any specifically reviewed exact script hash, and the blob frame allowance required for connected PDF previews; never replace a hash allowance with `unsafe-inline`.
+- `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata. Phase 9.5 reuses this schema; Phase 9.6 adds public shares in `0002`; `0004` adds public-share expiry.
 - `scripts/create-admin.mjs`: local-only first-admin provisioning via Wrangler `--local`.
 - `scripts/create-admin-remote.mjs`, `scripts/create-storage-mount-remote.mjs`: explicit production-only provisioning commands; both target `nexora-db` using Wrangler `--remote`.
 - `scripts/lib/production-provisioning.js`: private SQL-file runner and SQL builders for the production provisioning commands.
@@ -138,7 +138,7 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 
 ## Phase 9.6 — Sharing boundary and validation
 
-- `functions/_lib/shares-api.js`, `migrations/0002_public_shares.sql`: owner list/create/get/revoke/replace and anonymous capability-checked metadata/list/download/preview. One active share per user/mount/logical object; revoked records remain unusable.
+- `functions/_lib/shares-api.js`, `migrations/0002_public_shares.sql`, `migrations/0004_public_share_expiry.sql`: owner list/create/get/revoke/replace and anonymous capability-checked metadata/list/download/preview. One active share per user/mount/logical object; expiration is enforced server-side, revoked and expired records remain unusable.
 - `src/services/shares.js`, `src/context/SharesProvider.jsx`, `src/hooks/useShares.js`, `src/components/files/ShareDialog.jsx`, `src/pages/SharedPage.jsx`, `src/pages/PublicSharePage.jsx`: independent sharing state and public UI. Session-owned in-memory links clear when workspace unmounts or auth owner changes. No browser persistent secret storage.
 - User-approved link strategy: random 256-bit secret, SHA-256 only in D1, creation/replacement returns relative public path once. Refresh loses recoverable link; explicit Replace invalidates old capability via compare-and-swap. Never expose token hashes or log public capability paths.
 - Public ancestry uses authoritative stat parent IDs, cycle detection and maximum 64 hops, checked again before releasing listing/stream response. Missing, trashed, foreign, unsupported, revoked and provider errors fail closed with generic public 404. No path-prefix or breadcrumb authorization. Already delivered/in-flight bytes cannot be recalled.

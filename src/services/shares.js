@@ -31,7 +31,8 @@ function object(value) {
 function share(value) {
   if (!value || !ID.test(value.id || '') || !ID.test(value.storageId || '') || !ID.test(value.objectId || '')) throw new ShareApiError(502);
   return { id: value.id, storageId: value.storageId, objectId: value.objectId, storageName: typeof value.storageName === 'string' ? value.storageName : 'Storage',
-    createdAt: typeof value.createdAt === 'string' ? value.createdAt : '', status: ['active', 'revoked', 'unavailable'].includes(value.status) ? value.status : 'unavailable', object: object(value.object) };
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : '', expiresAt: typeof value.expiresAt === 'string' ? value.expiresAt : null,
+    status: ['active', 'expired', 'revoked', 'unavailable'].includes(value.status) ? value.status : 'unavailable', object: object(value.object) };
 }
 async function request(path, { method = 'GET', body, signal, fetchImpl = fetch, isPublic = false } = {}) {
   let response;
@@ -59,8 +60,8 @@ export async function listShares({ cursor, storageId, objectId, ...options } = {
   return { shares: p.shares.map(share), nextCursor: ID.test(p.nextCursor || '') ? p.nextCursor : null };
 }
 export async function getShare(id, options) { return result(await request(`/api/shares/${encodeURIComponent(id)}`, options)); }
-export async function createShare(storageId, objectId, options) { return result(await request('/api/shares', { ...options, method: 'POST', body: { storageId, objectId } })); }
-export async function replaceShare(id, options) { return result(await request(`/api/shares/${encodeURIComponent(id)}/replace`, { ...options, method: 'POST' })); }
+export async function createShare(storageId, objectId, expiresIn, options) { return result(await request('/api/shares', { ...options, method: 'POST', body: { storageId, objectId, expiresIn } })); }
+export async function replaceShare(id, expiresIn, options) { return result(await request(`/api/shares/${encodeURIComponent(id)}/replace`, { ...options, method: 'POST', body: { expiresIn } })); }
 export async function revokeShare(id, options) { const p = await request(`/api/shares/${encodeURIComponent(id)}`, { ...options, method: 'DELETE' }); if (p.revoked !== true) throw new ShareApiError(502); }
 export async function getPublicShare(capability, options) {
   const p = await request(publicApi(capability), { ...options, isPublic: true });

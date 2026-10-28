@@ -14,6 +14,8 @@ Initial unrelated modifications to package.json, pnpm-lock.yaml and pnpm-workspa
 
 `0002_public_shares.sql` adds id, user_id, storage_mount_id, object_id, token_hash, created_at, updated_at and revoked_at. Foreign keys cascade on owner/mount removal. A partial unique index permits one active owner/mount/object share; a second index supports owner-created ordering. No duplicated authoritative name/type/size or physical/provider paths. Existing Phase 9.5 schema is unchanged. Tests apply both migrations to isolated in-memory SQLite; no deployed D1 migration was run.
 
+Follow-up migration `0004_public_share_expiry.sql` adds nullable `expires_at` (NULL means never) and an expiry index. Creation and explicit replacement accept only `1h`, `1d`, `1month` (30 days), or `never`; the API returns an ISO expiry timestamp or null. Public metadata, listing and streaming reject an expired capability with the same generic 404 as other unavailable links. Expired owner records remain manageable and can be replaced to issue a new secret. The migration is local source only; production migration/deployment is not authorized or claimed.
+
 The initial audit documented that even `shareId + secret` cannot recover a hash-only secret for later Copy Link. The user explicitly selected option 1: keep the full URL in current authenticated in-memory state only, then offer explicit **Replace link** after refresh. No encryption/key-management layer or recoverable server secret was introduced.
 
 - URL: `/s/:shareId/:secret`; id is an independent random UUID, secret is 32 Web Crypto random bytes encoded base64url (256-bit entropy).
@@ -29,14 +31,14 @@ All routes require an active Nexora session; mutations preserve exact same-origi
 
 | Route | Behavior |
 | --- | --- |
-| GET /api/shares | Active owner records, 20 per page, nextCursor by owner-scoped share ID; hydrate current safe object metadata in batches of four |
+| GET /api/shares | Unrevoked owner records, including expired records, 20 per page, nextCursor by owner-scoped share ID; hydrate current safe object metadata in batches of four |
 | GET /api/shares?storageId=&objectId= | Exact owner-scoped active record lookup for Share dialog; avoids scanning all shares |
-| POST /api/shares | Body storageId/objectId only; active owned writable mount, stat plus file download or folder list; server object metadata; create or reuse active record |
+| POST /api/shares | Body storageId/objectId/expiresIn; active owned writable mount, stat plus file download or folder list; server object metadata; create or reuse active record |
 | GET /api/shares/:id | Owned record and current object hydration; unavailable object remains manageable |
 | DELETE /api/shares/:id | Idempotent owner revocation, including unavailable/read-only mounts |
-| POST /api/shares/:id/replace | Active owned writable mount and object/capability checks, atomic secret rotation; 409 if revoked or concurrently changed |
+| POST /api/shares/:id/replace | Body expiresIn; active owned writable mount and object/capability checks, atomic secret/expiry rotation; 409 if revoked or concurrently changed |
 
-Owner output is explicitly serialized share id, storageId/name, logical object id/metadata, createdAt and active/unavailable/revoked state. Provider failures during owner hydration retain records as unavailable rather than deleting them. Owner 401 expires the session; 409 prompts refresh; provider/network failures use safe messages; AbortError remains cancellable.
+Owner output is explicitly serialized share id, storageId/name, logical object id/metadata, createdAt, expiresAt and active/expired/unavailable/revoked state. Provider failures during owner hydration retain records as unavailable rather than deleting them. Owner 401 expires the session; 409 prompts refresh; provider/network failures use safe messages; AbortError remains cancellable.
 
 Nexora sharing is metadata layered over authorized stat/list/download reads. It does not assert provider `share` support; Storage capability display keeps provider share false. Read-only mounts cannot create/replace; owners can still revoke links.
 
@@ -75,7 +77,7 @@ Infrastructure request/access logs may record request paths independently of app
 
 - Focused shares service normalizes owner/public responses, URLs and errors. SharesProvider owns abortable owner listing/mutations and memory-only links; it remounts under auth-owner scope.
 - File Browser row and one-item selection toolbar offer capability-gated Share. No bulk share. Dedicated shared Dialog/Button controls handle loading, unshared/create, shared, copy status, errors, replacing and revoking, with explicit confirmations.
-- `/shared` uses D1 records only, bounded current-metadata hydration, refresh, pagination, loading/error/empty/no-active-storage states, storage/type/created/public-access display, Copy/Open when secret is in memory, Manage/Replace/Revoke and Open in Files. No recursive scan/file bytes. Other mounts' navigation stays disabled until active, matching the existing mount selection boundary.
+- `/shared` uses D1 records only, bounded current-metadata hydration, refresh, pagination, loading/error/empty/no-active-storage states, storage/type/created/expiry/public-access display, Copy/Open when secret is in memory, Manage/Replace/Revoke and Open in Files. Manage lets owners choose 1 hour, 1 day, 1 month (30 days), or never when creating/replacing; no recursive scan/file bytes. Other mounts' navigation stays disabled until active, matching the existing mount selection boundary.
 - Open in Files carries validated abbreviated route state, preserving navigation guards without inventing ancestors. Browser QA found and fixed the initial missing-state fallback; a regression test covers file-parent and folder targets.
 - Public minimal layout uses existing Nexora logo/glass/Button/Dialog, safe name wrapping, 44px public primary controls and shared-root-only breadcrumbs. It has no sidebar, workspace links or identity. Folder listing paginates/merges by logical ID; nested navigation stays independent of workspace state.
 - Existing shared UI wrappers were reused. shadcn Button/Dialog docs were checked; a Base UI warning from an anchor rendered as a Button was fixed using nativeButton=false. No UI dependency or unrelated redesign was added.
@@ -102,7 +104,9 @@ Remaining browser/provider QA: large streamed binaries, real image/PDF previews,
 
 No commit/push/deploy, remote migration, secret/configuration or production D1/Storage change was made. This phase requires separately approved migration/deployment and smoke tests. Before release:
 
-1. Review/apply `0002_public_shares.sql` to the intended Nexora D1; deploy the reviewed app/Functions together using approved operator workflow.
+Expiry follow-up local verification: `pnpm lint`, `pnpm build`, and `git diff --check` passed. Tests and browser QA were not run for this follow-up; migration 0004 and server behavior remain unverified against production.
+
+1. Review/apply `0002_public_shares.sql` and additive `0004_public_share_expiry.sql` to the intended Nexora D1; deploy the reviewed app/Functions together using approved operator workflow. `0004` is new local source and has not been applied to production.
 2. Verify edge/access logging excludes/redacts capability URLs and public page referrer/cache headers are applied.
 3. Share disposable real file/folder; test anonymous stat/list/nested Preview/Download, pagination, long names and mobile layout. Confirm no provider/internal information appears in browser network responses.
 4. Attempt parent/sibling/foreign logical IDs, malformed cursor, revoked/replaced capability and inactive/read-only mount cases. Verify generic public rejection and correct owner errors.
