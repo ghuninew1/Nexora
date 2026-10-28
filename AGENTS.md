@@ -11,7 +11,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/data/files.js` remains demo data for legacy examples only; Dashboard, Recent, Favorites, File Browser, and Trash use authenticated Nexora data where implemented. Phase 9.5 uses the existing D1 `recent_access` store and `/api/recent` routes for bounded Recent history and current object hydration.
 - `wrangler.jsonc` configures Pages output in `dist/` and Nexora-owned `DB` D1 binding `nexora-db`. Production provisioning and migration status are operator-confirmed; verify live state separately.
 - `functions/_lib/activity.js` owns best-effort authenticated activity writes, retention, safe snapshots and cursor API; migration `0003_activity_events.sql` owns persistent history.
-- `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization, and the server-only Shared Storage client. The React app does not import this code.
+- `functions/_lib/` owns Pages API routing, shared PBKDF2-HMAC-SHA-256 password hashing/verification at 100,000 iterations, hashed-cookie sessions, mount authorization, response normalization/security headers, and the server-only Shared Storage client. The React app does not import this code.
 - `storage_mounts.shared_storage_project_id` is an internal server mapping. Browser requests use Nexora mount/object IDs and cannot choose project IDs or receive provider references.
 - Phase 9.1 adds authenticated storage discovery/capabilities through the Nexora same-origin API. Phase 9.2 connects File Browser listing, pagination, navigation, and capability-gated folder creation; Phase 9.3 adds capability-gated upload/download/rename/move/copy; Phase 9.3.1 adds an in-memory metadata-only listing cache; Phase 9.3.2 adds on-demand safe inline preview through the authenticated download path and fixes exact-ancestor breadcrumb navigation; Phase 9.4 connects Move to Trash, Trash listing, restore, and permanent delete; Phase 9.4.1 connects selection actions and Favorites; Phase 9.5 connects Recent tracking, Recent page, and Dashboard. Phase 9.6 connects Shared to persistent owner-scoped public links and adds independent public routes. Phase 9.7 adds upload Retry/Cancel guards and bounded multi-selection Move/Trash; authoritative usage is still unavailable because the Nexora usage route reports no provider metrics.
 - IssueDesk and its Garage-backed Storage Service are separate projects. Do not add copied IssueDesk storage/business logic or imply that Nexora currently authenticates to or persists files in that service.
@@ -26,7 +26,8 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/pages/WorkspacePage.jsx`: Dashboard, Recent, Favorites, connected Trash, Storage, and Settings route views.
 - `src/components/navigation/navigation.js`: route labels, icons, grouping, and page descriptions.
 - `src/components/files/`, `src/hooks/useFiles.js`, `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`, `src/utils/remote-files-cache.js`: remote File Browser, Recent and Favorites state; bounded metadata-only folder cache and retained legacy demo helpers.
-- `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, and value-free capability/Copy-upstream diagnostics with manual trusted-origin redirect policy.
+- `functions/api/[[path]].js`, `functions/_lib/`: Pages Functions entry, server-only auth/storage handlers, API security headers, and value-free capability/Copy-upstream diagnostics with manual trusted-origin redirect policy.
+- `public/_headers`, `public/theme-init.js`, `index.html`: static-page CSP/security headers and the same-origin theme bootstrap. Preserve `script-src 'self'` and the blob frame allowance required for connected PDF previews.
 - `migrations/0001_backend_foundation.sql`: Nexora D1 users, sessions, mounts, login throttling, Favorites, and bounded Recent metadata. Phase 9.5 reuses this schema; Phase 9.6 adds `migrations/0002_public_shares.sql`.
 - `scripts/create-admin.mjs`: local-only first-admin provisioning via Wrangler `--local`.
 - `scripts/create-admin-remote.mjs`, `scripts/create-storage-mount-remote.mjs`: explicit production-only provisioning commands; both target `nexora-db` using Wrangler `--remote`.
@@ -53,7 +54,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
 - `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: Shared Storage implementation in the separate IssueDesk checkout. The historical S2 report predates the Phase 9.1 brief's operator-reported production deployment; Nexora must not infer live state from source docs.
 - `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2, Phase 8 backend, Phase 8.5 frontend auth, and remaining Phase 9 scope.
-- `docs/PHASE_10_0.md`: source/config production-readiness audit and explicit live-verification gates; local source evidence does not prove Cloudflare deployment, remote migration, or secret configuration.
+- `docs/PHASE_10_0.md`, `docs/PHASE_10_0_1.md`, `docs/PHASE_10_1.md`: operator-confirmed production-readiness result, DNS/network verification limitation, and security finalization audit. Local source evidence does not prove Cloudflare deployment, remote bindings, Access policy, or secret configuration.
 - `.agents/skills/nexora-project/SKILL.md`: project-scoped Codex workflow, supplementing the detailed repository rules here.
 
 Check this map against actual files when changing the architecture; update README when any statement becomes stale.
@@ -167,7 +168,7 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 
 ## Nexora v1 release baseline
 
-- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Phase 10.0.1 is active under the user's 2026-10-28 request; do not add deferred features beyond its production-readiness scope. Read `docs/PHASE_10_0_1.md` for operator-confirmed versus tool-verified gates. Never reapply migrations 0001–0003 solely for verification; operator confirmed them applied on production D1 `nexora-db` on 2026-10-28.
+- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Phase 10.0 passed by operator confirmation on 2026-10-28; Phase 10.1 source audit/local hardening is complete with production/operator gates still open. Do not add deferred features. Read `docs/PHASE_10_0_1.md` and `docs/PHASE_10_1.md` for operator-confirmed versus tool-verified results and open security gates. Never reapply migrations 0001–0003 solely for verification; operator confirmed them applied on production D1 `nexora-db` on 2026-10-28.
 - Account creation is administrator-provisioned; do not describe a public self-service registration route. Keep production implementation, user-reported smoke tests, and local validation distinct.
 - Backup/recovery design exists in `docs/BACKUP_RECOVERY.md`; automated backup and an isolated restore drill are not implemented/completed. Never claim recovery proven without an actual isolated restore.
 - Runtime SQLite artifacts in adjacent IssueDesk are no longer tracked; do not read or delete local DB/WAL/SHM files during Git hygiene checks. `garage/garage.toml` has since been removed from the adjacent IssueDesk index while preserving its local ignored copy; its example template uses a placeholder. Changes are staged/uncommitted and history was not rewritten; historical RPC secret material remains a follow-up. Do not print it or rotate production credentials without a separately authorized task.
@@ -179,3 +180,11 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - Current live checks are blocked when Cloudflare auth or network/DNS is unavailable. Report the exact failure and minimum operator action; do not workaround by editing source.
 - Inspect only names/presence for production secrets and bindings. Never read, display, or log their values.
 - No production deploy, secret rotation, configuration change, or data mutation without separate authorization. Begin with read-only checks; full smoke paths that create/update/delete production data require explicit approval.
+
+## Phase 10.1 — Security Finalization boundary
+
+- Keep Nexora service credentials server-only; use same-origin mutation checks, Secure/HttpOnly/SameSite=Lax sessions, hashed session/share tokens, owner/mount/capability checks, safe public errors, and value-free logging.
+- The app and API emit restrictive CSP and browser security headers. Preserve the theme bootstrap's external script location unless its CSP hash/policy is deliberately reviewed. Test header changes against PDF/blob previews and production-like browser routes.
+- Login has D1 throttling; public-share reads and costly upload/download/storage routes still need platform rate controls. Do not modify Cloudflare rate rules, Access policies, host firewall, Garage, or Storage without separate authorization.
+- Treat public share URLs as bearer capabilities. `no-referrer` helps prevent onward leakage; platform access logs still need explicit path redaction. Never log capability URLs or tokens.
+- Refer to `docs/PHASE_10_1.md` for MUST/OPTIONAL and production/operator gates. Never read or print secret values or rewrite Git history.

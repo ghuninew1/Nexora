@@ -29,46 +29,48 @@ async function handleAuth({ request, env, parts }) {
 
 export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
   return async function handleApiRequest(request, env) {
+    let response;
     try {
       const parts = decodePath(new URL(request.url).pathname);
       if (parts[0] !== 'api') throw new ApiError('NOT_FOUND', 404);
       if (parts[1] === 'public' && parts[2] === 'shares') {
-        const response = await handlePublicSharesApi({ request, env, parts, fetchImpl });
+        response = await handlePublicSharesApi({ request, env, parts, fetchImpl });
         response.headers.set('Referrer-Policy', 'no-referrer');
-        response.headers.set('X-Content-Type-Options', 'nosniff');
-        return response;
-      }
-      if (parts[1] === 'shares') {
+      } else if (parts[1] === 'shares') {
         const user = await requireUser(request, env);
         if (['POST', 'DELETE'].includes(request.method.toUpperCase())) requireSameOrigin(request);
-        return await handleSharesApi({ request, env, user, parts, fetchImpl });
-      }
-      if (parts[1] === 'auth') return await handleAuth({ request, env, parts });
-      if (parts[1] === 'activity') {
+        response = await handleSharesApi({ request, env, user, parts, fetchImpl });
+      } else if (parts[1] === 'auth') response = await handleAuth({ request, env, parts });
+      else if (parts[1] === 'activity') {
         const user = await requireUser(request, env);
-        return await handleActivityApi({ request, env, user, parts });
-      }
-      if (parts[1] === 'storage' && parts[2] === 'v1') {
+        response = await handleActivityApi({ request, env, user, parts });
+      } else if (parts[1] === 'storage' && parts[2] === 'v1') {
         const user = await requireUser(request, env);
         if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
-        return await handleStorageApi({ request, env, user, parts, fetchImpl, logger });
-      }
-      if (parts[1] === 'favorites') {
+        response = await handleStorageApi({ request, env, user, parts, fetchImpl, logger });
+      } else if (parts[1] === 'favorites') {
         const user = await requireUser(request, env);
         if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
-        return await handleFavoritesApi({ request, env, user, parts, fetchImpl });
-      }
-      if (parts[1] === 'recent') {
+        response = await handleFavoritesApi({ request, env, user, parts, fetchImpl });
+      } else if (parts[1] === 'recent') {
         const user = await requireUser(request, env);
         if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
-        return await handleRecentApi({ request, env, user, parts, fetchImpl });
-      }
-      throw new ApiError('NOT_FOUND', 404);
+        response = await handleRecentApi({ request, env, user, parts, fetchImpl });
+      } else throw new ApiError('NOT_FOUND', 404);
     } catch (error) {
-      if (new URL(request.url).pathname.startsWith('/api/public/shares')) return fail('SHARE_UNAVAILABLE', 404);
-      if (error instanceof ApiError) return fail(error.code, error.status);
-      return fail('INTERNAL_ERROR', 500);
+      if (new URL(request.url).pathname.startsWith('/api/public/shares')) response = fail('SHARE_UNAVAILABLE', 404);
+      else if (error instanceof ApiError) response = fail(error.code, error.status);
+      else response = fail('INTERNAL_ERROR', 500);
     }
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000');
+    response.headers.set('X-Frame-Options', 'DENY');
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    response.headers.set('Referrer-Policy', 'no-referrer');
+    response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (!response.headers.has('Content-Security-Policy')) {
+      response.headers.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    }
+    return response;
   };
 }
 

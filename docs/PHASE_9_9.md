@@ -34,6 +34,8 @@ Reviewed Nexora cookie security (Secure/HttpOnly/SameSite=Lax, 14-day session), 
 
 ## Validation and production status
 
+> Follow-up recorded in the later Nexora handoff: the adjacent IssueDesk Garage config was removed from its index, the tracked example was replaced with a placeholder, and runtime SQLite/WAL/SHM files were no longer tracked. Those changes were recorded as staged/uncommitted at handoff time; Git history was not rewritten. This does not close the historical secret exposure question or establish whether the value was used in production. The adjacent checkout was not re-verified during Phase 10.1. Do not read or repeat values; see [Phase 10.1](PHASE_10_1.md) for the remaining operator gates.
+
 - Wrangler v4.154.0 and `d1 export` help were checked locally; Wrangler emitted a log-file permission warning in this sandbox, but help/version returned. No network command ran.
 - No backup artifact existed, so no checksum or restore test was claimed.
 - No scripts or runtime code were changed by Phase 9.9; no tests were added to simulate infrastructure recovery.

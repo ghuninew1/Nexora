@@ -114,6 +114,17 @@ before(async () => {
 
 after(() => sqlite?.close());
 
+test('API responses carry restrictive browser security headers', async () => {
+  const response = await request('/api/unknown');
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get('Strict-Transport-Security'), 'max-age=31536000');
+  assert.equal(response.headers.get('X-Frame-Options'), 'DENY');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
+  assert.equal(response.headers.get('Permissions-Policy'), 'camera=(), microphone=(), geolocation=()');
+  assert.equal(response.headers.get('Content-Security-Policy'), "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+});
+
 test('D1 migration creates separate account, session, mount, favorite, and bounded recent tables', () => {
   const tables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name);
   for (const name of ['users', 'sessions', 'login_attempts', 'storage_mounts', 'favorites', 'recent_access', 'activity_events']) assert.ok(tables.includes(name));
