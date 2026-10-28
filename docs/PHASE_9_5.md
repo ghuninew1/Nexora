@@ -29,6 +29,8 @@ Recent is an access list, not a Trash or audit log. Trash mutations do not write
 
 ## Validation and limits
 
+- Follow-up bug fix: Recent folder actions now navigate to the `/files` route with the logical folder query and validated breadcrumb state. Opening a file's containing folder from Recent uses the same route navigation. Local lint/build verification is pending for this follow-up; production behavior is unverified.
+
 - Backend tests cover authenticated and unauthenticated explicit access, mount ownership, upsert/deduplication, repeated access, order/limit, metadata refresh after rename/move, no writes during GET hydration, stale cleanup, temporary provider failure, safe serialization, and Download success when D1 Recent tracking fails.
 - Frontend service tests cover bounded Recent query and same-origin logical-ID access requests; route-state tests cover abbreviated Recent folder navigation.
 - `pnpm lint` passed with no warnings; `pnpm test` passed 99/99; `git diff --check` passed. `pnpm exec vite build --configLoader runner --outDir /tmp/nexora-phase-95-build` passed after transforming 2,318 modules. Build output was kept outside the repository.

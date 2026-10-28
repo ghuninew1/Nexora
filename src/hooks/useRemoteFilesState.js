@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useStorage } from './useStorage';
 import {
@@ -77,6 +77,7 @@ function operationErrorMessage(code, operation = null) {
 
 export default function useRemoteFilesState() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { status: storageStatus, activeStorage, capabilities, error: storageError } = useStorage();
   const { expireSession, status: authStatus, user } = useAuth();
@@ -921,15 +922,15 @@ export default function useRemoteFilesState() {
     const nextBreadcrumbs = knownBreadcrumbs ?? [...rootBreadcrumbs(), { objectId: item.objectId, label: item.name }];
     void recordRecentAccess(item);
     setNotice('');
-    setSearchParams({ folder: item.objectId }, { state: routeStateFor(storageId, nextBreadcrumbs, null, !knownBreadcrumbs) });
+    navigate({ pathname: '/files', search: `?folder=${encodeURIComponent(item.objectId)}` }, { state: routeStateFor(storageId, nextBreadcrumbs, null, !knownBreadcrumbs) });
     return true;
-  }, [storageId, setSearchParams, recordRecentAccess]);
+  }, [storageId, navigate, recordRecentAccess]);
 
   const openContainingFolder = useCallback((item) => {
     if (!item || item.storageId !== storageId) return false;
     if (item.parentId === null) {
       setNotice('');
-      setSearchParams({}, { state: routeStateFor(storageId, rootBreadcrumbs()) });
+      navigate({ pathname: '/files' }, { state: routeStateFor(storageId, rootBreadcrumbs()) });
       return true;
     }
     if (!isValidObjectId(item.parentId)) return false;
@@ -937,9 +938,9 @@ export default function useRemoteFilesState() {
     const nextBreadcrumbs = knownBreadcrumbs ?? [...rootBreadcrumbs(), { objectId: item.parentId, label: 'Containing folder' }];
     void recordRecentAccess({ objectId: item.parentId, storageId });
     setNotice('');
-    setSearchParams({ folder: item.parentId }, { state: routeStateFor(storageId, nextBreadcrumbs, null, !knownBreadcrumbs) });
+    navigate({ pathname: '/files', search: `?folder=${encodeURIComponent(item.parentId)}` }, { state: routeStateFor(storageId, nextBreadcrumbs, null, !knownBreadcrumbs) });
     return true;
-  }, [storageId, setSearchParams, recordRecentAccess]);
+  }, [storageId, navigate, recordRecentAccess]);
 
   const openFolder = useCallback((objectId) => {
     if (!storageId || !isValidObjectId(objectId)) return;
