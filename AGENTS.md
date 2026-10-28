@@ -154,3 +154,10 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - `functions/_lib/activity.js` is the centralized writer. Event persistence is best effort after the primary mutation; safe logging must not fail that mutation. Keep allowlisted metadata bounded and never store share secrets/capability URLs or provider credentials.
 - Retain at most 500 events per user and 180 days. Use session-derived ownership and stable cursor ordering; do not accept browser `userId`. Bulk Move/Trash produce per-object events from existing routes, without batch duplicates.
 - See `docs/PHASE_9_8.md` for implementation, checks, and pending browser/production QA. Migration/deployment requires separately approved production rollout.
+
+
+## Phase 9.9 — Backup and production safety
+
+- Backup/recovery is an infrastructure/operator responsibility. Never run production export, restore, migration, service stop, QNAP/Docker command, secret rotation, cutover, or delete without explicit user authorization and verified target. Restore tests start in disposable infrastructure; never import over existing production data by default.
+- Treat Nexora D1, Storage API SQLite metadata, Garage metadata and Garage object blocks as separate authoritative components with cross-system dependencies. Use SQLite Online Backup API for live WAL databases; never raw-copy a live `.db` as the default. Garage metadata and data must be a coordinated recovery set.
+- Consult `docs/BACKUP_RECOVERY.md` before proposing operational commands and `docs/PHASE_9_9.md` for known findings. Do not repeat or persist secret values.

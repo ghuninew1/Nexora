@@ -176,3 +176,12 @@ Pre-existing changes to package.json, pnpm-lock.yaml and pnpm-workspace.yaml wer
 Local implementation adds `migrations/0003_activity_events.sql`, centralized best-effort writer/API in `functions/_lib/activity.js`, mutation/share integration, and protected `/activity` page. Events are session-owner scoped and success-only; metadata is action-allowlisted and excludes secrets. Retention is 500/user and 180 days. Bulk Move/Trash reuses per-object routes with no duplicate batch records. Dashboard activity panel was intentionally skipped.
 
 `pnpm lint`, `pnpm test` (125/125), standard `pnpm build`, and `git diff --check` passed. Browser QA is not claimed. Production migration/deployment and live provider behavior remain unverified; no production state was touched.
+
+
+## Phase 9.9 — Current handoff (2026-10-28)
+
+Added `docs/BACKUP_RECOVERY.md` and `docs/PHASE_9_9.md`. Audit identifies Nexora D1 migrations 0001–0003, authoritative Storage API SQLite metadata and Garage metadata/object data, with project/bucket/reference dependencies. Inspected config pins Garage v2.1.0, SQLite metadata, and replication factor 1; actual production paths and current deployment remain operator-confirmed. D1 export syntax was checked using Wrangler v4.154.0 help; no remote command or backup was run.
+
+Open HIGH findings in the adjacent IssueDesk repo: a tracked literal Garage RPC secret and tracked runtime SQLite/WAL/SHM artifacts under the Compose data mount. Contents were not read; production use is unknown. The checkout was not modified because scope forbids Garage/Storage/Docker work. Treat secret material as exposed and have the owning operator confirm, rotate/remove through a separately approved change, and clean database artifacts/history.
+
+Backup policy/runbook specifies 7 daily/4 weekly/3 monthly, off-device copy/3-2-1 target, checksums, isolated restore-first ordering, and end-to-end validation. No backup job, tooling, production change or restore drill exists yet. Rate limiting beyond login, published Compose port exposure, and app-wide security headers remain documented follow-ups; RPO/RTO and deployment controls require operator decisions. The unstaged ActivityPage edit was preserved.

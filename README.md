@@ -103,3 +103,8 @@ Local checks: `pnpm lint`, `pnpm test` (117/117), `pnpm build`, `git diff --chec
 ## Phase 9.8 — Activity & Audit Log
 
 เพิ่ม D1 migration `0003_activity_events.sql`, server-side best-effort logging หลัง successful authenticated file/Favorites/share mutations และหน้า protected `/activity` พร้อม refresh/load-more. API ใช้ session owner, cursor pagination, default 50/max 100; retention จำกัด 500 events/user และ 180 วัน. Bulk Move/Trash ยังคงบันทึกแยกต่อ object จาก single-object routes ไม่มี batch event. Browser QA และ production migration/deployment ยังไม่ได้ทำ. รายละเอียดและผล validation อยู่ใน [docs/PHASE_9_8.md](docs/PHASE_9_8.md).
+
+
+## Phase 9.9 — Backup & Recovery
+
+Added a source-derived data inventory and operator runbook for D1, Storage API SQLite, Garage metadata/object data, retention, checksums, restore order and validation. No backup/restore, QNAP, Docker, remote D1, deployment, or secret operation was run. The audit documents high findings in the adjacent IssueDesk checkout (tracked Garage RPC secret and tracked runtime SQLite/WAL/SHM artifacts); operator confirmation/remediation is required there. See [Phase 9.9](docs/PHASE_9_9.md) and [Backup & Recovery runbook](docs/BACKUP_RECOVERY.md).

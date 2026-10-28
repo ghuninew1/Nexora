@@ -68,13 +68,28 @@ export default function ActivityPage() {
     {items.length > 0 && <ol className={cx('flex min-w-0 flex-col gap-3')} aria-label="Recent actions">
       {items.map((item) => {
         const Icon = ACTION_ICON[item.action] ?? Activity;
-        return <li key={item.id} className={cx('glass-surface flex min-w-0 items-start gap-3 p-4')}>
-          <span className={cx('glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary')}><Icon className={cx('size-5')} aria-hidden="true" /></span>
-          <div className={cx('min-w-0 flex-1')}><p className={cx('break-words text-sm font-medium [overflow-wrap:anywhere]')}>{formatActivity(item)}</p><p className={cx('mt-1 flex flex-wrap gap-x-2 text-xs text-muted-foreground')}>
-            {item.storageName && <span>{item.storageName}</span>}
-            <time dateTime={item.createdAt} title={new Date(item.createdAt).toLocaleString()}>{new Date(item.createdAt).toLocaleString()}</time>
-          </p></div>
-        </li>;
+        return (
+            <li key={item.id} className={cx("glass-surface flex min-w-0 items-start gap-3 p-4")}>
+                <span
+                    className={cx(
+                        "glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary",
+                    )}
+                >
+                    <Icon className={cx("size-5")} aria-hidden="true" />
+                </span>
+                <div className={cx("min-w-0 flex-1")}>
+                    <p className={cx("wrap-anywhere text-sm font-medium")}>
+                        {formatActivity(item)}
+                    </p>
+                    <p className={cx("mt-1 flex flex-wrap gap-x-2 text-xs text-muted-foreground")}>
+                        {item.storageName && <span>{item.storageName}</span>}
+                        <time dateTime={item.createdAt} title={new Date(item.createdAt).toLocaleString()}>
+                            {new Date(item.createdAt).toLocaleString()}
+                        </time>
+                    </p>
+                </div>
+            </li>
+        );
       })}
     </ol>}
     {nextCursor && <Button type="button" className={cx('min-h-11 self-center')} variant="outline" disabled={status === 'loading-more'} onClick={() => void load({ append: true })} aria-busy={status === 'loading-more'}>{status === 'loading-more' ? 'Loading…' : 'Load more'}</Button>}
