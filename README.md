@@ -6,6 +6,8 @@ Nexora เป็นเว็บจัดการไฟล์บน private clou
 
 ขอบเขต v1 ครอบคลุม authentication แบบ admin-provisioned, connected File Browser และ lifecycle, Favorites/Recent/Bulk operations, public read/download shares, Activity, Dashboard/Storage และ operational backup/recovery runbook. Package version ปัจจุบันคือ `1.0.0`. ดู capability, production boundary, limitations และ deferred roadmap ที่ [V1 Release Baseline](docs/V1_RELEASE.md). “Feature Complete” หมายถึง scope ใน source; ไม่ได้ยืนยัน production deployment หรือ recovery drill.
 
+ธีม Dark ใช้พื้นหลังและพื้นผิวเขียวเข้มพร้อมสีเน้นมินต์; Light mode คงชุดสีเดิมไว้
+
 ## Shared Storage S1/S2 and Nexora Phase 8
 
 Shared Storage ใน checkout แยก `issuedesk/garage/storage/` มี File Manager API `/v3`, metadata สำหรับ folder/file, pagination, copy, Trash/restore/permanent delete และ operation state. S1/S2 local tests 27/27 ผ่าน; Phase 9.1 brief ที่ผู้ใช้ให้มารายงานว่า S1/S2 deploy แล้ว และ production `/v3` capabilities คืน HTTP 200. รายงาน S2 เก่ายังสะท้อน snapshot ก่อนยืนยันนั้น. Nexora Phase 8 เพิ่ม Pages Functions, D1 schema, session auth และ same-origin `/api/storage/v1/*`; Phase 9.5 เชื่อม Dashboard/Recent กับ mount และ `recent_access` เดิม Phase 9.6 เพิ่ม persistent public sharing (local implementation). ดู [S1](docs/STORAGE_PHASE_S1.md), [S2](docs/STORAGE_PHASE_S2.md), [Phase 8](docs/PHASE_8.md), [Phase 9.5](docs/PHASE_9_5.md)

@@ -1,5 +1,11 @@
 # Nexora — Project Handoff
 
+## Dark theme palette — 30 ตุลาคม 2026
+
+- ปรับ `src/index.css` เฉพาะ Dark tokens ให้พื้นหลัง, card, glass surfaces, accent, primary, sidebar และ chart เป็นเขียวเข้ม/มินต์ตามสีพอร์ตโฟลิโอ Sites; Light mode คงเดิม
+- ตรวจ `AGENTS.md`, `README.md` และ handoff ให้ตรงกับ source; `pnpm build` และ `git diff --check` ผ่าน
+- ยังไม่ได้ตรวจภาพใน browser หรือ deploy; โหมด Light และ production ยังไม่ได้ตรวจใน browser
+
 อัปเดตล่าสุด: 2026-10-28
 
 **Current status: Nexora v1 — Feature Complete.** ส่วนสรุป v1 ท้ายเอกสารเป็น handoff ปัจจุบัน; รายงาน phase ด้านล่างเป็นประวัติและแยก local validation จาก production evidence.
