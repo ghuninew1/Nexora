@@ -97,7 +97,7 @@ IssueDesk เชื่อมกับ Shared Storage Service แยกต่า�
 
 ใช้ `cx()` สำหรับ `className` ทุก JSX ที่สร้างหรือแก้ โดยส่ง string/falsy values; helper นี้ไม่ merge Tailwind conflicts อย่าคัดลอก business logic จาก IssueDesk และให้เอกสารนี้ตรงกับ source/config ปัจจุบันเสมอ
 
-แนวทางทำงานของ Codex สำหรับ repo นี้อยู่ใน [`AGENTS.md`](AGENTS.md) และ [Nexora project skill](.agents/skills/nexora-project/SKILL.md).
+แนวทางทำงานของ Codex สำหรับ repo นี้อยู่ใน [`AGENTS.md`](AGENTS.md) และ [Nexora project skill](.agents/skills/nexora/SKILL.md).
 
 ## Phase 9.6 — Public links (local implementation)
 
