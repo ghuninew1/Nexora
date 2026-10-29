@@ -211,7 +211,7 @@
             box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%), inset 0 -1px 0 rgb(255 255 255 / 10%), inset 0 0 0 1px rgb(255 255 255 / 18%), 0 6px 20px -6px rgb(0 0 0 / 25%);
         }
 
-        .glass-interactive[data-slot="button"]:hover:not(:disabled, [data-disabled], [aria-disabled="true"]) {
+        .glass-interactive:where([data-slot="button"], .glass-nav-link):hover:not(:disabled, [data-disabled], [aria-disabled="true"]) {
             box-shadow: inset 0 1px 0 color-mix(in oklch, currentColor 34%, transparent),
                 inset 0 -1px 0 color-mix(in oklch, currentColor 12%, transparent),
                 inset 0 0 0 1px color-mix(in oklch, currentColor 22%, transparent),
@@ -230,7 +230,7 @@
     .glass-interactive[data-variant="destructive"] { --glass-hover: color-mix(in oklch, var(--destructive) 20%, transparent); }
 
     /* Button glass highlights follow the label color so they remain visible on light controls. */
-    .glass-interactive[data-slot="button"]::before {
+    .glass-interactive:where([data-slot="button"], .glass-nav-link)::before {
         background: linear-gradient(
             135deg,
             color-mix(in oklch, currentColor 28%, transparent) 0%,
@@ -239,7 +239,7 @@
         );
     }
 
-    .glass-interactive[data-slot="button"]::after {
+    .glass-interactive:where([data-slot="button"], .glass-nav-link)::after {
         background: radial-gradient(
             90px circle at var(--mx) var(--my),
             color-mix(in oklch, currentColor 40%, transparent),

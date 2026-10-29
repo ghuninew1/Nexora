@@ -85,6 +85,7 @@ Check this map against actual files when changing the architecture; update READM
 - Keep long breadcrumbs usable on narrow screens and honor `prefers-reduced-motion` for animation and transitions.
 - Preserve `Button` Base UI semantics, variants, `ref`, render/slot composition, state-based className callbacks, and caller event handlers when extending the shared component.
 - Use the shared `Button` for actions and retain its IssueDesk-referenced Liquid Glass hover behavior; button sheen and pointer light should contrast with light and dark button surfaces; avoid one-off button styling that bypasses the shared variants.
+- Sidebar NavLinks should use the same button-matched Liquid Glass hover sheen, pointer light, rim, and shadow in Light and Dark themes.
 - Never log auth request bodies, credentials, passwords, password hashes, salts, cookies, session tokens, authorization headers, or raw secrets. Use the shared password helper for all user creation and verification.
 - Storage diagnostics may log only binding presence, request stage, HTTP status, allowlisted error type/result, and redirect origin classification; never log storage/project IDs, upstream/redirect URL, provider references, headers/values, or response bodies.
 

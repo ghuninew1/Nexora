@@ -26,6 +26,7 @@ function SidebarContent({ isCollapsed = false, onNavigate, onToggle, mobile = fa
             {group.items.map(({ to, label, icon: Icon }) => (
               <NavLink key={to} to={to} onClick={onNavigate} title={isCollapsed ? label : undefined} onPointerMove={updateGlassPointer} className={({ isActive }) => cx(
                 glassHover,
+                "glass-nav-link",
                 "flex min-h-11 shrink-0 items-center rounded-xl text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 isCollapsed ? "size-11 justify-center self-center" : "gap-3 px-3",
                 isActive ? "glass-nav-active font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:text-sidebar-foreground",
