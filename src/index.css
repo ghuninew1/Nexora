@@ -71,36 +71,36 @@
 
 .dark {
     color-scheme: dark;
-    --background: oklch(0.16 0.028 155);
-    --foreground: oklch(0.985 0 0);
+    --background: #090d12;
+    --foreground: #eef2f4;
 
-    --card: oklch(0.21 0.035 155);
-    --card-foreground: oklch(0.985 0 0);
+    --card: #10161c;
+    --card-foreground: #eef2f4;
 
-    --muted: oklch(0.26 0.035 155);
-    --muted-foreground: oklch(0.74 0.025 155);
+    --muted: #151c22;
+    --muted-foreground: #a1abb2;
 
-    --border: oklch(1 0 0 / 10%);
+    --border: #273139;
 
-    --primary: oklch(0.82 0.16 155);
-    --primary-foreground: oklch(0.17 0.03 155);
+    --primary: #8cffc7;
+    --primary-foreground: #07110e;
 
     --destructive: oklch(0.704 0.191 22.216);
     --destructive-foreground: #ffffff;
 
-    --ring: oklch(0.78 0.14 155);
+    --ring: #8cffc7;
 
-    --popover: oklch(0.22 0.035 155);
+    --popover: #11171d;
 
-    --popover-foreground: oklch(0.985 0 0);
+    --popover-foreground: #eef2f4;
 
-    --secondary: oklch(0.27 0.035 155);
+    --secondary: #171e24;
 
-    --secondary-foreground: oklch(0.985 0 0);
+    --secondary-foreground: #eef2f4;
 
-    --accent: oklch(0.29 0.05 155);
+    --accent: #18221f;
 
-    --accent-foreground: oklch(0.985 0 0);
+    --accent-foreground: #eef2f4;
 
     --input: oklch(1 0 0 / 15%);
 
@@ -114,21 +114,21 @@
 
     --chart-5: oklch(0.42 0.08 135);
 
-    --sidebar: oklch(0.19 0.03 155);
+    --sidebar: #0d1217;
 
-    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-foreground: #eef2f4;
 
-    --sidebar-primary: oklch(0.82 0.16 155);
+    --sidebar-primary: #8cffc7;
 
-    --sidebar-primary-foreground: oklch(0.17 0.03 155);
+    --sidebar-primary-foreground: #07110e;
 
-    --sidebar-accent: oklch(0.27 0.04 155);
+    --sidebar-accent: #18221f;
 
-    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-accent-foreground: #eef2f4;
 
     --sidebar-border: oklch(1 0 0 / 10%);
 
-    --sidebar-ring: oklch(0.78 0.14 155);
+    --sidebar-ring: #8cffc7;
 }
 
 /* Shared surface vocabulary. Opaque colors remain the no-blur fallback. */
@@ -150,16 +150,16 @@
 }
 
 .dark {
-    --glass-surface: oklch(0.23 0.035 155 / 70%);
-    --glass-surface-solid: oklch(0.23 0.035 155);
-    --glass-elevated: oklch(0.27 0.04 155 / 92%);
+    --glass-surface: oklch(0.2 0.012 255 / 72%);
+    --glass-surface-solid: oklch(0.2 0.012 255);
+    --glass-elevated: oklch(0.25 0.014 255 / 94%);
     --glass-control: oklch(1 0 0 / 5%);
     --glass-surface-hover: oklch(1 0 0 / 10%);
     --glass-border: oklch(1 0 0 / 13%);
     --glass-highlight: oklch(1 0 0 / 14%);
-    --glass-shadow: 0 16px 40px oklch(0.05 0.025 155 / 28%), 0 2px 8px oklch(0.05 0.025 155 / 16%);
+    --glass-shadow: 0 16px 40px oklch(0.04 0.01 255 / 34%), 0 2px 8px oklch(0.04 0.01 255 / 20%);
     --glass-control-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 3px oklch(0 0 0 / 12%);
-    --glass-overlay: oklch(0.08 0.025 155 / 60%);
+    --glass-overlay: oklch(0.08 0.012 255 / 64%);
     --glass-hover: rgb(255 255 255 / 10%);
     --glass-pointer-core: rgb(255 255 255 / 28%);
     --glass-pointer-edge: rgb(255 255 255 / 8%);

@@ -6,7 +6,7 @@ Nexora เป็นเว็บจัดการไฟล์บน private clou
 
 ขอบเขต v1 ครอบคลุม authentication แบบ admin-provisioned, connected File Browser และ lifecycle, Favorites/Recent/Bulk operations, public read/download shares, Activity, Dashboard/Storage และ operational backup/recovery runbook. Package version ปัจจุบันคือ `1.0.0`. ดู capability, production boundary, limitations และ deferred roadmap ที่ [V1 Release Baseline](docs/V1_RELEASE.md). “Feature Complete” หมายถึง scope ใน source; ไม่ได้ยืนยัน production deployment หรือ recovery drill.
 
-ธีม Dark ใช้พื้นหลังและพื้นผิวเขียวเข้มพร้อมสีเน้นมินต์; Light mode คงชุดสีเดิมไว้
+ธีม Dark ใช้พื้นหลังดำอมฟ้า `#090d12` พร้อมสีเน้นมินต์; Light mode คงชุดสีเดิมไว้
 
 ## Shared Storage S1/S2 and Nexora Phase 8
 

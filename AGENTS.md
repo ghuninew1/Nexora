@@ -79,7 +79,7 @@ Check this map against actual files when changing the architecture; update READM
 - Use the existing Base UI and shadcn wrappers before adding new primitives.
 - Every JSX `className` prop written or modified must use `cx()` from `src/utils/cx.js`, including static classes and callback return values. Do not use templates, concatenation, arrays, or object maps inside `cx()`; it only filters falsy values and joins strings and does not merge Tailwind conflicts.
 - Keep Tailwind class fragments static and semantic. Follow the existing theme tokens, glass utilities, reduced-motion behavior, and mobile-first patterns.
-- Dark mode uses green-charcoal surfaces with a mint primary accent in `src/index.css`; preserve Light mode tokens when changing the palette.
+- Dark mode uses near-black blue-charcoal surfaces (`#090d12`) with a mint primary accent in `src/index.css`; preserve Light mode tokens when changing the palette.
 - Keep keyboard access, focus-visible styling, accessible labels, and dialog titles. Clean up effects, listeners, object URLs, and timers introduced by code.
 - Show duplicate-name validation inline and associate input errors with the relevant field using `aria-invalid`, `aria-describedby`, and a live alert.
 - Use semantic progressbar values and labels for progress indicators, polite status announcements for completion, and sufficiently large touch targets for row actions.

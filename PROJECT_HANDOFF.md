@@ -2,8 +2,8 @@
 
 ## Dark theme palette — 30 ตุลาคม 2026
 
-- ปรับ `src/index.css` เฉพาะ Dark tokens ให้พื้นหลัง, card, glass surfaces, accent, primary, sidebar และ chart เป็นเขียวเข้ม/มินต์ตามสีพอร์ตโฟลิโอ Sites; Light mode คงเดิม
-- ตรวจ `AGENTS.md`, `README.md` และ handoff ให้ตรงกับ source; `pnpm build` และ `git diff --check` ผ่าน
+- ปรับ `src/index.css` เฉพาะ Dark tokens ให้พื้นหลังและ surfaces เป็นดำอมฟ้า `#090d12` ใกล้ Sites ลดสีเขียวในพื้นที่กว้าง; คงมินต์ไว้ที่ primary/accent/chart และไม่เปลี่ยน Light mode
+- ตรวจ `AGENTS.md`, `README.md` และ handoff ให้ตรงกับ source; `pnpm build` และ `git diff --check` รอบปรับเฉดนี้ผ่าน
 - ยังไม่ได้ตรวจภาพใน browser หรือ deploy; โหมด Light และ production ยังไม่ได้ตรวจใน browser
 
 อัปเดตล่าสุด: 2026-10-28
