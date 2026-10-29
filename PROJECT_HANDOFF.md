@@ -132,7 +132,7 @@ For one selected object, the File Browser toolbar offers the same Preview, Favor
 
 ## แผนที่ไฟล์ปัจจุบัน
 
-- `src/App.jsx`, `src/layouts/AppLayout.jsx`, `src/components/layout/`: route และ shared shell
+- `src/App.jsx`, `src/components/layout/`: route และ shared shell
 - `src/context/FilesProvider.jsx`, `src/context/files-context.js`, `src/hooks/useFiles.js`: demo workspace state และ remote File Browser context
 - `src/hooks/useRemoteFilesState.js`, `src/utils/storage-files.js`: remote listing/navigation/Favorites/Recent/Trash state and breadcrumb validation
 - `src/components/files/`: connected File Browser listing, selection toolbar, item actions and folder dialog

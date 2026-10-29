@@ -5,7 +5,7 @@
 These instructions apply to the whole Nexora repository. Treat source and configuration as authoritative; docs and sample data do not prove remote credentials, deployed bindings, storage availability, or production behavior.
 
 - React 19, Vite 8, Tailwind CSS v4, React Router 7, pnpm.
-- `src/App.jsx` defines routes; `src/layouts/AppLayout.jsx` keeps a shared `AppShell` around the route outlet.
+- `src/App.jsx` defines routes and keeps a shared `AppShell` around the route outlet.
 - `src/components/layout/` contains responsive navigation, header, and app shell. `src/components/files/` contains file browser UI. `src/hooks/` owns reusable state. `src/services/` is the intended location for domain API clients as integrations are added.
 - `src/index.css` owns design tokens and Liquid Glass primitives. Base UI/shadcn wrappers live in `src/components/ui/`.
 - `src/data/files.js` remains demo data for legacy examples only; Dashboard, Recent, Favorites, File Browser, and Trash use authenticated Nexora data where implemented. Phase 9.5 uses the existing D1 `recent_access` store and `/api/recent` routes for bounded Recent history and current object hydration.
@@ -18,7 +18,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 
 ## Project map
 
-- `src/App.jsx`, `src/layouts/`: routing and persistent shared shell.
+- `src/App.jsx`, `src/components/layout/`: routing and persistent shared shell.
 - `src/context/AuthProvider.jsx`, `src/hooks/useAuth.js`, `src/services/auth.js`: same-origin auth requests, session bootstrap, login/logout, and public user state.
 - `src/context/StorageProvider.jsx`, `src/hooks/useStorage.js`, `src/services/storage.js`: authenticated same-origin storage mount discovery, public capabilities, optional usage, object listing/pagination, folder creation, Favorites, Recent, and Trash lifecycle requests.
 - `src/components/auth/`, `src/pages/Login.jsx`: loading/error gates, protected-route handling, and sign-in page.
