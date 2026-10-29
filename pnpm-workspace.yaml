@@ -6,10 +6,10 @@ allowBuilds:
   esbuild: true
   workerd: true
 minimumReleaseAgeExclude:
-  - lucide-react@1.53.0 || 1.62.0
+  - lucide-react@1.53.0 || 1.62.0 || 1.64.0
   - '@tanstack/query-core@5.105.0'
   - '@tanstack/react-query@5.105.0'
-  - miniflare@5.20261023.0-beta || 5.20261023.1-beta
-  - wrangler@4.153.0 || 4.154.0
+  - miniflare@5.20261023.0-beta || 5.20261023.1-beta || 5.20261023.2-beta
+  - wrangler@4.153.0 || 4.154.0 || 4.155.0
   - '@shadcn/registry@0.2.1'
   - shadcn@4.23.0
