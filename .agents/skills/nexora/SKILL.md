@@ -1,5 +1,5 @@
 ---
-name: nexora-project
+name: nexora
 description: Use when implementing, debugging, reviewing, or documenting the Nexora repository, especially its File Browser and Cloudflare Pages Storage integration. Keep IssueDesk and its Garage service as a separate system.
 ---
 
