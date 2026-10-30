@@ -3,6 +3,7 @@ import { ApiError, fail, json, readJson } from './http.js';
 import { randomToken, sha256Hex } from './password.js';
 import { createStorageClient, normalizeObject } from './storage-client.js';
 import { previewObjectResponse, streamResponse } from './storage-api.js';
+import { encryptShareSecret, decryptShareSecret } from './share-secret.js';
 import { findActivitySnapshot, recordActivity } from './activity.js';
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
@@ -57,7 +58,12 @@ async function hydrate(ctx, row) {
   try {
     const mount = await requireStorageMount(ctx.env.DB, ctx.user, row.storage_mount_id);
     const object = await stat({ ...ctx, mount }, row.object_id);
-    return ownerShare(row, object);
+    const share = ownerShare(row, object);
+    if (share.status === 'active') {
+      const secret = await decryptShareSecret(ctx.env, row);
+      if (secret) share.publicPath = `/s/${row.id}/${secret}`;
+    }
+    return share;
   } catch { return ownerShare(row, null, 'unavailable'); }
 }
 export async function handleSharesApi({ request, env, user, parts, fetchImpl }) {
@@ -101,9 +107,10 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
     const hash = await sha256Hex(secret);
     const id = crypto.randomUUID();
     const now = Date.now();
-    await env.DB.prepare(`INSERT INTO public_shares (id,user_id,storage_mount_id,object_id,token_hash,created_at,updated_at,revoked_at,expires_at)
-      VALUES (?,?,?,?,?,?,?,NULL,?) ON CONFLICT(user_id,storage_mount_id,object_id) WHERE revoked_at IS NULL DO NOTHING`)
-      .bind(id, user.id, mount.id, objectId, hash, now, now, expiresAt).run();
+    const encrypted = await encryptShareSecret(env, id, user.id, secret);
+    await env.DB.prepare(`INSERT INTO public_shares (id,user_id,storage_mount_id,object_id,token_hash,created_at,updated_at,revoked_at,expires_at,encrypted_secret)
+      VALUES (?,?,?,?,?,?,?,NULL,?,?) ON CONFLICT(user_id,storage_mount_id,object_id) WHERE revoked_at IS NULL DO NOTHING`)
+      .bind(id, user.id, mount.id, objectId, hash, now, now, expiresAt, encrypted).run();
     const row = await env.DB.prepare('SELECT * FROM public_shares WHERE user_id = ? AND storage_mount_id = ? AND object_id = ? AND revoked_at IS NULL')
       .bind(user.id, mount.id, objectId).first();
     if (!row) throw unavailable();
@@ -117,7 +124,7 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
     if (parts.length === 3 && method === 'GET') return json({ share: await hydrate(ctx, row) });
     if (parts.length === 3 && method === 'DELETE') {
       const snapshot = await findActivitySnapshot(env.DB, user.id, row.storage_mount_id, row.object_id);
-      await env.DB.prepare('UPDATE public_shares SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE id = ? AND user_id = ?')
+      await env.DB.prepare('UPDATE public_shares SET revoked_at = COALESCE(revoked_at, ?), updated_at = ?, encrypted_secret = NULL WHERE id = ? AND user_id = ?')
         .bind(Date.now(), Date.now(), row.id, user.id).run();
       if (row.revoked_at === null) await recordActivity(env.DB, user, { storageMountId: row.storage_mount_id, storageName: row.storage_name,
         action: 'share_revoke', objectId: row.object_id, objectName: snapshot?.object_name ?? null,
@@ -132,13 +139,14 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
       required(await capabilities({ ...ctx, mount }), object);
       const secret = randomToken();
       const hash = await sha256Hex(secret);
+      const encrypted = await encryptShareSecret(env, row.id, user.id, secret);
       // Compare-and-swap prevents two concurrent replacements both succeeding.
-      const result = await env.DB.prepare('UPDATE public_shares SET token_hash = ?, updated_at = ?, expires_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND token_hash = ?')
-        .bind(hash, Date.now(), expiresAt, row.id, user.id, row.token_hash).run();
+      const result = await env.DB.prepare('UPDATE public_shares SET token_hash = ?, updated_at = ?, expires_at = ?, encrypted_secret = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND token_hash = ?')
+        .bind(hash, Date.now(), expiresAt, encrypted, row.id, user.id, row.token_hash).run();
       if (!result.meta?.changes) throw new ApiError('NAME_CONFLICT', 409);
       await recordActivity(env.DB, user, { storageMountId: mount.id, storageName: mount.name, action: 'share_replace',
         objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId, metadata: { shareId: row.id } });
-      return json({ share: ownerShare(row, object), publicPath: `/s/${row.id}/${secret}` });
+      return json({ share: ownerShare({ ...row, expires_at: expiresAt }, object), publicPath: `/s/${row.id}/${secret}` });
     }
   }
   throw unavailable();

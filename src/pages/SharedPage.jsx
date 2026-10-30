@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { File, FileQuestion, Folder } from 'lucide-react';
+import { nextShareExpiryDelay } from '../utils/share-expiry';
 import { shareFilesDestination } from '../services/shares';
 import { recordStorageRecent } from '../services/storage';
 import { useAuth } from '../hooks/useAuth';
@@ -32,8 +33,8 @@ export default function SharedPage() {
     function updateExpiryClock() {
       const now = Date.now();
       setClockNow(now);
-      const nextExpiry = shares.shares.map(share => Date.parse(share.expiresAt || '')).filter(value => Number.isFinite(value) && value > now).sort((a, b) => a - b)[0];
-      if (nextExpiry) timeout = setTimeout(updateExpiryClock, nextExpiry - now + 1);
+      const delay = nextShareExpiryDelay(shares.shares, now);
+      if (delay !== null) timeout = setTimeout(updateExpiryClock, delay);
     }
     updateExpiryClock();
     return () => clearTimeout(timeout);

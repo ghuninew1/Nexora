@@ -5,3 +5,6 @@ CF_ACCESS_CLIENT_SECRET=
 # Optional bounded upstream timeout (100–30000 ms); defaults to 15000.
 STORAGE_TIMEOUT_MS=
 STORAGE_MAX_UPLOAD_BYTES=26214400
+
+# Base64-encoded 32-byte random key, server-side only; keep stable across deployments.
+SHARE_ENCRYPTION_KEY=

@@ -260,3 +260,15 @@ Current working-tree package version is 1.0.1; see [v1.0.1 release notes](docs/V
 The README is a project overview and development guide; detailed implementation history, validation, and outstanding operational gates remain in this handoff and the release notes.
 
 Documentation preference: README contains project information, setup and usage; record all changes, validation and follow-up in PROJECT_HANDOFF.md.
+
+## Shared expiry timer follow-up — 30 ตุลาคม 2026
+
+- จำกัดเวลารอของ timer หน้า Shared ไม่ให้เกินขอบเขต browser แล้วตรวจเวลาหมดอายุซ้ำสำหรับลิงก์อายุยาว; secret ยังคงอยู่ในหน่วยความจำ session เท่านั้น การคง Copy Link หลัง reload/login ต้องเลือกแนวทางจัดเก็บเพิ่มเติม
+- ตรวจ `pnpm lint`, `node --test tests/share-expiry.test.js` และ `git diff --check` ผ่าน; ยังไม่ได้ทำ browser QA หรือ deployment
+
+## Shared link recovery — 30 ตุลาคม 2026
+
+- ลิงก์ใหม่/Replace เก็บ secret เข้ารหัส AES-GCM ใน D1 พร้อม hash สำหรับตรวจ capability และส่งคืนเฉพาะ owner ที่เข้าสู่ระบบ เมื่อยัง active และไม่หมดอายุ; ไม่เก็บ secret ใน browser storage. Revoke ล้าง ciphertext และ Replace ใช้ compare-and-swap. ลิงก์เก่าที่มีแต่ hash ต้อง Replace เพื่อกู้คืนข้ามอุปกรณ์ โดยลิงก์เดิมจะใช้ไม่ได้หลัง Replace
+- ต้องตั้ง `SHARE_ENCRYPTION_KEY` เป็น base64 ของ random 32 bytes แบบ server-only และคง key เดิมข้าม deployment; key หายหรือเปลี่ยนทำให้กู้คืน secret เก่าไม่ได้ ต้อง Replace. ต้อง apply migration `0005_share_secret_encryption.sql` ก่อนใช้ revision นี้; ยังไม่ได้ตั้ง secret, migrate หรือ deploy production. ห้ามเผยแพร่ค่าคีย์หรือ bearer URLs ใน logs
+- Timer ในหน้า Shared จำกัด delay ภายใน browser limit สำหรับ expiry 30 วัน. Browser/live-provider QA ยังไม่ทำ
+- ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; `pnpm test` ผ่าน 135 tests ก่อนเพิ่มการทดสอบ encryption แยก ซึ่งผ่านเพิ่มเติม 1 test. การทดสอบ share fixtures เดิมถูกปรับให้ใช้ expiry และ migrations ปัจจุบัน

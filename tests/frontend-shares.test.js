@@ -15,9 +15,9 @@ test('owner share service contracts normalize fields and enforce same-origin cre
   };
   const options = { fetchImpl };
   const p = await listShares({ storageId: 'mount_test', objectId: 'file_test', ...options }); assert.equal(p.shares[0].token_hash, undefined); assert.equal(p.shares[0].object.providerReference, undefined);
-  await createShare('mount_test', 'file_test', options); await getShare(cap.id, options); await replaceShare(cap.id, options); await revokeShare(cap.id, options);
+  await createShare('mount_test', 'file_test', 'never', options); await getShare(cap.id, options); await replaceShare(cap.id, 'never', options); await revokeShare(cap.id, options);
   assert.deepEqual(calls.map(c => c.init.method), ['GET', 'POST', 'GET', 'POST', 'DELETE']);
-  assert.equal(calls[3].url, '/api/shares/share_test/replace'); assert.deepEqual(JSON.parse(calls[1].init.body), { storageId: 'mount_test', objectId: 'file_test' });
+  assert.equal(calls[3].url, '/api/shares/share_test/replace'); assert.deepEqual(JSON.parse(calls[1].init.body), { storageId: 'mount_test', objectId: 'file_test', expiresIn: 'never' });
   assert.ok(calls.every(c => c.init.credentials === 'same-origin' && c.init.cache === 'no-store'));
 });
 
@@ -41,7 +41,7 @@ test('capability parsing and URL construction reject injection and unsupported a
 test('public errors are generic; owner errors include session expiry and conflicts; AbortError survives', async () => {
   for (const status of [404, 503, 401]) await assert.rejects(getPublicShare(cap, { fetchImpl: async () => Response.json({ error: 'private-provider' }, { status }) }), e => e.message === SHARE_UNAVAILABLE);
   await assert.rejects(listShares({ fetchImpl: async () => new Response(null, { status: 401 }) }), e => e.status === 401);
-  await assert.rejects(replaceShare(cap.id, { fetchImpl: async () => new Response(null, { status: 409 }) }), e => e.status === 409);
+  await assert.rejects(replaceShare(cap.id, 'never', { fetchImpl: async () => new Response(null, { status: 409 }) }), e => e.status === 409);
   await assert.rejects(getPublicShare(cap, { fetchImpl: async () => { throw new Error('internal-host'); } }), e => e.message === SHARE_UNAVAILABLE);
   await assert.rejects(getPublicShare(cap, { fetchImpl: async () => { throw new DOMException('aborted', 'AbortError'); } }), e => e.name === 'AbortError');
 });

@@ -7,11 +7,11 @@ import { randomToken, sha256Hex } from '../functions/_lib/password.js';
 
 async function fixture() {
   const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_backend_foundation.sql', '0002_public_shares.sql', '0003_activity_events.sql']) db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+  for (const file of ['0001_backend_foundation.sql', '0002_public_shares.sql', '0003_activity_events.sql', '0004_public_share_expiry.sql', '0005_share_secret_encryption.sql']) db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
   const env = { DB: { prepare(sql) { return { bind(...args) { return {
     async first() { return db.prepare(sql).get(...args) ?? null; }, async all() { return { results: db.prepare(sql).all(...args) }; },
     async run() { return { meta: db.prepare(sql).run(...args) }; },
-  }; } }; } }, STORAGE_API_URL: 'https://provider.test', STORAGE_APP_SECRET: 'private-secret', CF_ACCESS_CLIENT_ID: 'private-access', CF_ACCESS_CLIENT_SECRET: 'private-access-secret' };
+  }; } }; } }, SHARE_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', STORAGE_API_URL: 'https://provider.test', STORAGE_APP_SECRET: 'private-secret', CF_ACCESS_CLIENT_ID: 'private-access', CF_ACCESS_CLIENT_SECRET: 'private-access-secret' };
   const cookies = {};
   for (const id of ['alice', 'bob']) {
     db.prepare("INSERT INTO users VALUES (?,?,?,'private-hash','user',1,1,1)").run(id, `${id}@example.test`, id);
@@ -41,7 +41,7 @@ async function fixture() {
     return Response.json({ items: listingOverride ?? [...objects.values()].filter(o => o.parentId === u.searchParams.get('parentId') && !o.deletedAt), nextCursor: null });
   } });
   async function call(path, { user = 'alice', method = 'GET', body, origin = 'https://nexora.test' } = {}) {
-    return handler(new Request(`https://nexora.test${path}`, { method, headers: { ...(user ? { Cookie: cookies[user] } : {}), Origin: origin, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }), env);
+    return handler(new Request(`https://nexora.test${path}`, { method, headers: { ...(user ? { Cookie: cookies[user] } : {}), Origin: origin, 'Content-Type': 'application/json' }, ...((body || method === 'POST' && path.startsWith('/api/shares')) ? { body: JSON.stringify(method === 'POST' && path.startsWith('/api/shares') ? { expiresIn: 'never', ...body } : body) } : {}) }), env);
   }
   async function create(id = 'root', user = 'alice') { const r = await call('/api/shares', { method: 'POST', user, body: { storageId: `mount_${user}`, objectId: id } }); assert.equal(r.status, 201); return (await r.json()).data; }
   const publicApi = path => path.replace('/s/', '/api/public/shares/');
@@ -61,7 +61,7 @@ test('share authentication, ownership, origin, missing object and capability che
   f.db.close();
 });
 
-test('create stores only hash, duplicates do not rotate, owner listing/get serialize safely', async () => {
+test('create encrypts secret, duplicates do not rotate, owner listing/get serialize safely', async () => {
   const f = await fixture(); const p = await f.create('single');
   const secret = p.publicPath.split('/').at(-1);
   assert.equal(secret.length, 43);
@@ -75,8 +75,28 @@ test('create stores only hash, duplicates do not rotate, owner listing/get seria
   assert.ok(!JSON.stringify(activity).includes(secret));
   assert.equal((await (await f.call('/api/shares', { user: 'bob' })).json()).data.shares.length, 0);
   for (const method of ['GET', 'DELETE']) assert.equal((await f.call(`/api/shares/${p.share.id}`, { user: 'bob', method })).status, 404);
-  const serialized = JSON.stringify(listed); for (const word of ['private-', 'private_', 'token_hash', secret]) assert.ok(!serialized.includes(word));
+  const serialized = JSON.stringify(listed); assert.equal(listed.data.shares[0].publicPath, p.publicPath);
+  for (const word of ['private-', 'private_', 'token_hash', 'encrypted_secret']) assert.ok(!serialized.includes(word));
   assert.equal((await f.call(`/api/shares/${p.share.id}`)).status, 200);
+  f.db.close();
+});
+
+test('recoverable links are owner-only, expire, and legacy links require replacement', async () => {
+  const f = await fixture();
+  const p = await f.create('single');
+  const row = f.db.prepare('SELECT * FROM public_shares WHERE id = ?').get(p.share.id);
+  assert.ok(row.encrypted_secret);
+  assert.ok(!row.encrypted_secret.includes(p.publicPath.split('/').at(-1)));
+  assert.equal((await (await f.call(`/api/shares/${p.share.id}`)).json()).data.share.publicPath, p.publicPath);
+  assert.equal((await f.call(`/api/shares/${p.share.id}`, { user: 'bob' })).status, 404);
+  f.db.prepare('UPDATE public_shares SET expires_at = ? WHERE id = ?').run(Date.now() - 1000, p.share.id);
+  assert.equal((await (await f.call('/api/shares')).json()).data.shares[0].publicPath, undefined);
+  f.db.prepare('UPDATE public_shares SET expires_at = NULL, encrypted_secret = NULL WHERE id = ?').run(p.share.id);
+  assert.equal((await (await f.call('/api/shares')).json()).data.shares[0].publicPath, undefined);
+  const replacement = await (await f.call(`/api/shares/${p.share.id}/replace`, { method: 'POST' })).json();
+  assert.equal((await (await f.call('/api/shares')).json()).data.shares[0].publicPath, replacement.data.publicPath);
+  await f.call(`/api/shares/${p.share.id}`, { method: 'DELETE' });
+  assert.equal(f.db.prepare('SELECT encrypted_secret FROM public_shares WHERE id = ?').get(p.share.id).encrypted_secret, null);
   f.db.close();
 });
 

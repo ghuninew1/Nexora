@@ -30,7 +30,8 @@ function object(value) {
 }
 function share(value) {
   if (!value || !ID.test(value.id || '') || !ID.test(value.storageId || '') || !ID.test(value.objectId || '')) throw new ShareApiError(502);
-  return { id: value.id, storageId: value.storageId, objectId: value.objectId, storageName: typeof value.storageName === 'string' ? value.storageName : 'Storage',
+  const pathMatch = typeof value.publicPath === 'string' ? /^\/s\/([A-Za-z0-9_-]{1,128})\/([A-Za-z0-9_-]{43})$/u.exec(value.publicPath) : null;
+  return { ...(pathMatch && pathMatch[1] === value.id ? { publicPath: publicSharePath(pathMatch[1], pathMatch[2]) } : {}), id: value.id, storageId: value.storageId, objectId: value.objectId, storageName: typeof value.storageName === 'string' ? value.storageName : 'Storage',
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : '', expiresAt: typeof value.expiresAt === 'string' ? value.expiresAt : null,
     status: ['active', 'expired', 'revoked', 'unavailable'].includes(value.status) ? value.status : 'unavailable', object: object(value.object) };
 }

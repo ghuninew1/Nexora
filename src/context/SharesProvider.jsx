@@ -20,6 +20,7 @@ export function SharesProvider({ children }) {
     setState(s => ({ ...s, status: 'loading', error: null }));
     try {
       const p = await listShares({ cursor, signal: c.signal }); if (c.signal.aborted) return;
+      setLinks(current => { const next = { ...current }; for (const item of p.shares) { if (item.publicPath) next[item.id] = item.publicPath; else delete next[item.id]; } return next; });
       setState(s => ({ shares: cursor ? [...new Map([...s.shares, ...p.shares].map(v => [v.id, v])).values()] : p.shares, nextCursor: p.nextCursor, status: 'ready', error: null }));
     } catch (e) { if (c.signal.aborted) return; report(e); setState(s => ({ ...s, status: 'error', error: e.message })); }
   }, [report]);
