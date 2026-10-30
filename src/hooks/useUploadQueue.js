@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MAX_UPLOAD_CONCURRENCY = 2;
+const SUCCESS_DISMISS_DELAY_MS = 5000;
 
 function errorMessage(error) {
   if (error?.code === 'NAME_CONFLICT') return 'A file or folder with this name already exists here.';
@@ -20,6 +21,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const tasksRef = useRef(new Map());
   const pendingRef = useRef([]);
   const activeRef = useRef(new Map());
+  const dismissTimersRef = useRef(new Map());
   const mountedRef = useRef(true);
   const uploadFileRef = useRef(uploadFile);
   const onCompleteRef = useRef(onComplete);
@@ -57,6 +59,14 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           if (controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
           task.status = 'success';
           updateItem(task.id, { status: 'success', result });
+          if (mountedRef.current) {
+            const timer = setTimeout(() => {
+              dismissTimersRef.current.delete(task.id);
+              tasksRef.current.delete(task.id);
+              setItems((current) => current.filter((item) => item.id !== task.id));
+            }, SUCCESS_DISMISS_DELAY_MS);
+            dismissTimersRef.current.set(task.id, timer);
+          }
           try { onCompleteRef.current?.(task, result); } catch { /* refresh errors must not turn a completed upload into a failed transfer */ }
         })
         .catch((error) => {
@@ -89,12 +99,15 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     mountedRef.current = true;
     const active = activeRef.current;
     const tasks = tasksRef.current;
+    const dismissTimers = dismissTimersRef.current;
     return () => {
       mountedRef.current = false;
       pendingRef.current = [];
       for (const task of active.values()) task.controller?.abort();
       active.clear();
       tasks.clear();
+      for (const timer of dismissTimers.values()) clearTimeout(timer);
+      dismissTimers.clear();
     };
   }, []);
 
@@ -156,7 +169,11 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
 
   const clearFinished = useCallback(() => {
     const finished = new Set(items.filter((item) => ['success', 'error', 'cancelled'].includes(item.status)).map((item) => item.id));
-    for (const id of finished) tasksRef.current.delete(id);
+    for (const id of finished) {
+      tasksRef.current.delete(id);
+      clearTimeout(dismissTimersRef.current.get(id));
+      dismissTimersRef.current.delete(id);
+    }
     if (mountedRef.current) setItems((current) => current.filter((item) => !finished.has(item.id)));
   }, [items]);
 

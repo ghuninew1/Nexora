@@ -36,6 +36,8 @@
 - Upload queue ที่เหลือใน demo จำลอง progress ใน browser; ไม่ส่ง bytes ไป storage
 - Shared แสดง persistent public links และ Share action เชื่อม API แล้ว (local). Storage page แสดง safe connection/capability state จาก Nexora API; usage ยัง not reported เพราะไม่มี authoritative metrics
 - Theme เป็น browser preference ใน `localStorage`
+- UI follow-up: คิวอัปโหลดล้างรายการที่สำเร็จอัตโนมัติหลัง 5 วินาที; รายการผิดพลาดหรือยกเลิกยังคงอยู่จนกว่าจะล้างเอง.
+- UI follow-up: File Browser list/grid แสดงไอคอนตามชนิดไฟล์รูปภาพ วิดีโอ ข้อความ และ PDF โดยไฟล์อื่นใช้ไอคอนทั่วไป.
 - UI follow-up: Header กว้างเต็มหน้าจอและ Sidebar desktop เริ่มใต้ Header; mobile Sidebar ยังเป็น drawer; Sidebar responsive; ใช้ `src/assets/logo_full.avif` ตอนขยายและ `src/assets/logo.avif` ตอนพับ; Sidebar NavLinks ใช้ Liquid Glass hover แบบเดียวกับปุ่ม Collapse ใน Light/Dark; File Browser และการ์ด Recent/Favorites มี Liquid Glass hover; Favorites ใน File Browser ยังคงเป็น demo เฉพาะหน้าที่ใช้ demo state
 - Favorites navigation follow-up: folder rows now provide the same Open folder action as Recent, and file rows can open their containing folder when parent metadata is available.
 - Recent navigation follow-up: Open folder and Open containing folder now navigate to `/files` with the target logical folder and breadcrumb route state. Local lint/build verification pending; production behavior remains unverified.

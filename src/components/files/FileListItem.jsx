@@ -1,13 +1,34 @@
-import { Share2, ArrowRightLeft, Copy, File, FileCode2, FileText, Folder, MoreHorizontal, Download, Eye, Pencil, Star, Trash2 } from "lucide-react";
+import { Share2, ArrowRightLeft, Copy, File, FileImage, FileText, FileType2, FileVideo, Folder, MoreHorizontal, Download, Eye, Pencil, Star, Trash2 } from "lucide-react";
 import { cx } from "../../utils/cx";
 import { Button } from "../ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { getStoragePreviewSpec } from "../../utils/storage-preview";
 
-const fileIcons = { md: FileCode2, pdf: FileText };
+const imageExtensions = new Set(["jpg", "jpeg", "png", "gif", "webp", "avif", "svg", "bmp", "ico", "heic", "heif", "tif", "tiff"]);
+const videoExtensions = new Set(["mp4", "mov", "webm", "mkv", "avi", "mpeg", "mpg", "m4v", "ogv"]);
+const textExtensions = new Set(["txt", "md", "markdown", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini"]);
+
+const fileIcons = { folder: Folder, image: FileImage, video: FileVideo, pdf: FileType2, text: FileText, file: File };
+
+function getFileIcon(file) {
+  if (file.type === "folder") return "folder";
+  const mime = (file.mimeType || "").split(";", 1)[0].trim().toLowerCase();
+  const extension = (file.extension || file.name?.split(".").pop() || "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime === "application/pdf") return "pdf";
+  if (mime.startsWith("text/") || ["application/json", "application/xml", "application/csv"].includes(mime)) return "text";
+  if (!mime || mime === "application/octet-stream") {
+    if (imageExtensions.has(extension)) return "image";
+    if (videoExtensions.has(extension)) return "video";
+    if (extension === "pdf") return "pdf";
+    if (textExtensions.has(extension)) return "text";
+  }
+  return "file";
+}
 
 function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy, onShare, onTrash }) {
-  const Icon = file.type === "folder" ? Folder : fileIcons[file.extension] ?? File;
+  const Icon = fileIcons[getFileIcon(file)];
   const isFolder = file.type === "folder";
   const canRename = Boolean(capabilities.rename && !readOnly && !busy);
   const canMove = Boolean(capabilities.move && !readOnly && !busy);
