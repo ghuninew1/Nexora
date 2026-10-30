@@ -85,6 +85,7 @@ export default function useRemoteFilesState() {
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [mutatingIds, setMutatingIds] = useState(() => new Set());
   const [operationFeedback, setOperationFeedback] = useState(null);
+  const clearOperationFeedback = useCallback(() => setOperationFeedback(null), []);
   const [notice, setNotice] = useState('');
   const [preview, setPreview] = useState(null);
   const [trashState, setTrashState] = useState(EMPTY_TRASH_STATE);
@@ -1080,6 +1081,7 @@ export default function useRemoteFilesState() {
     isCreatingFolder,
     mutatingIds,
     operationFeedback,
+    clearOperationFeedback,
     uploadQueue,
     uploadFiles,
     cancelUpload,
@@ -1104,7 +1106,7 @@ export default function useRemoteFilesState() {
     createFolder,
   }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice, activeStorage, capabilities,
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
-    operationFeedback, uploadQueue, uploadFiles, cancelUpload, retryUpload, clearFinishedUploads,
+    operationFeedback, clearOperationFeedback, uploadQueue, uploadFiles, cancelUpload, retryUpload, clearFinishedUploads,
     renameObject, moveObject, copyObject, downloadObject, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
     preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,
