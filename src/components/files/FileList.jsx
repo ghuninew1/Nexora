@@ -8,7 +8,7 @@ function FileList({ cutIds = [], files, selectedIds, query, view, favorites, onS
   const allSelected = files.every((file) => selectedIds.includes(file.id));
   return (
     <div className={cx(view === "list" ? "overflow-hidden rounded-xl border border-border bg-card" : "")}>
-      {view === "list" && <div className={cx("grid grid-cols-[minmax(0,1fr)] items-center border-b border-border bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid-cols-[minmax(0,1fr)_160px_100px_40px] sm:px-4 sm:py-3")}>
+      {view === "list" && <div className={cx("grid grid-cols-[minmax(0,1fr)] items-center border-b border-border bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid-cols-[minmax(0,1fr)_160px_100px_56px] sm:px-4 sm:py-3")}>
         <div className={cx("flex min-w-0 items-center gap-3")}>
           <button type="button" onClick={onSelectAll} aria-label={allSelected ? "Deselect all files" : "Select all files"} aria-pressed={allSelected} className={cx("flex size-8 shrink-0 items-center justify-center rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
             <span className={cx("flex size-4 items-center justify-center rounded border text-[10px]", allSelected ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{allSelected && "✓"}</span>

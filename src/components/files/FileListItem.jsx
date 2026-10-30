@@ -44,7 +44,7 @@ function FileListItem({ file, isCutItem = false, selected, favorite, view, onSel
   return (
     <article className={cx(
       "group relative min-w-0 border-border transition-[background-color,border-color] duration-150",
-      view === "grid" ? "grid grid-cols-1 rounded-xl border bg-card p-4" : "grid w-full items-center border-b px-4 py-3 pr-12 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_160px_100px_40px] sm:pr-4",
+      view === "grid" ? "grid grid-cols-1 rounded-xl border bg-card p-4" : "grid w-full items-center border-b px-4 py-3 pr-12 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_160px_100px_56px] sm:pr-4",
       !selected && "hover:border-primary/20 hover:bg-[var(--glass-surface-hover)] focus-within:bg-[var(--glass-surface-hover)]",
       selected && "bg-primary/5 ring-1 ring-inset ring-primary/30",
       isCutItem && "opacity-50",
@@ -76,7 +76,7 @@ function FileListItem({ file, isCutItem = false, selected, favorite, view, onSel
       <span className={cx(view === "grid" ? "mt-3 text-xs text-muted-foreground" : "hidden text-sm text-muted-foreground sm:block")}>{file.modified}</span>
       <span className={cx(view === "grid" ? "text-xs text-muted-foreground" : "hidden text-right text-sm text-muted-foreground sm:block")}>{file.size ?? "—"}</span>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={cx(view === "grid" ? "absolute right-2 top-2" : "absolute right-2 top-2 sm:static")} aria-label={`Actions for ${file.name}`}><MoreHorizontal /></Button>} />
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={cx(view === "grid" ? "absolute right-2 top-2" : "absolute right-2 top-2 sm:static sm:justify-self-end")} aria-label={`Actions for ${file.name}`}><MoreHorizontal /></Button>} />
         <DropdownMenuContent align="end" className={cx("w-auto")}>
           {!isFolder && <DropdownMenuItem disabled={!canPreview} onClick={() => onPreview?.(file)}><Eye />Preview</DropdownMenuItem>}
           {!isFolder && <DropdownMenuItem disabled={!canDownload} onClick={() => onDownload?.(file)}><Download />Download</DropdownMenuItem>}
