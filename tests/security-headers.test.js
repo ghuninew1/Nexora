@@ -33,6 +33,7 @@ test('HTML responses receive a per-response restrictive nonce CSP and no-store c
   assert.match(scriptSrc, /'nonce-[A-Za-z0-9+/]+=*'/);
   assert.doesNotMatch(scriptSrc, /'unsafe-inline'|'unsafe-eval'/);
   assert.match(csp, /frame-src blob:/);
+  assert.match(csp, /media-src 'self' blob:/);
   assert.notEqual(csp, second.headers.get('Content-Security-Policy'));
   assert.equal(first.headers.get('Cache-Control'), 'no-store');
   assert.equal(first.headers.get('ETag'), null);

@@ -105,6 +105,7 @@ function safeDisposition(value) {
 
 const SAFE_PREVIEW_MIME_TYPES = new Map([
   ['image/jpeg', 'image'], ['image/png', 'image'], ['image/webp', 'image'],
+  ['video/mp4', 'video'], ['video/webm', 'video'], ['video/ogg', 'video'],
   ['image/gif', 'image'], ['image/avif', 'image'], ['application/pdf', 'pdf'],
   ['text/plain', 'text'], ['text/markdown', 'text'], ['text/x-markdown', 'text'],
   ['text/csv', 'text'], ['application/csv', 'text'], ['application/json', 'text'],
@@ -116,6 +117,7 @@ const SAFE_PREVIEW_MIME_TYPES = new Map([
 
 const SAFE_PREVIEW_EXTENSIONS = new Map([
   ['jpg', 'image/jpeg'], ['jpeg', 'image/jpeg'], ['png', 'image/png'], ['webp', 'image/webp'],
+  ['mp4', 'video/mp4'], ['webm', 'video/webm'], ['ogv', 'video/ogg'],
   ['gif', 'image/gif'], ['avif', 'image/avif'], ['pdf', 'application/pdf'], ['txt', 'text/plain'],
   ['md', 'text/markdown'], ['markdown', 'text/markdown'], ['csv', 'text/csv'], ['json', 'application/json'],
   ['log', 'text/plain'], ['yaml', 'text/plain'], ['yml', 'text/plain'], ['toml', 'text/plain'],

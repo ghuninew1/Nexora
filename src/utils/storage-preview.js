@@ -3,6 +3,7 @@ export const MAX_MEDIA_PREVIEW_BYTES = 20 * 1024 * 1024;
 
 const MIME_PREVIEWS = new Map([
   ['image/jpeg', 'image'], ['image/png', 'image'], ['image/webp', 'image'],
+  ['video/mp4', 'video'], ['video/webm', 'video'], ['video/ogg', 'video'],
   ['image/gif', 'image'], ['image/avif', 'image'], ['application/pdf', 'pdf'],
   ['text/plain', 'text'], ['text/markdown', 'text'], ['text/x-markdown', 'text'],
   ['text/csv', 'text'], ['application/csv', 'text'], ['application/json', 'text'],
@@ -15,6 +16,7 @@ const MIME_PREVIEWS = new Map([
 const EXTENSION_MIME = new Map([
   ['jpg', ['image/jpeg', 'image']], ['jpeg', ['image/jpeg', 'image']], ['png', ['image/png', 'image']],
   ['webp', ['image/webp', 'image']], ['gif', ['image/gif', 'image']], ['avif', ['image/avif', 'image']],
+  ['mp4', ['video/mp4', 'video']], ['webm', ['video/webm', 'video']], ['ogv', ['video/ogg', 'video']],
   ['pdf', ['application/pdf', 'pdf']], ['txt', ['text/plain', 'text']], ['md', ['text/markdown', 'text']],
   ['markdown', ['text/markdown', 'text']], ['csv', ['text/csv', 'text']], ['json', ['application/json', 'text']],
   ['log', ['text/plain', 'text']], ['yaml', ['text/plain', 'text']], ['yml', ['text/plain', 'text']],

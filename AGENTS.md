@@ -110,7 +110,7 @@ Check this map against actual files when changing the architecture; update READM
 - File Browser list/grid uses file type icons for images, videos, text and PDF based on MIME type or filename extension when MIME is unavailable; other files use the generic icon.
 - File Browser listing cache is session-scoped in memory, keyed by storage plus logical parent (with an explicit root identity), bounded to 60 folders, and stale after 20 seconds. Keep request dedupe cursor-specific, clear on auth/storage scope changes, and selectively invalidate affected parents after mutations. Never cache bytes or provider internals.
 - Trash uses a separate cursor-paginated in-memory collection, deduplicated by logical object ID. Move to Trash invalidates its source folder and removes cached subtree metadata/listings; restore removes the Trash row and invalidates only the response's authoritative parent; permanent delete removes the Trash row and safe subtree metadata. Do not clear unrelated folder listings.
-- Connected File Browser preview is an app-level feature backed by the authenticated `download` capability; it does not assert provider `preview` support. Only allowlisted image/PDF/text content may preview, text is capped at 1 MiB, and preview bytes are fetched only after the user selects Preview. Listing cache remains metadata-only. Demo entries still have no source bytes.
+- Connected File Browser preview is an app-level feature backed by the authenticated `download` capability; it does not assert provider `preview` support. Only allowlisted image/PDF/text/video content may preview, text is capped at 1 MiB, and preview bytes are fetched only after the user selects Preview. Listing cache remains metadata-only. Demo entries still have no source bytes.
 
 ## Dependencies and commands
 
@@ -215,3 +215,5 @@ Trash offers Delete permanently all after loading a snapshot of all pages and ex
 Connected and public file previews use a medium-width dialog on larger screens and retain the mobile layout.
 
 The File Browser list keeps extra space between the Size column and row actions on wider screens.
+
+File preview supports MP4, WebM and Ogg video up to 20 MiB through the existing on-demand preview route. Playback depends on browser codec support; video bytes are buffered before playback, and larger files remain downloadable. Public shares use the same preview policy.

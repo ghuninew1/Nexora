@@ -6,7 +6,7 @@ export function createPageNonce() {
 }
 
 export function createPageContentSecurityPolicy(nonce) {
-    return `default-src 'self'; script-src 'self' https://static.cloudflareinsights.com 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`;
+    return `default-src 'self'; script-src 'self' https://static.cloudflareinsights.com 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`;
 }
 
 export async function onRequest({ request, next }) {

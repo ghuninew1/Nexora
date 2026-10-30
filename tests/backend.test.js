@@ -857,6 +857,27 @@ test('preview uses download authorization while keeping provider preview false a
   assert.match(attachment.headers.get('Content-Disposition'), /^attachment;/u);
 });
 
+test('video preview enforces allowlisted types and media size limit', async () => {
+  let downloads = 0;
+  const videoFetch = (size, mimeType = 'video/mp4') => async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/objects/object_alpha') && init.method === 'GET') return Response.json({ success: true, object: { ...object(), name: 'clip.mp4', mimeType: 'video/mp4', sizeBytes: size } });
+    if (path.endsWith('/download')) { downloads += 1; return new Response('video', { headers: { 'Content-Type': mimeType } }); }
+    return upstreamResponse(url, init);
+  };
+  const route = `/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`;
+  const response = await request(route, { fetchImpl: videoFetch(5) });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'video/mp4');
+  await response.body.cancel();
+  const mismatch = await request(route, { fetchImpl: videoFetch(5, 'text/html') });
+  assert.equal(mismatch.status, 415);
+  const before = downloads;
+  const large = await request(route, { fetchImpl: videoFetch(20 * 1024 * 1024 + 1) });
+  assert.equal(large.status, 413);
+  assert.equal(downloads, before);
+});
+
 test('preview rejects unsupported content and oversized files before fetching binary bytes', async () => {
   let downloadCalls = 0;
   const htmlFetch = async (url, init) => {

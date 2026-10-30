@@ -501,6 +501,10 @@ test('preview type policy allows safe formats and rejects active or unsupported 
   assert.deepEqual(getStoragePreviewSpec({ type: 'file', name: 'photo.avif', mimeType: 'image/avif' }), {
     kind: 'image', mimeType: 'image/avif', maxBytes: MAX_MEDIA_PREVIEW_BYTES,
   });
+  for (const [name, mimeType] of [['clip.mp4', 'video/mp4'], ['clip.webm', 'video/webm'], ['clip.ogv', 'video/ogg']]) {
+    assert.deepEqual(getStoragePreviewSpec({ type: 'file', name, mimeType }), { kind: 'video', mimeType, maxBytes: MAX_MEDIA_PREVIEW_BYTES });
+    assert.equal(getStoragePreviewSpec({ type: 'file', name, mimeType: 'application/octet-stream' }).mimeType, mimeType);
+  }
   assert.equal(getStoragePreviewSpec({ type: 'file', name: 'notes.md', mimeType: 'application/octet-stream' }).kind, 'text');
   assert.equal(getStoragePreviewSpec({ type: 'file', name: 'notes.md', mimeType: 'text/html' }), null);
   assert.equal(getStoragePreviewSpec({ type: 'file', name: 'vector.svg', mimeType: 'image/svg+xml' }), null);
