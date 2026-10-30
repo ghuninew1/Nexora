@@ -148,7 +148,7 @@ function ListingPage({ page }) {
         : connected.favoritesStatus === "error" ? <div className={cx("glass-surface flex flex-col items-start gap-3 p-5")} role="alert"><p className={cx("text-sm text-destructive")}>{connected.favoritesError}</p><Button variant="outline" onClick={() => void connected.refreshFavorites()}>Try again<RefreshCw /></Button></div>
           : files.length === 0 ? <div className={cx("glass-surface flex min-h-64 flex-col items-center justify-center px-6 text-center")}><span className={cx("glass-control flex size-12 items-center justify-center rounded-2xl text-muted-foreground")}><Folder className={cx("size-5")} aria-hidden="true" /></span><h2 className={cx("mt-4 text-sm font-semibold")}>No favorites yet</h2><p className={cx("mt-1 max-w-sm text-sm text-muted-foreground")}>Star a connected file or folder to keep it here.</p></div>
             : files.map((file) => <article key={`${file.storageId}:${file.objectId}`} className={cx("glass-surface flex min-w-0 items-center gap-3 p-4")}>
-              <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}>{file.type === "folder" ? <Folder className={cx("size-5")} aria-hidden="true" /> : <File className={cx("size-5")} aria-hidden="true" />}</span>
+              <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl", file.type === "folder" ? "text-amber-700 dark:text-amber-300" : "text-primary")}>{file.type === "folder" ? <Folder className={cx("size-5")} aria-hidden="true" /> : <File className={cx("size-5")} aria-hidden="true" />}</span>
               <div className={cx("min-w-0 flex-1")}><p className={cx("truncate text-sm font-medium")}>{file.name}</p><p className={cx("mt-1 truncate text-xs text-muted-foreground")}>{file.storageName} · {file.type === "folder" ? "Folder" : file.size ?? "File"}</p></div>
               {file.type === "folder" ? <Button type="button" variant="outline" size="sm" disabled={file.storageId !== connected.storageId} onClick={() => connected.openRecentFolder(file)} aria-label={`Open folder ${file.name}`}><Folder data-icon="inline-start" />Open folder</Button>
                 : file.parentId !== undefined && <Button type="button" variant="ghost" size="sm" disabled={file.storageId !== connected.storageId} onClick={() => connected.openContainingFolder(file)} aria-label={`Open containing folder for ${file.name}`}>Open folder</Button>}
@@ -178,7 +178,7 @@ function TrashItemRow({ file, browser, onPermanentDelete, bulkBusy = false }) {
   const details = [file.type === "folder" ? "Folder" : formatTrashSize(file.sizeBytes), formatTrashDate(file.deletedAt)];
   return <article className={cx("glass-surface flex min-w-0 flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between")}>
     <div className={cx("flex min-w-0 items-start gap-3")}>
-      <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
+      <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl", file.type === "folder" ? "text-amber-700 dark:text-amber-300" : "text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
       <div className={cx("min-w-0")}>
         <p className={cx("break-all text-sm font-medium text-foreground")}>{file.name}</p>
         <p className={cx("mt-1 text-xs text-muted-foreground")}>{details.join(" · ")}</p>

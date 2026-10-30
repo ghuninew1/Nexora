@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { File, FileQuestion, Folder } from 'lucide-react';
 import { shareFilesDestination } from '../services/shares';
 import { recordStorageRecent } from '../services/storage';
 import { useAuth } from '../hooks/useAuth';
@@ -45,11 +46,13 @@ export default function SharedPage() {
     {shares.status === 'error' && <p role="alert">{shares.error}</p>}
     {shares.status === 'ready' && shares.shares.length === 0 && <div className={cx('glass-surface p-6')}><h2 className={cx('font-medium')}>No public links yet</h2><p className={cx('mt-2 text-sm text-muted-foreground')}>Create a public link from a file or folder’s Share action.</p></div>}
     {shares.shares.map(share => {
+      const isFolder = share.object?.type === 'folder';
+      const Icon = isFolder ? Folder : share.object?.type === 'file' ? File : FileQuestion;
       const expiry = share.expiresAt === null ? null : Date.parse(share.expiresAt);
       const notExpired = expiry === null || (clockNow !== null && Number.isFinite(expiry) && expiry > clockNow);
       const canOpenLink = Boolean(shares.links[share.id]) && notExpired && !['expired', 'revoked'].includes(share.status);
       return <article key={share.id} className={cx('glass-surface flex min-w-0 flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between')}>
-      <div className={cx('min-w-0')}><h2 className={cx('font-medium [overflow-wrap:anywhere]')}>{share.object?.name ?? 'Unavailable item'}</h2><p className={cx('mt-1 break-words text-xs text-muted-foreground')}>{share.object?.type ?? 'Item'} · {share.storageName} · {new Date(share.createdAt).toLocaleDateString()} · {share.status === 'active' ? 'View + Download' : share.status === 'expired' ? 'Expired' : 'Unavailable'} · {share.expiresAt ? `Expires ${new Date(share.expiresAt).toLocaleString()}` : 'Never expires'}</p></div>
+      <div className={cx('flex min-w-0 items-start gap-3')}><span className={cx('glass-control flex size-10 shrink-0 items-center justify-center rounded-xl', isFolder ? 'text-amber-700 dark:text-amber-300' : share.object?.type === 'file' ? 'text-primary' : 'text-muted-foreground')}><Icon className={cx('size-5')} aria-hidden="true" /></span><div className={cx('min-w-0')}><h2 className={cx('font-medium [overflow-wrap:anywhere]')}>{share.object?.name ?? 'Unavailable item'}</h2><p className={cx('mt-1 break-words text-xs text-muted-foreground')}>{share.object?.type ?? 'Item'} · {share.storageName} · {new Date(share.createdAt).toLocaleDateString()} · {share.status === 'active' ? 'View + Download' : share.status === 'expired' ? 'Expired' : 'Unavailable'} · {share.expiresAt ? `Expires ${new Date(share.expiresAt).toLocaleString()}` : 'Never expires'}</p></div></div>
       <div className={cx('flex shrink-0 flex-wrap gap-2')}>{canOpenLink && <><Button className={cx('min-h-11')} variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(new URL(shares.links[share.id], window.location.origin).href); setNotice('Link copied.'); } catch { setNotice('Could not copy. Open Manage link to select the URL.'); } }}>Copy Link</Button><Button className={cx('min-h-11')} variant="outline" nativeButton={false} render={<a href={shares.links[share.id]} target="_blank" rel="noopener noreferrer" />}>Open</Button></>}
       <Button className={cx('min-h-11')} variant="outline" onClick={() => { setConfirmAction('revoke'); setSelected(share); }}>Revoke</Button><Button className={cx("min-h-11")} variant="outline" onClick={() => { setConfirmAction(null); setSelected(share); }}>Manage link</Button><Button className={cx("min-h-11")} variant="ghost" disabled={!share.object || share.storageId !== storage.activeStorage?.storageId} onClick={() => openInFiles(share)}>Open in Files</Button></div>
     </article>;
