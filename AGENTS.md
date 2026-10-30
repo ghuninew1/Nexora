@@ -38,7 +38,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `src/components/files/FolderDestinationDialog.jsx`: lazy folder-only destination picker for move/copy.
 - `src/data/files.js`: fixture entries.
 - `src/components/ui/`, `src/utils/cx.js`, `src/utils/glass.js`, `src/index.css`: shared controls, classes, glass interactions, and tokens.
-- `README.md` and `docs/DESIGN_SYSTEM.md`: current user-facing project status and design usage.
+- `README.md` and `docs/DESIGN_SYSTEM.md`: project overview, setup, usage, and design guidance; detailed history and validation belong in the handoff and release notes.
 - `docs/STORAGE_API_AUDIT.md`: source-derived IssueDesk and Shared Storage API endpoint/auth/streaming audit.
 - `docs/STORAGE_ARCHITECTURE.md`: current/target provider architecture and Phase 8 implementation boundary.
 - `docs/STORAGE_API_V1_PROPOSAL.md`: reviewed provider-neutral `/api/storage/v1/*` contract; implemented routes remain subject to later production review.
@@ -54,6 +54,7 @@ These instructions apply to the whole Nexora repository. Treat source and config
 - `docs/PRODUCTION_PROVISIONING.md`: operator commands, environment variables, and rollback/recovery guidance for production admin and mount creation.
 - `docs/STORAGE_PHASE_S1.md` and `docs/STORAGE_PHASE_S2.md`: Shared Storage implementation in the separate IssueDesk checkout. The historical S2 report predates the Phase 9.1 brief's operator-reported production deployment; Nexora must not infer live state from source docs.
 - `PROJECT_HANDOFF.md`: verified Phase 7/S1/S2, Phase 8 backend, Phase 8.5 frontend auth, and remaining Phase 9 scope.
+- `docs/V1.0.1_RELEASE.md`: source changes and validation/production boundaries for v1.0.1.
 - `docs/PHASE_10_0.md`, `docs/PHASE_10_0_1.md`, `docs/PHASE_10_1.md`, `docs/PHASE_10_1_1.md`: operator-confirmed production-readiness result, DNS/network verification limitation, CSP fix, and production security gates. Phase 10.1.1 records the 2026-10-28 post-CSP all-functions smoke check as operator-confirmed, not tool-verified; it is a read-only audit, and unresolved infrastructure gates require operator action. Local source evidence does not prove Cloudflare deployment, remote bindings, Access policy, or secret configuration.
 - `.agents/skills/nexora-project/SKILL.md`: project-scoped Codex workflow, supplementing the detailed repository rules here.
 
@@ -69,7 +70,7 @@ Check this map against actual files when changing the architecture; update READM
 6. Never expose service credentials in `VITE_*`, JSX, client bundles, or browser requests. When integration begins, use a Nexora server-side domain API, ownership checks, and a separately reviewed shared Storage contract.
 7. Do not modify or deploy remote infrastructure, D1 data, Storage data, or secrets without explicit authorization.
 8. When work changes the UI or file behavior, keep README, this file, and design notes aligned with the resulting source.
-9. After every project change, synchronize `README.md`, `AGENTS.md`, and `PROJECT_HANDOFF.md` with the resulting source, current scope, and checks actually completed. Keep pending QA and unapproved backend work clearly marked; do not claim a check passed before running it.
+9. After every project change, review `README.md` and `AGENTS.md` for current project information, and record every change and checks actually completed in `PROJECT_HANDOFF.md`. Keep README focused on the project, setup, and usage rather than change history. Keep pending QA and unapproved backend work clearly marked; do not claim a check passed before running it.
 10. Production readiness reports must distinguish source-derived configuration from live platform state. Never print or read secret values for inventory; do not deploy, migrate, rotate, or modify production resources without explicit authorization.
 
 ## React, JSX, and styling conventions
@@ -176,7 +177,7 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 
 ## Nexora v1 release baseline
 
-- Current source scope is documented in `docs/V1_RELEASE.md`; package version is already 1.0.0. Phase 10.0 passed by operator confirmation on 2026-10-28; Phase 10.1 source audit/local hardening is complete with production/operator gates still open. Do not add deferred features. Read `docs/PHASE_10_0_1.md`, `docs/PHASE_10_1.md`, and `docs/PHASE_10_1_1.md` for operator-confirmed versus tool-verified results and open security gates. Never reapply migrations 0001–0003 solely for verification; operator confirmed them applied on production D1 `nexora-db` on 2026-10-28.
+- Current source scope is documented in `docs/V1_RELEASE.md`; the working-tree package version is 1.0.1. Phase 10.0 passed by operator confirmation on 2026-10-28; Phase 10.1 source audit/local hardening is complete with production/operator gates still open. Do not add deferred features. Read `docs/PHASE_10_0_1.md`, `docs/PHASE_10_1.md`, and `docs/PHASE_10_1_1.md` for operator-confirmed versus tool-verified results and open security gates. Never reapply migrations 0001–0003 solely for verification; operator confirmed them applied on production D1 `nexora-db` on 2026-10-28.
 - Account creation is administrator-provisioned; do not describe a public self-service registration route. Keep production implementation, user-reported smoke tests, and local validation distinct.
 - Backup/recovery design exists in `docs/BACKUP_RECOVERY.md`; automated backup and an isolated restore drill are not implemented/completed. Never claim recovery proven without an actual isolated restore.
 - Runtime SQLite artifacts in adjacent IssueDesk are no longer tracked; do not read or delete local DB/WAL/SHM files during Git hygiene checks. `garage/garage.toml` has since been removed from the adjacent IssueDesk index while preserving its local ignored copy; its example template uses a placeholder. Changes are staged/uncommitted and history was not rewritten; historical RPC secret material remains a follow-up. Do not print it or rotate production credentials without a separately authorized task.

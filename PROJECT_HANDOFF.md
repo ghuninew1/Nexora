@@ -254,3 +254,9 @@ The File Browser list keeps extra space between the Size column and row actions 
 File preview supports MP4, WebM and Ogg video up to 20 MiB through the existing on-demand preview route. Playback depends on browser codec support; video bytes are buffered before playback, and larger files remain downloadable. Public shares use the same preview policy.
 
 File Browser row action and New menus highlight enabled items on hover or keyboard focus, with a distinct destructive highlight for Move to Trash.
+
+Current working-tree package version is 1.0.1; see [v1.0.1 release notes](docs/V1.0.1_RELEASE.md) for source changes and unresolved validation and production gates. Earlier version statements describe their historical phase.
+
+The README is a project overview and development guide; detailed implementation history, validation, and outstanding operational gates remain in this handoff and the release notes.
+
+Documentation preference: README contains project information, setup and usage; record all changes, validation and follow-up in PROJECT_HANDOFF.md.
