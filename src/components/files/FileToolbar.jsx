@@ -36,7 +36,7 @@ function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRen
         </> : <>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button disabled={isBusy}><Plus />New<ChevronDown /></Button>} />
-            <DropdownMenuContent align="start">
+            <DropdownMenuContent align="start" className={cx("file-browser-menu")}>
               <DropdownMenuItem disabled={!canCreateFolder || isBusy} onClick={onNewFolder}><FolderPlus />Folder</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
