@@ -136,3 +136,5 @@ Dashboard, Recent, Favorites, Trash, and Shared use amber folder icons and prima
 The mobile Sidebar slides in from the left and slides out to the left; reduced-motion preferences disable its transition.
 
 Trash offers Delete permanently all after loading a snapshot of all pages and explicit irreversible confirmation. Deletions use existing per-item APIs; results can be partial, and newly added items are outside the snapshot. Browser and live-provider QA remain pending.
+
+Connected and public file previews use a medium-width dialog on larger screens and retain the mobile layout.

@@ -19,7 +19,7 @@ export default function StorageFilePreviewDialog({ preview, onOpenChange, onDown
   const file = preview?.file;
   return (
     <Dialog open={Boolean(preview)} onOpenChange={onOpenChange}>
-      {file && <DialogContent className={cx("h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-4 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl sm:p-6")} aria-busy={preview.status === "loading"}>
+      {file && <DialogContent dialogSize="md" className={cx("h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-4 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:p-6")} aria-busy={preview.status === "loading"}>
         <DialogHeader className={cx("min-w-0 pr-8")}>
           <DialogTitle className={cx("truncate")}><span className={cx("sr-only")}>Preview: </span>{file.name}</DialogTitle>
           <DialogDescription>{preview.status === "ready" ? `${preview.mimeType} · ${file.size || "Size unavailable"}` : "On-demand preview from connected storage"}</DialogDescription>
