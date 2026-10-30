@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Folder, FolderOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Folder, FolderOpen, FolderPlus } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { listStorageObjects, mergeStorageObjects, StorageApiError } from '../../services/storage';
 import { appendBreadcrumb, isFolderDestinationInvalid, rootBreadcrumbs } from '../../utils/storage-files';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { cx } from '../../utils/cx';
+import NewFolderDialog from './NewFolderDialog';
 
 function operationMessage(code) {
   if (code === 'NAME_CONFLICT') return 'An item with this name already exists in that folder.';
@@ -18,7 +19,7 @@ function operationMessage(code) {
   return 'Storage is temporarily unavailable. Try again later.';
 }
 
-function FolderDestinationDialog({ open, onOpenChange, storageId, source, action, isAllowed, onConfirm }) {
+function FolderDestinationDialog({ open, onOpenChange, storageId, source, action, isAllowed, canCreateFolder, onCreateFolder, onConfirm }) {
   const { expireSession } = useAuth();
   const [breadcrumbs, setBreadcrumbs] = useState(rootBreadcrumbs);
   const [items, setItems] = useState([]);
@@ -28,6 +29,7 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
   const [operationError, setOperationError] = useState('');
   const [isPending, setIsPending] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
   const controllerRef = useRef(null);
   const sequenceRef = useRef(0);
   const parentId = breadcrumbs.at(-1)?.objectId ?? null;
@@ -76,6 +78,15 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
     void loadFolder(nextBreadcrumbs.at(-1)?.objectId ?? null);
   };
 
+  const handleCreateFolder = async (name) => {
+    const result = await onCreateFolder(name, parentId);
+    if (result.ok) {
+      setNewFolderOpen(false);
+      await loadFolder(parentId);
+    }
+    return result;
+  };
+
   const handleConfirm = async () => {
     if (!isAllowed || isPending || isInvalidDestination) return;
     setIsPending(true);
@@ -114,6 +125,9 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
         <Button type="button" variant="outline" size="sm" disabled={breadcrumbs.length === 1 || isPending} onClick={() => navigateTo(breadcrumbs.slice(0, -1))}>
           <ChevronLeft aria-hidden="true" />Back
         </Button>
+        <Button type="button" variant="outline" size="sm" disabled={!canCreateFolder || isPending || status === 'loading' || status === 'error'} onClick={() => setNewFolderOpen(true)}>
+          <FolderPlus aria-hidden="true" />New folder
+        </Button>
         <Button type="button" size="sm" disabled={!isAllowed || isInvalidDestination || isPending || status === 'loading' || status === 'error'} onClick={() => void handleConfirm()}>
           {isPending ? 'Working…' : action === 'move' ? 'Move here' : 'Copy here'}
         </Button>
@@ -139,6 +153,7 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
         {nextCursor && <div className={cx('flex justify-center p-2')}><Button type="button" variant="ghost" size="sm" disabled={status === 'loading-more'} onClick={() => void loadFolder(parentId, nextCursor)}>{status === 'loading-more' ? 'Loading…' : 'Load more folders'}</Button></div>}
       </div>}
 
+      {newFolderOpen && <NewFolderDialog open onOpenChange={setNewFolderOpen} onCreate={handleCreateFolder} />}
       <DialogFooter>
         <Button type="button" variant="outline" disabled={isPending} onClick={() => onOpenChange(false)}>Cancel</Button>
       </DialogFooter>

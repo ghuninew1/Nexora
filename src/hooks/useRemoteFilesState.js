@@ -994,12 +994,12 @@ export default function useRemoteFilesState() {
     }
   }, [storageId, folderId, displayState.nextCursor, displayState.paginationStatus, expireSession, setSearchParams]);
 
-  const createFolder = useCallback(async (name) => {
+  const createFolder = useCallback(async (name, targetParentId = folderId) => {
     if (!storageId || !canUseCapability('createFolder')) {
       return { error: 'FORBIDDEN' };
     }
     if (!validateStorageObjectName(name)) return { error: 'INVALID_INPUT' };
-    if (displayState.items.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+    if (targetParentId === folderId && displayState.items.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
       return { error: 'NAME_CONFLICT' };
     }
 
@@ -1009,11 +1009,11 @@ export default function useRemoteFilesState() {
     const generation = generationRef.current;
     setIsCreatingFolder(true);
     try {
-      await createStorageFolder(storageId, { name, parentId: folderId }, { signal: controller.signal });
+      const folder = await createStorageFolder(storageId, { name, parentId: targetParentId }, { signal: controller.signal });
       if (controller.signal.aborted || generation !== generationRef.current) return { error: 'CANCELLED' };
-      cacheRef.current.invalidate(storageId, folderId);
-      await loadFirstPage({ refreshing: true, force: true });
-      return { ok: true };
+      cacheRef.current.invalidate(storageId, targetParentId);
+      if (targetParentId === folderId) await loadFirstPage({ refreshing: true, force: true });
+      return { ok: true, folder };
     } catch (error) {
       if (controller.signal.aborted || error?.name === 'AbortError') return { error: 'CANCELLED' };
       if (error instanceof StorageApiError && error.status === 401) expireSession();

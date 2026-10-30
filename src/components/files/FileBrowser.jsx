@@ -181,7 +181,7 @@ function FileBrowser() {
         </>}
       </section>
       {shareFile && shareFile.storageId === browser.storageId && shareFile.folderId === browser.folderId && <ShareDialog key={`${shareFile.storageId}:${shareFile.file.objectId}`} file={shareFile.file} storageId={shareFile.storageId} onClose={() => setShareFile(null)} />}
-      <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} onCreate={handleCreateFolder} />
+      {newFolderOpen && <NewFolderDialog open onOpenChange={setNewFolderOpen} onCreate={handleCreateFolder} />}
       <RenameDialog open={Boolean(renameFile)} onOpenChange={(open) => { if (!open) setRenameFile(null); }} file={renameFile} onRename={handleRename} />
       <FolderDestinationDialog
         key={destinationAction?.key}
@@ -191,6 +191,8 @@ function FileBrowser() {
         source={destinationAction?.file}
         action={destinationAction?.action}
         isAllowed={destinationAction?.action === "move" ? browser.canMove : browser.canCopy}
+        canCreateFolder={browser.canCreateFolder}
+        onCreateFolder={browser.createFolder}
         onConfirm={handleDestination}
       />
       <StorageFilePreviewDialog preview={browser.preview} onOpenChange={(open) => { if (!open) browser.closePreview(); }} onDownload={(file) => void browser.downloadObject(file)} maxTextPreviewBytes={browser.maxTextPreviewBytes} />
