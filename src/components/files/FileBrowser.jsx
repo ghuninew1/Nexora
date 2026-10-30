@@ -226,6 +226,12 @@ function FileBrowser() {
         {isReady && <>
           <div aria-live="polite" aria-atomic="true" className={cx("sr-only")}>{isRefreshing ? "Refreshing folder contents" : `${browser.items.length} items loaded`}</div>
           <FileList
+            sortBy={browser.sortBy}
+            sortDirection={browser.sortDirection}
+            onSort={(field) => {
+              if (field === browser.sortBy) browser.setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
+              else { browser.setSortBy(field); browser.setSortDirection("asc"); }
+            }}
             files={browser.currentFiles}
             cutIds={clipboard.mode === "cut" && clipboard.sourceStorageId === browser.storageId ? clipboard.items.map((item) => item.objectId) : []}
             selectedIds={browser.selectedIds}

@@ -1,9 +1,17 @@
-import { Star } from "lucide-react";
+import { ArrowDown, ArrowUp, Star } from "lucide-react";
 import { cx } from "../../utils/cx";
 import FileEmptyState from "./FileEmptyState";
 import FileListItem from "./FileListItem";
 
-function FileList({ cutIds = [], files, selectedIds, query, view, favorites, onSelect, onSelectAll, onOpenFolder, onPreview, onRename, onDownload, onMove, onCopy, onShare, onTrash, onToggleFavorite, allowFavorites = false, canCreateFolder = false, capabilities, readOnly = false, mutatingIds, onCreateFolder }) {
+function SortHeading({ label, field, sortBy, sortDirection, onSort, alignEnd = false }) {
+  const active = sortBy === field;
+  const Icon = sortDirection === "asc" ? ArrowUp : ArrowDown;
+  return <button type="button" onClick={() => onSort(field)} aria-label={`Sort by ${label}${active ? `, currently ${sortDirection === "asc" ? "ascending" : "descending"}` : ""}`} className={cx("inline-flex min-h-10 items-center gap-1 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", alignEnd && "justify-self-end")}>
+    {label}{active && <Icon className={cx("size-3.5")} aria-hidden="true" />}
+  </button>;
+}
+
+function FileList({ sortBy, sortDirection, onSort, cutIds = [], files, selectedIds, query, view, favorites, onSelect, onSelectAll, onOpenFolder, onPreview, onRename, onDownload, onMove, onCopy, onShare, onTrash, onToggleFavorite, allowFavorites = false, canCreateFolder = false, capabilities, readOnly = false, mutatingIds, onCreateFolder }) {
   if (files.length === 0) return <FileEmptyState searching={Boolean(query.trim())} canCreateFolder={canCreateFolder} onCreateFolder={onCreateFolder} />;
   const allSelected = files.every((file) => selectedIds.includes(file.id));
   return (
@@ -15,8 +23,8 @@ function FileList({ cutIds = [], files, selectedIds, query, view, favorites, onS
           </button>
           {allowFavorites && <span className={cx("flex size-11 shrink-0 items-center justify-center")} aria-label="Favorites"><Star className={cx("size-4")} aria-hidden="true" /></span>}
           <span className={cx("size-10 shrink-0")} aria-hidden="true" />
-          <span>Name</span>
-        </div><span className={cx("hidden sm:block")}>Modified</span><span className={cx("hidden text-right sm:block")}>Size</span><span />
+          <SortHeading label="Name" field="name" sortBy={sortBy} sortDirection={sortDirection} onSort={onSort} />
+        </div><div className={cx("hidden sm:block")}><SortHeading label="Modified" field="modified" sortBy={sortBy} sortDirection={sortDirection} onSort={onSort} /></div><div className={cx("hidden sm:flex sm:justify-end")}><SortHeading label="Size" field="size" sortBy={sortBy} sortDirection={sortDirection} onSort={onSort} alignEnd /></div><span />
       </div>}
       {view === "grid" && <div className={cx("mb-2 flex justify-end")}><button type="button" onClick={onSelectAll} aria-pressed={allSelected} className={cx("min-h-10 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground")}>{allSelected ? "Deselect all" : "Select all"}</button></div>}
       <div className={cx(view === "grid" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "")}>

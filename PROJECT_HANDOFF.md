@@ -277,3 +277,8 @@ Documentation preference: README contains project information, setup and usage; 
 
 - ปรับ Grid view ให้ใช้การ์ดสี่เหลี่ยมจัตุรัสและจำนวนคอลัมน์ตามหน้าจอ โดยคง selection, Favorites, การเปิดโฟลเดอร์ และเมนูรายการ; List view คงเดิม
 - ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA ยังไม่ทำ และไม่ได้ deploy หรือเปลี่ยนข้อมูล production
+
+## File Browser column sorting — 30 ตุลาคม 2026
+
+- หัวคอลัมน์ Name, Modified และ Size ใช้เรียงรายการที่โหลดแล้ว กดซ้ำเพื่อสลับทิศทางและแสดงลูกศรตาม state เดียวกับ sort menu; Modified/Size ใช้เมนูได้บนจอแคบ
+- ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA ยังไม่ทำ และไม่มี deployment หรือ production change
