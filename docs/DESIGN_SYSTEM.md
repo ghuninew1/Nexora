@@ -49,7 +49,7 @@ Foundation, App Layout และหน้า workspace ใช้ design system �
 - `src/components/navigation/navigation.js` เป็นแหล่งข้อมูลร่วมของเมนู ชื่อหน้า และคำอธิบาย
 - Dashboard ใช้ active mount, reported usage และ Recent จริงโดยไม่มี fixture metrics; Recent ใช้ authenticated API/D1 พร้อม metadata hydration, refresh/retry และ actions ที่ใช้ flow เดิม. Favorites โหลดรายการจริงจาก authenticated API/D1 และ storage mount ที่เป็นเจ้าของ object; Trash โหลดข้อมูลจาก active storage ด้วย cursor pagination พร้อม Restore และ Permanent Delete. Shared จัดการ public links จริง, Storage แสดงสถานะการเชื่อมต่อ และ Settings ใช้ตั้งค่าธีมได้ URL ที่ไม่พบแสดง 404
 - Mobile navigation ใช้ Base UI Dialog: focus trap, Escape, คืน focus และปิดเมื่อเลือกเมนูหรือเปลี่ยนเป็น desktop breakpoint
-- `Button` กลางยังใช้ Base UI, variants เดิม และ `.glass-interactive`; NavLink ใน Sidebar ใช้พื้นหลังสีตามธีมที่เลื่อนตาม hover หรือ focus และแสดงสถานะ active แยกกัน
+- `Button` กลางยังใช้ Base UI, variants เดิม และ `.glass-interactive`; NavLink ใน Sidebar ใช้พื้นหลัง `--glass-hover` ที่เลื่อนตาม hover หรือ focus และแสดงสถานะ active แยกกัน
 - Interaction อ้างอิง IssueDesk GlassButton: diagonal sheen, radial light ตามเมาส์, inset rim/shadow และ active scale 0.97; sheen, pointer light และ rim ของปุ่มใช้สีตัวอักษร จึงมองเห็นได้บนพื้นปุ่มทั้งสว่างและมืด ส่วนปุ่ม filled/destructive คงสีเพื่อรักษา contrast
 - Pointer tracking ไม่ทำงานกับ touch/disabled และไม่ใช้ React state ต่อการขยับเมาส์ Caller ยังส่ง `onPointerMove`, `ref`, `render` และ className callback ผ่าน Button ได้
 - ปุ่มตกแต่ง Search/Notifications เดิมใน Header ถูกแทนด้วยชื่อหน้าและคำอธิบาย ปุ่ม file search ใน toolbar ยังอยู่ตาม implementation เดิม

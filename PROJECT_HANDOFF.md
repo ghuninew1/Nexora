@@ -1,5 +1,10 @@
 # Nexora — Project Handoff
 
+## Sidebar hover color — 31 ตุลาคม 2026
+
+- ปรับ highlight ที่เลื่อนใน Sidebar ให้ใช้ `--glass-hover` ตามพื้นหลัง hover ของปุ่มในแต่ละธีม โดยคง animation และ active state เดิม
+- ตรวจ `README.md` แล้ว ยังคงตรงกับ source; ปรับ `AGENTS.md` และ design notes ให้ตรงกัน `pnpm lint` และ `git diff --check` ผ่าน; ยังไม่ได้ตรวจ browser หรือ deploy
+
 ## Sidebar navigation highlight — 30 ตุลาคม 2026
 
 - เพิ่มพื้นหลังสีตามธีมที่เลื่อนระหว่างเมนู Sidebar เมื่อ hover หรือ focus โดยคงสถานะ active แยกไว้ และรองรับ reduced motion
