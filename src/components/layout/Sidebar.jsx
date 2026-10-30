@@ -123,7 +123,7 @@ function Sidebar({ isCollapsed, isMobileOpen, onMobileOpenChange, menuButtonRef,
                 <DialogPrimitive.Portal>
                     <DialogPrimitive.Backdrop
                         className={cx(
-                            "glass-overlay fixed inset-0 z-40 transition-opacity duration-200 data-closed:opacity-0 motion-reduce:transition-none",
+                            "glass-overlay fixed inset-0 z-40 transition-opacity duration-200 ease-out data-starting-style:opacity-0 data-ending-style:opacity-0 motion-reduce:transition-none",
                         )}
                     />
                     <DialogPrimitive.Popup
@@ -132,7 +132,7 @@ function Sidebar({ isCollapsed, isMobileOpen, onMobileOpenChange, menuButtonRef,
                             menuButtonRef.current?.getClientRects().length ? menuButtonRef.current : false
                         }
                         className={cx(
-                            "glass-sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col border-r text-sidebar-foreground outline-none transition-transform duration-200 data-closed:-translate-x-full motion-reduce:transition-none",
+                            "glass-sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col border-r text-sidebar-foreground outline-none transition-transform duration-200 ease-out data-starting-style:-translate-x-full data-ending-style:-translate-x-full motion-reduce:transition-none",
                         )}
                     >
                         <DialogPrimitive.Title className={cx("sr-only")}>Nexora navigation</DialogPrimitive.Title>

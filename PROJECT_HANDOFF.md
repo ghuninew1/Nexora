@@ -242,3 +242,5 @@ Local validation: `pnpm lint` and focused clipboard utility tests passed. The fu
 Activity displays distinct icon colors for Move, Create, Copy, Upload, public-link Replace, and permanent deletion in light and dark themes; action text remains the accessible label.
 
 Dashboard and Recent use amber folder icons and primary-colored file icons in their shared Recent list.
+
+The mobile Sidebar slides in from the left and slides out to the left; reduced-motion preferences disable its transition.
