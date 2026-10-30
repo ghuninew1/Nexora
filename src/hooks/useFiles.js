@@ -102,7 +102,7 @@ function formatBytes(bytes) {
 function formatModified(value) {
   if (!value) return 'Not available';
   const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? 'Not available' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(timestamp);
+  return Number.isNaN(timestamp) ? 'Not available' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp);
 }
 
 export default function useFiles() {

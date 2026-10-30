@@ -282,3 +282,8 @@ Documentation preference: README contains project information, setup and usage; 
 
 - หัวคอลัมน์ Name, Modified และ Size ใช้เรียงรายการที่โหลดแล้ว กดซ้ำเพื่อสลับทิศทางและแสดงลูกศรตาม state เดียวกับ sort menu; Modified/Size ใช้เมนูได้บนจอแคบ
 - ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA ยังไม่ทำ และไม่มี deployment หรือ production change
+
+## File Browser Modified timestamp — 30 ตุลาคม 2026
+
+- แสดงเวลาโดยไม่แสดงวินาทีตามหลังวันที่ Modified ตาม locale ของ browser และขยายคอลัมน์ให้รองรับข้อความ; sorting ยังคงใช้ timestamp เดิม
+- ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA ยังไม่ทำ และไม่มี deployment หรือ production change
