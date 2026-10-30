@@ -144,7 +144,7 @@ function Sidebar({ isCollapsed, isMobileOpen, onMobileOpenChange, menuButtonRef,
                 aria-label="Main sidebar"
                 data-collapsed={isCollapsed}
                 className={cx(
-                    "glass-sidebar fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r text-sidebar-foreground transition-[width] duration-200 motion-reduce:transition-none md:flex",
+                    "glass-sidebar fixed bottom-0 left-0 top-16 z-20 hidden flex-col overflow-hidden border-r text-sidebar-foreground transition-[width] duration-200 motion-reduce:transition-none md:flex",
                     isCollapsed ? "w-[60px]" : "w-56 lg:w-60 2xl:w-64",
                 )}
             >

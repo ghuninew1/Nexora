@@ -44,8 +44,8 @@ Foundation, App Layout และหน้า workspace ใช้ design system �
 ## Phase 3 — Layout และ Button
 
 - `src/layouts/AppLayout.jsx` ครอบ `Outlet` ด้วย AppShell เดียว Sidebar state จึงอยู่ต่อระหว่างเปลี่ยน route
-- Sidebar desktop เต็มความสูงชิดขอบซ้าย; โหมด collapsed กว้าง 60px และ expanded กว้าง 224px ตั้งแต่ `md`, 240px ที่ `lg`, และ 256px ที่ `2xl`; AppShell กันพื้นที่ด้านซ้ายตามความกว้าง Sidebar เพื่อไม่ให้บัง content
-- บน mobile ใช้ drawer เต็มความสูงที่เปิดจาก Header; desktop Sidebar คงอยู่ขณะเปลี่ยน route ส่วน Header sticky อยู่ในพื้นที่ content
+- Sidebar desktop เริ่มใต้ Header และชิดขอบซ้าย; โหมด collapsed กว้าง 60px และ expanded กว้าง 224px ตั้งแต่ `md`, 240px ที่ `lg`, และ 256px ที่ `2xl`; AppShell กันพื้นที่ด้านซ้ายตามความกว้าง Sidebar เพื่อไม่ให้บัง content
+- บน mobile ใช้ drawer เต็มความสูงที่เปิดจาก Header; desktop Sidebar คงอยู่ขณะเปลี่ยน route ส่วน Header sticky กว้างเต็มหน้าจอ
 - `src/components/navigation/navigation.js` เป็นแหล่งข้อมูลร่วมของเมนู ชื่อหน้า และคำอธิบาย
 - Dashboard ใช้ active mount, reported usage และ Recent จริงโดยไม่มี fixture metrics; Recent ใช้ authenticated API/D1 พร้อม metadata hydration, refresh/retry และ actions ที่ใช้ flow เดิม. Favorites โหลดรายการจริงจาก authenticated API/D1 และ storage mount ที่เป็นเจ้าของ object; Trash โหลดข้อมูลจาก active storage ด้วย cursor pagination พร้อม Restore และ Permanent Delete. Shared จัดการ public links จริง, Storage แสดงสถานะการเชื่อมต่อ และ Settings ใช้ตั้งค่าธีมได้ URL ที่ไม่พบแสดง 404
 - Mobile navigation ใช้ Base UI Dialog: focus trap, Escape, คืน focus และปิดเมื่อเลือกเมนูหรือเปลี่ยนเป็น desktop breakpoint

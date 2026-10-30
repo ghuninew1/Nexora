@@ -43,6 +43,11 @@ function AppShell({ children }) {
                 <div className={cx("absolute -left-24 top-1/4 size-96 rounded-full bg-cyan-500/5 blur-3xl")} />
                 <div className={cx("absolute -right-24 bottom-1/4 size-96 rounded-full bg-indigo-500/5 blur-3xl")} />
             </div>
+            <Header
+                onMenuClick={() => setIsMobileSidebarOpen(true)}
+                menuButtonRef={menuButtonRef}
+                isMobileOpen={isMobileSidebarOpen}
+            />
             <Sidebar
                 isCollapsed={isSidebarCollapsed}
                 isMobileOpen={isMobileSidebarOpen}
@@ -52,15 +57,10 @@ function AppShell({ children }) {
             />
             <div
                 className={cx(
-                    "relative min-h-dvh min-w-0 transition-[margin] duration-200 motion-reduce:transition-none",
+                    "relative min-w-0 transition-[margin] duration-200 motion-reduce:transition-none",
                     isSidebarCollapsed ? "md:ml-[60px]" : "md:ml-56 lg:ml-60 2xl:ml-64",
                 )}
             >
-                <Header
-                    onMenuClick={() => setIsMobileSidebarOpen(true)}
-                    menuButtonRef={menuButtonRef}
-                    isMobileOpen={isMobileSidebarOpen}
-                />
                 <main
                     id="main-content"
                     tabIndex={-1}
