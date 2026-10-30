@@ -1,3 +1,5 @@
+import { NavHighlight } from "./NavHighlight";
+import { useNavHighlight } from "./useNavHighlight";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { NavLink } from "react-router-dom";
@@ -9,6 +11,7 @@ import compactLogo from "../../assets/logo.avif";
 import fullLogo from "../../assets/logo_full.avif";
 
 function SidebarContent({ isCollapsed = false, onNavigate, onToggle, mobile = false }) {
+    const { highlight, ...highlightEvents } = useNavHighlight();
     return (
         <>
             <div className={cx("flex h-16 shrink-0 items-center", isCollapsed ? "justify-center" : "px-3")}>
@@ -50,8 +53,10 @@ function SidebarContent({ isCollapsed = false, onNavigate, onToggle, mobile = fa
             </div>
             <nav
                 aria-label={mobile ? "Mobile workspace navigation" : "Workspace navigation"}
-                className={cx("flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden px-2 pb-3")}
+                {...highlightEvents}
+                className={cx("relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden px-2 pb-3")}
             >
+                <NavHighlight highlight={highlight} />
                 {navigationGroups.map((group, index) => (
                     <section
                         key={group.label}
@@ -69,14 +74,14 @@ function SidebarContent({ isCollapsed = false, onNavigate, onToggle, mobile = fa
                         {group.items.map(({ to, label, icon: Icon }) => (
                             <NavLink
                                 key={to}
+                                data-nav-highlight
                                 to={to}
                                 onClick={onNavigate}
                                 title={isCollapsed ? label : undefined}
                                 onPointerMove={updateGlassPointer}
                                 className={({ isActive }) =>
                                     cx(
-                                        glassHover,
-                                        "glass-nav-link",
+                                        "relative",
                                         "flex min-h-11 shrink-0 items-center rounded-xl text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                                         isCollapsed ? "size-11 justify-center self-center" : "gap-3 px-3",
                                         isActive

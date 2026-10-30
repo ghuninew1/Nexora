@@ -1,5 +1,10 @@
 # Nexora — Project Handoff
 
+## Sidebar navigation highlight — 30 ตุลาคม 2026
+
+- เพิ่มพื้นหลังสีตามธีมที่เลื่อนระหว่างเมนู Sidebar เมื่อ hover หรือ focus โดยคงสถานะ active แยกไว้ และรองรับ reduced motion
+- ตรวจ `AGENTS.md` และ `README.md` แล้ว; `pnpm lint` ผ่าน ยังไม่ได้ตรวจ browser หรือ deploy
+
 ## Dark theme palette — 30 ตุลาคม 2026
 
 - ปรับ `src/index.css` เฉพาะ Dark tokens ให้พื้นหลังและ surfaces เป็นดำอมฟ้า `#090d12` ใกล้ Sites ลดสีเขียวในพื้นที่กว้าง; คงมินต์ไว้ที่ primary/accent/chart และไม่เปลี่ยน Light mode
