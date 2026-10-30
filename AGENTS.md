@@ -217,3 +217,5 @@ Connected and public file previews use a medium-width dialog on larger screens a
 The File Browser list keeps extra space between the Size column and row actions on wider screens.
 
 File preview supports MP4, WebM and Ogg video up to 20 MiB through the existing on-demand preview route. Playback depends on browser codec support; video bytes are buffered before playback, and larger files remain downloadable. Public shares use the same preview policy.
+
+File Browser row action menus highlight enabled items on hover or keyboard focus, with a distinct destructive highlight for Move to Trash.

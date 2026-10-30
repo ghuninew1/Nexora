@@ -77,7 +77,7 @@ function FileListItem({ file, isCutItem = false, selected, favorite, view, onSel
       <span className={cx(view === "grid" ? "text-xs text-muted-foreground" : "hidden text-right text-sm text-muted-foreground sm:block")}>{file.size ?? "—"}</span>
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={cx(view === "grid" ? "absolute right-2 top-2" : "absolute right-2 top-2 sm:static sm:justify-self-end")} aria-label={`Actions for ${file.name}`}><MoreHorizontal /></Button>} />
-        <DropdownMenuContent align="end" className={cx("w-auto")}>
+        <DropdownMenuContent align="end" className={cx("file-actions-menu w-auto")}>
           {!isFolder && <DropdownMenuItem disabled={!canPreview} onClick={() => onPreview?.(file)}><Eye />Preview</DropdownMenuItem>}
           {!isFolder && <DropdownMenuItem disabled={!canDownload} onClick={() => onDownload?.(file)}><Download />Download</DropdownMenuItem>}
           {allowFavorites && <DropdownMenuItem onClick={() => onToggleFavorite(file.id)}><Star />{favorite ? "Remove favorites" : "Add favorites"}</DropdownMenuItem>}
