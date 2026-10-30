@@ -6,6 +6,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { Button } from "../ui/button";
 import { getPageInfo } from "../navigation/navigation";
 import { cx } from "../../utils/cx";
+import logo from "../../assets/logo.avif";
 
 function Header({ onMenuClick, menuButtonRef, isMobileOpen }) {
     const { pathname } = useLocation();
@@ -53,6 +54,16 @@ function Header({ onMenuClick, menuButtonRef, isMobileOpen }) {
                     aria-expanded={isMobileOpen}
                 >
                     <Menu />
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-lg"
+                    onClick={() => navigate("/files")}
+                    className={cx("size-11 shrink-0 p-1")}
+                    aria-label="Nexora home"
+                >
+                    <img src={logo} alt="" className={cx("size-9 object-contain")} />
                 </Button>
                 <div className={cx("min-w-0")}>
                     <p className={cx("truncate text-sm font-semibold tracking-tight")}>{page?.label ?? "Nexora"}</p>
