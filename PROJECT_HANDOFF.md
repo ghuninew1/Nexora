@@ -272,3 +272,8 @@ Documentation preference: README contains project information, setup and usage; 
 - ต้องตั้ง `SHARE_ENCRYPTION_KEY` เป็น base64 ของ random 32 bytes แบบ server-only และคง key เดิมข้าม deployment; key หายหรือเปลี่ยนทำให้กู้คืน secret เก่าไม่ได้ ต้อง Replace. ต้อง apply migration `0005_share_secret_encryption.sql` ก่อนใช้ revision นี้; ยังไม่ได้ตั้ง secret, migrate หรือ deploy production. ห้ามเผยแพร่ค่าคีย์หรือ bearer URLs ใน logs
 - Timer ในหน้า Shared จำกัด delay ภายใน browser limit สำหรับ expiry 30 วัน. Browser/live-provider QA ยังไม่ทำ
 - ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; `pnpm test` ผ่าน 135 tests ก่อนเพิ่มการทดสอบ encryption แยก ซึ่งผ่านเพิ่มเติม 1 test. การทดสอบ share fixtures เดิมถูกปรับให้ใช้ expiry และ migrations ปัจจุบัน
+
+## File Browser grid cards — 30 ตุลาคม 2026
+
+- ปรับ Grid view ให้ใช้การ์ดสี่เหลี่ยมจัตุรัสและจำนวนคอลัมน์ตามหน้าจอ โดยคง selection, Favorites, การเปิดโฟลเดอร์ และเมนูรายการ; List view คงเดิม
+- ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA ยังไม่ทำ และไม่ได้ deploy หรือเปลี่ยนข้อมูล production

@@ -19,7 +19,7 @@ function FileList({ cutIds = [], files, selectedIds, query, view, favorites, onS
         </div><span className={cx("hidden sm:block")}>Modified</span><span className={cx("hidden text-right sm:block")}>Size</span><span />
       </div>}
       {view === "grid" && <div className={cx("mb-2 flex justify-end")}><button type="button" onClick={onSelectAll} aria-pressed={allSelected} className={cx("min-h-10 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground")}>{allSelected ? "Deselect all" : "Select all"}</button></div>}
-      <div className={cx(view === "grid" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-3" : "")}>
+      <div className={cx(view === "grid" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "")}>
         {files.map((file) => <FileListItem key={file.id} file={file} isCutItem={cutIds.includes(file.objectId)} selected={selectedIds.includes(file.id)} favorite={favorites.includes(file.id)} view={view} onSelect={onSelect} onOpenFolder={onOpenFolder} onPreview={onPreview} onRename={onRename} onDownload={onDownload} onMove={onMove} onCopy={onCopy} onShare={onShare} onTrash={onTrash} onToggleFavorite={onToggleFavorite} allowFavorites={allowFavorites} capabilities={capabilities} readOnly={readOnly} busy={mutatingIds.has(file.objectId)} />)}
       </div>
     </div>
