@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { listStorageObjects, mergeStorageObjects, StorageApiError } from '../../services/storage';
 import { appendBreadcrumb, isFolderDestinationInvalid, rootBreadcrumbs } from '../../utils/storage-files';
 import { Button } from '../ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { cx } from '../../utils/cx';
 import NewFolderDialog from './NewFolderDialog';
 
@@ -125,9 +125,6 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
         <Button type="button" variant="outline" size="sm" disabled={breadcrumbs.length === 1 || isPending} onClick={() => navigateTo(breadcrumbs.slice(0, -1))}>
           <ChevronLeft aria-hidden="true" />Back
         </Button>
-        <Button type="button" variant="outline" size="sm" disabled={!canCreateFolder || isPending || status === 'loading' || status === 'error'} onClick={() => setNewFolderOpen(true)}>
-          <FolderPlus aria-hidden="true" />New folder
-        </Button>
         <Button type="button" size="sm" disabled={!isAllowed || isInvalidDestination || isPending || status === 'loading' || status === 'error'} onClick={() => void handleConfirm()}>
           {isPending ? 'Working…' : action === 'move' ? 'Move here' : 'Copy here'}
         </Button>
@@ -154,9 +151,12 @@ function FolderDestinationDialog({ open, onOpenChange, storageId, source, action
       </div>}
 
       {newFolderOpen && <NewFolderDialog open onOpenChange={setNewFolderOpen} onCreate={handleCreateFolder} />}
-      <DialogFooter>
+      <div className={cx('-mx-4 -mb-4 flex items-center justify-between gap-2 rounded-b-xl border-t bg-muted/50 p-4')}>
+        <Button type="button" variant="outline" disabled={!canCreateFolder || isPending || status === 'loading' || status === 'error'} onClick={() => setNewFolderOpen(true)}>
+          <FolderPlus aria-hidden="true" />New folder
+        </Button>
         <Button type="button" variant="outline" disabled={isPending} onClick={() => onOpenChange(false)}>Cancel</Button>
-      </DialogFooter>
+      </div>
     </DialogContent>
   </Dialog>;
 }
