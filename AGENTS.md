@@ -196,3 +196,10 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - Login has D1 throttling; public-share reads and costly upload/download/storage routes still need platform rate controls. Do not modify Cloudflare rate rules, Access policies, host firewall, Garage, or Storage without separate authorization.
 - Treat public share URLs as bearer capabilities. `no-referrer` helps prevent onward leakage; platform access logs still need explicit path redaction. Never log capability URLs or tokens.
 - Refer to `docs/PHASE_10_1.md` and `docs/PHASE_10_1_1.md` for MUST/OPTIONAL and production/operator gates. Record the 2026-10-28 post-CSP all-functions smoke check as operator-confirmed, not tool-verified. Preserve nonce CSP and `public/_headers`; never restore script `unsafe-inline` or `unsafe-eval`. Never read or print secret values or rewrite Git history.
+
+
+## File Browser clipboard (local implementation)
+
+The authenticated workspace keeps an in-memory file clipboard for multi-selection Copy and Cut. Paste uses the existing copy or move APIs; copy remains available for repeated paste, while successful cuts are removed and failed items remain. The toolbar supports Copy, Cut, Paste and Rename, and cut items appear faded. Ctrl/Command+C, X and V operate on files outside editable fields; Escape clears the clipboard. Paste requires a ready destination and matching storage; cross-storage transfers are unavailable. Folder cuts reject known descendants and destinations whose ancestry is unavailable. Existing provider errors, including name conflicts and missing items, are reported. The clipboard is discarded on workspace unmount, logout, expiry, account change or reload, and is never persisted.
+
+Local validation: `pnpm lint` and focused clipboard utility tests passed. The full test suite has failing public-share tests (share creation returned HTTP 400 instead of 201); clipboard keyboard, session lifecycle, UI and live-provider flows still need browser/integration QA. No build, deployment, migration or production data changes were performed for this feature.

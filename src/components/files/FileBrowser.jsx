@@ -1,6 +1,8 @@
 import ShareDialog from './ShareDialog';
 import { useStorage } from '../../hooks/useStorage';
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useFilesData } from "../../context/FilesProvider";
+import { emptyFileClipboard, invalidCutDestination, isEditableShortcutTarget, remainingCutClipboard } from "../../utils/file-clipboard";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, FolderOpen, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -30,6 +32,9 @@ function FileListLoading() {
 
 function FileBrowser() {
   const browser = useFiles();
+  const { clipboard, setClipboard } = useFilesData();
+  const [clipboardMessage, setClipboardMessage] = useState("");
+  const pasteBusy = useRef(false);
   const { capabilities, activeStorage } = useStorage();
   const [shareFile, setShareFile] = useState(null);
   const canShare = file => Boolean(file && !activeStorage?.readOnly && !capabilities?.readOnly && capabilities?.stat && capabilities?.[file.type === "folder" ? "list" : "download"]);
@@ -48,6 +53,61 @@ function FileBrowser() {
   const isLoading = browser.status === "loading";
   const isRefreshing = browser.status === "refreshing";
   const isReady = browser.status === "ready" || browser.status === "empty" || isRefreshing;
+
+  const canPaste = Boolean(clipboard.mode && clipboard.items.length && clipboard.sourceStorageId === browser.storageId && isReady && !bulkBusy && (clipboard.mode === "copy" ? browser.canCopy : browser.canMove));
+  const clearClipboard = () => { setClipboard(emptyFileClipboard()); setClipboardMessage(""); };
+  const captureClipboard = (mode) => {
+    if (!selectedFiles.length || selectedIsBusy || !(mode === "copy" ? browser.canCopy : browser.canMove)) return;
+    setClipboard({ mode, items: selectedFiles, sourceStorageId: browser.storageId, sourceParentId: browser.folderId });
+    setClipboardMessage(`${selectedFiles.length} item(s) ${mode === "copy" ? "copied" : "cut"}.`);
+  };
+  const paste = async () => {
+    if (!canPaste || pasteBusy.current) return;
+    if (clipboard.mode === "cut" && invalidCutDestination(clipboard.items, browser.folderId, browser.breadcrumbs, browser.breadcrumbsAbbreviated)) {
+      setClipboardMessage("Cannot move a folder into itself, its current location, or a descendant. Navigate from My Files to verify the destination.");
+      return;
+    }
+    if (clipboard.mode === "cut" && clipboard.sourceParentId === browser.folderId) {
+      setClipboardMessage("Items are already in this folder.");
+      return;
+    }
+    pasteBusy.current = true;
+    setBulkBusy(true);
+    const snapshot = clipboard;
+    try {
+      if (snapshot.mode === "cut") {
+        const result = await browser.moveObjects(snapshot.items, browser.folderId);
+        const succeeded = new Set(result.succeeded || []);
+        setClipboard((current) => remainingCutClipboard(current, snapshot, [...succeeded]));
+        if (succeeded.size) browser.removeFromSelection([...succeeded]);
+        setClipboardMessage("");
+      } else {
+        let succeeded = 0;
+        const errors = [];
+        for (const item of snapshot.items) {
+          const result = await browser.copyObject(item, browser.folderId);
+          if (result.ok) succeeded += 1;
+          else errors.push(`${item.name}: ${result.error || "error"}`);
+          if (result.error === "UNAUTHENTICATED") break;
+        }
+        setClipboardMessage(errors.length ? `${succeeded} copied; ${errors.length} failed. ${errors.slice(0, 3).join(" ")}` : `${succeeded} item(s) copied.`);
+      }
+    } finally { pasteBusy.current = false; setBulkBusy(false); }
+  };
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const target = event.target;
+      if (isEditableShortcutTarget(target) || document.querySelector('[role="dialog"], [role="menu"]')) return;
+      if (event.key === "Escape") { if (clipboard.mode && !pasteBusy.current) { event.preventDefault(); clearClipboard(); } return; }
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "c" && selectedFiles.length && browser.canCopy && !selectedIsBusy) { event.preventDefault(); captureClipboard("copy"); }
+      if (key === "x" && selectedFiles.length && browser.canMove && !selectedIsBusy) { event.preventDefault(); captureClipboard("cut"); }
+      if (key === "v" && canPaste) { event.preventDefault(); void paste(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   async function handleCreateFolder(name) {
     const result = await browser.createFolder(name);
@@ -116,6 +176,12 @@ function FileBrowser() {
         {browser.revalidationError && <div className={cx("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><span>{browser.revalidationError}</span><Button type="button" variant="ghost" size="sm" onClick={() => void browser.refreshCurrentFolder()}>Refresh</Button></div>}
         <FileToolbar
           selectedCount={selectedCount}
+          canPaste={canPaste}
+          onClipboardCopy={() => captureClipboard("copy")}
+          onClipboardCut={() => captureClipboard("cut")}
+          onPaste={() => void paste()}
+          onRenameSelected={() => selectedFile && setRenameFile(selectedFile)}
+          canRenameSelected={browser.canRename}
           selectedFile={selectedFile}
           isSelectionBusy={selectedIsBusy}
           selectedFavorite={Boolean(selectedFile && browser.favorites.includes(selectedFile.id))}
@@ -144,6 +210,8 @@ function FileBrowser() {
           view={browser.view} onViewChange={browser.setView}
         />
         <p className={cx("-mt-3 text-xs text-muted-foreground")}>Search and sorting apply to the items loaded in this folder.</p>
+        {clipboardMessage && <p className={cx("text-sm text-muted-foreground")} role="status" aria-live="polite">{clipboardMessage}</p>}
+        {clipboard.mode && clipboard.sourceStorageId !== browser.storageId && <p className={cx("text-sm text-muted-foreground")} role="status">Paste is unavailable across storages.</p>}
         {browser.operationFeedback && <p className={cx("rounded-lg border px-3 py-2 text-sm", browser.operationFeedback.type === "error" ? "border-destructive/30 text-destructive" : "border-primary/30 text-foreground")} role={browser.operationFeedback.type === "error" ? "alert" : "status"} aria-live="polite">{browser.operationFeedback.message}</p>}
         <UploadQueue items={browser.uploadQueue.items} concurrency={browser.uploadQueue.concurrency} onCancel={browser.cancelUpload} onRetry={browser.retryUpload} onClearFinished={browser.clearFinishedUploads} />
 
@@ -154,6 +222,7 @@ function FileBrowser() {
           <div aria-live="polite" aria-atomic="true" className={cx("sr-only")}>{isRefreshing ? "Refreshing folder contents" : `${browser.items.length} items loaded`}</div>
           <FileList
             files={browser.currentFiles}
+            cutIds={clipboard.mode === "cut" && clipboard.sourceStorageId === browser.storageId ? clipboard.items.map((item) => item.objectId) : []}
             selectedIds={browser.selectedIds}
             query={browser.query}
             view={browser.view}

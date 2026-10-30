@@ -1,10 +1,12 @@
 import { useCallback, useContext, useMemo, useState } from "react";
 import initialFiles from "../data/files";
 import { FilesContext, RemoteFilesContext } from "./files-context";
+import { emptyFileClipboard } from "../utils/file-clipboard";
 import useRemoteFilesState from "../hooks/useRemoteFilesState";
 
 export function FilesProvider({ children }) {
   const remoteFiles = useRemoteFilesState();
+  const [clipboard, setClipboard] = useState(emptyFileClipboard);
   const [files, setFiles] = useState(initialFiles);
   const [favorites, setFavorites] = useState(["documents-report", "images-logo"]);
   const [recent, setRecent] = useState([
@@ -38,7 +40,7 @@ export function FilesProvider({ children }) {
   const toggleFavorite = useCallback((id) => setFavorites((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]), []);
   const recordAccess = useCallback((id) => setRecent((current) => [{ id, accessedAt: new Date().toISOString() }, ...current.filter((entry) => entry.id !== id)].slice(0, 30)), []);
 
-  const value = useMemo(() => ({ files, favorites, recent, createFolder, addUploadedFile, rename, toggleFavorite, recordAccess }), [files, favorites, recent, createFolder, addUploadedFile, rename, toggleFavorite, recordAccess]);
+  const value = useMemo(() => ({ clipboard, setClipboard, files, favorites, recent, createFolder, addUploadedFile, rename, toggleFavorite, recordAccess }), [clipboard, files, favorites, recent, createFolder, addUploadedFile, rename, toggleFavorite, recordAccess]);
   return <FilesContext.Provider value={value}>
     <RemoteFilesContext.Provider value={remoteFiles}>{children}</RemoteFilesContext.Provider>
   </FilesContext.Provider>;

@@ -27,7 +27,7 @@ function getFileIcon(file) {
   return "file";
 }
 
-function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy, onShare, onTrash }) {
+function FileListItem({ file, isCutItem = false, selected, favorite, view, onSelect, onOpenFolder, onToggleFavorite, allowFavorites = false, capabilities = {}, readOnly = false, busy = false, onPreview, onRename, onDownload, onMove, onCopy, onShare, onTrash }) {
   const Icon = fileIcons[getFileIcon(file)];
   const isFolder = file.type === "folder";
   const canRename = Boolean(capabilities.rename && !readOnly && !busy);
@@ -47,6 +47,7 @@ function FileListItem({ file, selected, favorite, view, onSelect, onOpenFolder, 
       view === "grid" ? "grid grid-cols-1 rounded-xl border bg-card p-4" : "grid w-full items-center border-b px-4 py-3 pr-12 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_160px_100px_40px] sm:pr-4",
       !selected && "hover:border-primary/20 hover:bg-[var(--glass-surface-hover)] focus-within:bg-[var(--glass-surface-hover)]",
       selected && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+      isCutItem && "opacity-50",
     )}>
       <div className={cx("flex min-w-0 items-center gap-3", view === "grid" && "pr-8")}>
         <button type="button" onClick={() => onSelect(file.id)} aria-label={`${selected ? "Deselect" : "Select"} ${file.name}`} aria-pressed={selected} className={cx("flex size-8 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
