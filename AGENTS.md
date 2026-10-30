@@ -209,3 +209,5 @@ Activity displays distinct icon colors for Move, Create, Copy, Upload, public-li
 Dashboard and Recent use amber folder icons and primary-colored file icons in their shared Recent list.
 
 The mobile Sidebar slides in from the left and slides out to the left; reduced-motion preferences disable its transition.
+
+Trash offers Delete permanently all after loading a snapshot of all pages and explicit irreversible confirmation. Deletions use existing per-item APIs; results can be partial, and newly added items are outside the snapshot. Browser and live-provider QA remain pending.
