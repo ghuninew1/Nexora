@@ -203,13 +203,18 @@ function FileBrowser() {
           onUploadFiles={browser.uploadFiles}
           onRefresh={browser.refreshCurrentFolder}
           isRefreshing={isRefreshing}
-          onClearSelection={browser.clearSelection}
           query={browser.query} onQueryChange={browser.setQuery}
           sortBy={browser.sortBy} onSortChange={browser.setSortBy}
           sortDirection={browser.sortDirection} onSortDirectionChange={() => browser.setSortDirection((direction) => direction === "asc" ? "desc" : "asc")}
           view={browser.view} onViewChange={browser.setView}
         />
-        <p className={cx("-mt-3 text-xs text-muted-foreground")}>Search and sorting apply to the items loaded in this folder.</p>
+        <div className={cx("-mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1")}>
+          <p className={cx("text-xs text-muted-foreground")}>Search and sorting apply to the items loaded in this folder.</p>
+          {selectedCount > 0 && <div className={cx("flex items-center gap-2")}>
+            <span className={cx("text-sm font-medium text-foreground")} role="status">{selectedCount} selected</span>
+            <Button type="button" variant="ghost" size="sm" onClick={browser.clearSelection} disabled={selectedIsBusy}>Clear selection</Button>
+          </div>}
+        </div>
         {clipboardMessage && <div className={cx("flex items-center justify-between gap-3 text-sm text-muted-foreground")}><p role="status" aria-live="polite">{clipboardMessage}</p><Button type="button" variant="ghost" size="icon-sm" onClick={() => setClipboardMessage("")} aria-label="Dismiss clipboard message" title="Dismiss message"><X aria-hidden="true" /></Button></div>}
         {clipboard.mode && clipboard.sourceStorageId !== browser.storageId && <p className={cx("text-sm text-muted-foreground")} role="status">Paste is unavailable across storages.</p>}
         {browser.operationFeedback && <div className={cx("flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm", browser.operationFeedback.type === "error" ? "border-destructive/30 text-destructive" : "border-primary/30 text-foreground")}><p role={browser.operationFeedback.type === "error" ? "alert" : "status"} aria-live="polite">{browser.operationFeedback.message}</p><Button type="button" variant="ghost" size="icon-sm" onClick={browser.clearOperationFeedback} aria-label="Dismiss operation message" title="Dismiss message"><X aria-hidden="true" /></Button></div>}

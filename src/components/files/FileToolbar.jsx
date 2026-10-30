@@ -9,7 +9,7 @@ import { Separator } from "../ui/separator";
 import { cx } from "../../utils/cx";
 import UploadButton from "./UploadButton";
 
-function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRenameSelected, canRenameSelected, canShareSelected, onShareSelected, selectedCount, selectedFile, selectedFavorite, isSelectionBusy = false, canPreviewSelected = false, canMoveSelected = false, canCopySelected = false, canTrashSelected = false, onPreviewSelected, onToggleFavoriteSelected, onMoveSelected, onCopySelected, onTrashSelected, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange, onClearSelection }) {
+function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRenameSelected, canRenameSelected, canShareSelected, onShareSelected, selectedCount, selectedFile, selectedFavorite, isSelectionBusy = false, canPreviewSelected = false, canMoveSelected = false, canCopySelected = false, canTrashSelected = false, onPreviewSelected, onToggleFavoriteSelected, onMoveSelected, onCopySelected, onTrashSelected, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange }) {
   const hasSelection = selectedCount > 0;
   const isBusy = isRefreshing || isCreatingFolder;
   return (
@@ -22,7 +22,6 @@ function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRen
           <Button variant="ghost" size="sm" onClick={onRenameSelected} disabled={!selectedFile || !canRenameSelected || isSelectionBusy}><Pencil />Rename</Button>
         </div>
         {hasSelection ? <>
-          <span className={cx("shrink-0 text-sm font-medium text-foreground")}>{selectedCount} selected</span>
           {selectedCount > 1 ? <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label="Actions for selected items">
             <Button variant="ghost" size="sm" onClick={onMoveSelected} disabled={!canMoveSelected || isSelectionBusy} title="Move selected items"><ArrowRightLeft />Move</Button>
             <Button variant="outline" size="sm" onClick={onTrashSelected} disabled={!canTrashSelected || isSelectionBusy} title="Move selected items to Trash"><Trash2 />Move to Trash</Button>
@@ -34,7 +33,6 @@ function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRen
             <Button variant="ghost" size="sm" onClick={onMoveSelected} disabled={!canMoveSelected || isSelectionBusy} title="Move selected item"><ArrowRightLeft />Move</Button>
             <Button variant="outline" size="sm" onClick={onTrashSelected} disabled={!canTrashSelected || isSelectionBusy} title="Move selected item to Trash"><Trash2 />Move to Trash</Button>
           </div>}
-          <Button variant="ghost" size="sm" onClick={onClearSelection} disabled={isSelectionBusy}>Clear selection</Button>
         </> : <>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button disabled={isBusy}><Plus />New<ChevronDown /></Button>} />
