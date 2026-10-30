@@ -102,7 +102,7 @@ function formatBytes(bytes) {
 function formatModified(value) {
   if (!value) return 'Not available';
   const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? 'Not available' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp);
+  return Number.isNaN(timestamp) ? 'Not available' : new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(timestamp);
 }
 
 export default function useFiles() {

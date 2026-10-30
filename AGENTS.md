@@ -102,7 +102,7 @@ Check this map against actual files when changing the architecture; update READM
 - The connected File Browser upload queue sends bytes through the Nexora API with at most two concurrent uploads; do not invent byte progress. Download remains streamed through the same-origin API. Rename/move retain IDs and copy creates new IDs. Preview is on-demand through the authenticated inline route. Normal Delete means Move to Trash; restore and permanent delete use separate Trash-only actions.
 - The Copy/Move destination picker places New folder at the lower left opposite Cancel and can create a folder in the displayed destination when createFolder is permitted, invalidating its parent listing cache.
 - Folder navigation uses the `folder` query parameter on `/files`; validate logical IDs and breadcrumb history state, and safely return to root for unverified or deleted folders.
-- File Browser Modified shows local date and time without seconds; sorting still uses the original timestamp.
+- File Browser Modified shows Asia/Bangkok date and 24-hour time with seconds; sorting still uses the original timestamp.
 - List column headings sort loaded items by Name, Modified, or Size; clicking the active heading reverses its direction and stays synchronized with the sort menu.
 - Keep folder navigation and breadcrumbs consistent. Use backend cursors and merge pages by logical object ID; root requests omit `parentId`. Search/sort apply only to loaded items and use normalized fields (name, `modifiedAt`, `sizeBytes`), never display strings such as `"2.4 MB"` as numeric sizes.
 - Preserve selection across supported view changes; clear or reconcile it on storage/folder changes and filtering where appropriate.

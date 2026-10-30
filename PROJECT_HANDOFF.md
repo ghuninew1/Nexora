@@ -287,3 +287,8 @@ Documentation preference: README contains project information, setup and usage; 
 
 - แสดงเวลาโดยไม่แสดงวินาทีตามหลังวันที่ Modified ตาม locale ของ browser และขยายคอลัมน์ให้รองรับข้อความ; sorting ยังคงใช้ timestamp เดิม
 - ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA ยังไม่ทำ และไม่มี deployment หรือ production change
+
+## File Browser Modified timezone — 30 ตุลาคม 2026
+
+- เปลี่ยน Modified เป็นเขตเวลา Asia/Bangkok แบบ 24 ชั่วโมงพร้อมวินาที; sorting ใช้ timestamp เดิม
+- ตรวจ `pnpm lint`, `git diff --check` และตัวอย่างแปลงเวลา UTC เป็น 18:00:00 ผ่าน; Browser QA ยังไม่ทำ และไม่มี deployment หรือ production change
