@@ -11,6 +11,16 @@ const ACTION_ICON = {
   share_create: Share2, share_replace: Share2, share_revoke: Share2,
 };
 
+const ACTION_COLOR = {
+  move: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+  create_folder: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  share_create: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  copy: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
+  upload: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+  share_replace: 'bg-pink-500/15 text-pink-700 dark:text-pink-300',
+  delete_permanent: 'bg-red-500/15 text-red-700 dark:text-red-300',
+};
+
 export default function ActivityPage() {
   const { expireSession } = useAuth();
   const [items, setItems] = useState([]);
@@ -72,7 +82,8 @@ export default function ActivityPage() {
             <li key={item.id} className={cx("glass-surface flex min-w-0 items-start gap-3 p-4")}>
                 <span
                     className={cx(
-                        "glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary",
+                        "flex size-10 shrink-0 items-center justify-center rounded-xl border border-current/15",
+                        ACTION_COLOR[item.action] ?? "glass-control text-primary",
                     )}
                 >
                     <Icon className={cx("size-5")} aria-hidden="true" />
