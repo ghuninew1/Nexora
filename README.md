@@ -130,3 +130,5 @@ The authenticated workspace keeps an in-memory file clipboard for multi-selectio
 Local validation: `pnpm lint` and focused clipboard utility tests passed. The full test suite has failing public-share tests (share creation returned HTTP 400 instead of 201); clipboard keyboard, session lifecycle, UI and live-provider flows still need browser/integration QA. No build, deployment, migration or production data changes were performed for this feature.
 
 Activity displays distinct icon colors for Move, Create, Copy, Upload, public-link Replace, and permanent deletion in light and dark themes; action text remains the accessible label.
+
+Dashboard and Recent use amber folder icons and primary-colored file icons in their shared Recent list.

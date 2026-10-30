@@ -53,7 +53,7 @@ function RecentItemRow({ item, browser, compact = false }) {
   const Icon = isFolder ? Folder : item.mimeType === "application/pdf" ? FileText : File;
   return <article className={cx("glass-surface flex min-w-0 flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between")}>
     <div className={cx("flex min-w-0 items-start gap-3")}>
-      <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
+      <span className={cx("glass-control flex size-10 shrink-0 items-center justify-center rounded-xl", isFolder ? "text-amber-700 dark:text-amber-300" : "text-primary")}><Icon className={cx("size-5")} aria-hidden="true" /></span>
       <div className={cx("min-w-0 flex-1")}>
         <p className={cx("truncate text-sm font-medium")}>{item.name}</p>
         <p className={cx("mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground")}>
