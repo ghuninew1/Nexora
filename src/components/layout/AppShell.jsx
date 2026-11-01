@@ -41,7 +41,7 @@ function AppShell({ children }) {
             </a>
             <div aria-hidden="true" className={cx("pointer-events-none absolute inset-0 -z-10 overflow-hidden")}>
                 <div className={cx("absolute -left-24 top-1/4 size-96 rounded-full bg-cyan-500/5 blur-3xl")} />
-                <div className={cx("absolute -right-24 bottom-1/4 size-96 rounded-full bg-indigo-500/5 blur-3xl")} />
+                <div className={cx("absolute -right-24 bottom-1/4 size-96 rounded-full bg-green-500/5 blur-3xl")} />
             </div>
             <Header
                 onMenuClick={() => setIsMobileSidebarOpen(true)}
