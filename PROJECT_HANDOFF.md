@@ -1,5 +1,10 @@
 # Nexora — Project Handoff
 
+## Sidebar Liquid Glass hover — 1 พฤศจิกายน 2026
+
+- คืน Liquid Glass hover ให้ NavLink แต่ละรายการเหมือนปุ่ม Collapse รวมแสงตามเมาส์ ขอบและเงา พร้อมคง active และ focus state เดิม
+- ตรวจ `README.md` แล้ว ยังคงตรงกับ source; ปรับ `AGENTS.md` และ design notes ให้ตรงกัน `pnpm lint` และ `git diff --check` ผ่าน; ยังไม่ได้ตรวจ browser หรือ deploy
+
 ## Sidebar hover color — 31 ตุลาคม 2026
 
 - ปรับ highlight ที่เลื่อนใน Sidebar ให้ใช้ `--glass-hover` ตามพื้นหลัง hover ของปุ่มในแต่ละธีม โดยคง animation และ active state เดิม
