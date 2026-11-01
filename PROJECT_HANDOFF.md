@@ -307,3 +307,8 @@ Documentation preference: README contains project information, setup and usage; 
 
 - เปลี่ยน Modified เป็นเขตเวลา Asia/Bangkok แบบ 24 ชั่วโมงพร้อมวินาที; sorting ใช้ timestamp เดิม
 - ตรวจ `pnpm lint`, `git diff --check` และตัวอย่างแปลงเวลา UTC เป็น 18:00:00 ผ่าน; Browser QA ยังไม่ทำ และไม่มี deployment หรือ production change
+
+## File Browser compact list — 2 พฤศจิกายน 2026
+
+- ลดช่องว่างแนวตั้งของแถวและหัวตารางใน List view และจัดปุ่มเมนูกึ่งกลางแถวบนจอแคบ โดยคงปุ่ม Favorites ขนาด 44px; Grid view คงเดิม
+- ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA และ deployment ยังไม่ได้ทำ

@@ -57,6 +57,7 @@ Foundation, App Layout และหน้า workspace ใช้ design system �
 - คิวอัปโหลดล้างรายการที่สำเร็จหลัง 5 วินาที โดยคงรายการที่ผิดพลาดหรือยกเลิกไว้ให้ผู้ใช้ตรวจสอบ
 - หน้าต่าง Copy/Move มีปุ่มสร้างโฟลเดอร์ด้านล่างซ้ายในแถวเดียวกับ Cancel เมื่อ storage อนุญาต
 - File Browser ใช้ไอคอนแยกสำหรับไฟล์รูปภาพ วิดีโอ ข้อความ และ PDF ทั้งใน list/grid และใช้ไอคอนทั่วไปสำหรับไฟล์อื่น
+- File Browser list ลดช่องว่างแนวตั้งของแถวและหัวตาราง โดยคงปุ่ม Favorites ขนาดอย่างน้อย 44px
 - File Browser มี responsive list/grid, search/sort, context actions, selection, dialogs, sample empty states และ on-demand connected preview. Selection toolbar เปิด actions เฉพาะเมื่อเลือก object เดียว; row และ toolbar ใช้ operation path เดียวสำหรับ Favorite, Copy, Move, Preview และ Move to Trash. ปุ่มรูปดาวมี accessible active state และ touch target อย่างน้อย 44px
 - Connected File Browser uses a separate on-demand preview dialog for allowlisted images, PDF, and text. Text and JSON render as escaped source text, PDFs use a sandboxed frame, and preview loading/error/size states appear inline. Preview bytes are fetched only when requested; no preview bytes enter the listing cache.
 - Share เป็น View + Download เท่านั้น; dialog รองรับ Create/Copy/Open/Replace/Revoke. หลัง refresh ไม่สามารถกู้ secret เดิม ให้ยืนยัน Replace link. Provider usage แสดงเฉพาะเมื่อ API รายงานจริง; ไม่มี permission editor หรือ account-to-account sharing.
