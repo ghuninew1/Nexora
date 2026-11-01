@@ -100,7 +100,7 @@ function FileListItem({
                 "group relative min-w-0 border-border transition-[background-color,border-color] duration-150",
                 view === "grid"
                     ? "flex aspect-square flex-col rounded-xl border bg-card p-3 sm:p-4"
-                    : "grid w-full items-center border-b px-4 pr-12 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_210px_100px_56px] sm:pr-4",
+                    : "grid min-h-[52px] w-full items-center border-b px-4 pr-12 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_210px_100px_56px] sm:pr-4",
                 !selected &&
                     "hover:border-primary/20 hover:bg-[var(--glass-surface-hover)] focus-within:bg-[var(--glass-surface-hover)]",
                 selected && "bg-primary/5 ring-1 ring-inset ring-primary/30",

@@ -312,3 +312,8 @@ Documentation preference: README contains project information, setup and usage; 
 
 - ลดช่องว่างแนวตั้งของแถวและหัวตารางใน List view และจัดปุ่มเมนูกึ่งกลางแถวบนจอแคบ โดยคงปุ่ม Favorites ขนาด 44px; Grid view คงเดิม
 - ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA และ deployment ยังไม่ได้ทำ
+
+## File Browser row height — 2 พฤศจิกายน 2026
+
+- เพิ่มความสูงขั้นต่ำของแถว List view เป็น 52px โดยคงการจัดกึ่งกลางและขนาดปุ่ม Favorites
+- ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA และ deployment ยังไม่ได้ทำ

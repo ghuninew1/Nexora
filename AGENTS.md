@@ -219,7 +219,7 @@ Trash offers Delete permanently all after loading a snapshot of all pages and ex
 Connected and public file previews use a medium-width dialog on larger screens and retain the mobile layout.
 
 The File Browser list keeps extra space between the Size column and row actions on wider screens.
-List rows and their header use compact vertical spacing while retaining the Favorites button's 44px touch target.
+List rows have a minimum height of 52px and the header uses compact vertical spacing while retaining the Favorites button's 44px touch target.
 
 File preview supports MP4, WebM and Ogg video up to 20 MiB through the existing on-demand preview route. Playback depends on browser codec support; video bytes are buffered before playback, and larger files remain downloadable. Public shares use the same preview policy.
 
