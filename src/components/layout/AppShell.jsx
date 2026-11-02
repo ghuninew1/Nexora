@@ -10,6 +10,17 @@ function AppShell({ children }) {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const menuButtonRef = useRef(null);
     const { pathname } = useLocation();
+    const [maintenance, setMaintenance] = useState(null);
+
+    useEffect(() => {
+        let active = true;
+        const load = () => fetch('/api/config', { cache: 'no-store' }).then(response => response.ok ? response.json() : null)
+            .then(result => { if (active && result?.data) setMaintenance(result.data); }).catch(() => {});
+        void load();
+        window.addEventListener('nexora:config-change', load);
+        window.addEventListener('focus', load);
+        return () => { active = false; window.removeEventListener('nexora:config-change', load); window.removeEventListener('focus', load); };
+    }, []);
 
     useEffect(() => {
         const media = window.matchMedia("(min-width: 768px)");
@@ -68,6 +79,7 @@ function AppShell({ children }) {
                         "mx-auto flex min-h-[calc(100dvh-4rem)] w-full min-w-0 max-w-[1600px] flex-col p-4 outline-none sm:p-5 lg:p-6",
                     )}
                 >
+                    {maintenance?.maintenanceMode && <p className={cx('mb-4 rounded-lg border border-border bg-card p-3 text-sm')} role="status">{maintenance.maintenanceMessage}</p>}
                     {children}
                 </main>
             </div>

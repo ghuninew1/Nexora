@@ -130,6 +130,7 @@ before(async () => {
   sqlite.exec(migration);
   sqlite.exec(activityMigration);
   sqlite.exec(preferencesMigration);
+  sqlite.exec(readFileSync(new URL('../migrations/0007_system_settings.sql', import.meta.url), 'utf8'));
   env = { DB: d1(sqlite), STORAGE_API_URL: 'https://storage.example.test', STORAGE_APP_SECRET: 'server-app-secret',
     CF_ACCESS_CLIENT_ID: 'server-access-id', CF_ACCESS_CLIENT_SECRET: 'server-access-secret' };
   handler = createApiHandler({ fetchImpl: upstreamResponse, logger: silentLogger });
@@ -144,6 +145,33 @@ before(async () => {
 });
 
 after(() => sqlite?.close());
+
+test('admin maintenance setting is authorized, validated and enforced on storage mutations', async () => {
+  const adminLogin = await login('other@example.test', 'another correct horse battery staple');
+  const adminCookie = adminLogin.headers.get('set-cookie').split(';')[0];
+  const call = (path, method, body, selectedCookie = adminCookie) => handler(new Request(`${origin}${path}`, {
+    method, headers: { Cookie: selectedCookie, Origin: origin, 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }), env);
+  assert.equal((await call('/api/admin/settings', 'GET', undefined, cookie)).status, 403);
+  assert.equal((await call('/api/admin/settings', 'PATCH', { maintenanceMode: true }, cookie)).status, 403);
+  assert.equal((await call('/api/admin/settings', 'PATCH', { role: 'admin' })).status, 400);
+  assert.equal((await call('/api/admin/settings', 'PATCH', { maintenanceMode: 'true' })).status, 400);
+  assert.equal((await call('/api/admin/settings', 'PATCH', { maintenanceMode: true })).status, 200);
+  try {
+    const config = await handler(new Request(`${origin}/api/config`), env);
+    assert.equal((await config.json()).data.maintenanceMode, true);
+    const blocked = await call(`/api/storage/v1/storages/${storageId}/objects/folders`, 'POST', { name: 'Test' }, cookie);
+    assert.equal(blocked.status, 503);
+    const read = await call(`/api/storage/v1/storages/${storageId}/capabilities`, 'GET', undefined, cookie);
+    assert.equal(read.status, 200);
+    // The admin bypass reaches normal mount authorization, rather than the maintenance gate.
+    const admin = await call(`/api/storage/v1/storages/${storageId}/objects/folders`, 'POST', { name: 'Test' });
+    assert.equal(admin.status, 404);
+  } finally {
+    await call('/api/admin/settings', 'PATCH', { maintenanceMode: false });
+  }
+});
 
 test('API responses carry restrictive browser security headers', async () => {
   const response = await request('/api/unknown');

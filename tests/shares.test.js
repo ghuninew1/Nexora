@@ -7,7 +7,7 @@ import { randomToken, sha256Hex } from '../functions/_lib/password.js';
 
 async function fixture() {
   const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_backend_foundation.sql', '0002_public_shares.sql', '0003_activity_events.sql', '0004_public_share_expiry.sql', '0005_share_secret_encryption.sql']) db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+  for (const file of ['0001_backend_foundation.sql', '0002_public_shares.sql', '0003_activity_events.sql', '0004_public_share_expiry.sql', '0005_share_secret_encryption.sql', '0007_system_settings.sql']) db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
   const env = { DB: { prepare(sql) { return { bind(...args) { return {
     async first() { return db.prepare(sql).get(...args) ?? null; }, async all() { return { results: db.prepare(sql).all(...args) }; },
     async run() { return { meta: db.prepare(sql).run(...args) }; },
@@ -58,6 +58,16 @@ test('share authentication, ownership, origin, missing object and capability che
   assert.equal((await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId: 'single' } })).status, 422);
   f.caps.stat = true; f.caps.download = false;
   assert.equal((await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId: 'single' } })).status, 422);
+  f.db.close();
+});
+
+test('maintenance blocks user share mutations but leaves existing public reads available', async () => {
+  const f = await fixture();
+  const existing = await f.create('single');
+  f.db.prepare('INSERT INTO system_settings (key,value,updated_at,updated_by) VALUES (?, ?, ?, ?)').run('maintenanceMode', 'true', Date.now(), 'alice');
+  assert.equal((await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId: 'file' } })).status, 503);
+  assert.equal((await f.call(`/api/shares/${existing.share.id}`, { method: 'DELETE' })).status, 503);
+  assert.equal((await f.call(f.publicApi(existing.publicPath), { user: null })).status, 200);
   f.db.close();
 });
 

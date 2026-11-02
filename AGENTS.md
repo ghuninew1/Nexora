@@ -228,3 +228,7 @@ File Browser row action and New menus highlight enabled items on hover or keyboa
 ## Settings Phase 1 — incomplete backend groundwork
 
 Migration `0006_user_preferences.sql` and authenticated settings preference GET/PATCH and logout-other-sessions endpoints exist locally. Values are validated and default storage is checked against the user's active mount. The existing Settings page does not yet use these endpoints; theme remains browser-local and the requested behavior integrations and password change remain unfinished. Do not describe Settings Phase 1 as complete. See `PROJECT_HANDOFF.md` for validation and pending work. Production migration and deployment require explicit authorization.
+
+## Settings Phase 2 — partial maintenance controls
+
+Migration `0007_system_settings.sql` backs maintenance mode and its plain-text message. Authenticated admins can read and update these two settings through `GET/PATCH /api/admin/settings`; `GET /api/config` exposes only those public maintenance values. Maintenance blocks normal users' storage and owner share mutations server-side; reads, public shares, Favorites/Recent and personal preferences remain available, and admins remain subject to normal mount authorization. Settings are read from D1 on each relevant mutation, with no cross-isolate cache. Existing in-flight operations are not interrupted. Migration 0007 must exist before deploying this source because gated mutations query it. Other requested Phase 2 policies and Phase 1 integration remain incomplete; see `PROJECT_HANDOFF.md`.

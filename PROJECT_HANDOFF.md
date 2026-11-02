@@ -1,5 +1,11 @@
 # Nexora — Project Handoff
 
+## Settings Phase 2 — partial maintenance controls, 3 November 2026
+
+- Added `0007_system_settings.sql`, admin-only `GET/PATCH /api/admin/settings`, public `GET /api/config`, and a maintenance control in Settings. Only `maintenanceMode` and `maintenanceMessage` are implemented. The server checks the current D1 policy on user storage/share mutations; admins still pass ordinary ownership and capability checks. Public reads and existing shares remain available; in-flight operations are not cancelled. Config banner reloads on window focus and when this tab changes the setting.
+- Phase 2 remains incomplete: branding, upload/file type, sharing, session/password and other requested policies are not implemented. Phase 1 is also incomplete as described below. Quota and registration controls are not advertised; Nexora has no public registration and no authoritative quota enforcement. Existing upload limits remain in force.
+- `pnpm lint` and `pnpm test` (140/140) passed, including admin authorization, mutation blocking and existing public reads. Browser, device and live-provider QA were not performed. No local or production migration, deployment, or production data changes were performed. Apply migration 0007 before deploying code that gates writes; coordinate this separately with an authorized operator.
+
 ## Settings Phase 1 — work in progress, 3 November 2026
 
 - Added migration `0006_user_preferences.sql` and authenticated `GET/PATCH /api/settings/preferences` with server defaults, strict field validation, owner-scoped active mount validation and same-origin mutation protection. `POST /api/settings/logout-other-sessions` revokes only the current user's other sessions.
