@@ -1,11 +1,12 @@
 import { handleSharesApi, handlePublicSharesApi } from './shares-api.js';
-import { authenticate, login, sessionCookie, serializeUser, logout } from './auth.js';
+import { authenticate, login, sessionCookie, serializeUser, logout, normalizeDisplayName } from './auth.js';
 import { requireAdmin, requireUser } from './authorization.js';
 import { ApiError, decodePath, fail, json, readJson, requireJsonContentType, requireSameOrigin } from './http.js';
 import { handleFavoritesApi, handleRecentApi, handleStorageApi } from './storage-api.js';
 import { handleActivityApi } from './activity.js';
 import { handleSettingsApi } from './settings-api.js';
 import { getSystemSettings, handleAdminSettings, requireWritableSystem } from './system-settings.js';
+import { handleAdminUsers } from './admin-users.js';
 
 async function handleAuth({ request, env, parts }) {
   const method = request.method.toUpperCase();
@@ -25,6 +26,15 @@ async function handleAuth({ request, env, parts }) {
     const user = await authenticate(request, env);
     if (!user) throw new ApiError('UNAUTHENTICATED', 401);
     return json({ user: serializeUser(user) });
+  }
+  if (parts.length === 3 && route === 'me' && method === 'PATCH') {
+    requireSameOrigin(request);
+    const user = await requireUser(request, env);
+    const body = await readJson(request);
+    if (Object.keys(body).length !== 1 || !Object.hasOwn(body, 'displayName')) throw new ApiError('INVALID_INPUT', 400);
+    const displayName = normalizeDisplayName(body.displayName);
+    await env.DB.prepare('UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?').bind(displayName, Date.now(), user.id).run();
+    return json({ user: serializeUser({ ...user, displayName }) });
   }
   throw new ApiError('NOT_FOUND', 404);
 }
@@ -46,8 +56,8 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
         response = json(await getSystemSettings(env.DB));
       } else if (parts[1] === 'admin') {
         const user = await requireAdmin(request, env);
-        if (request.method === 'PATCH') requireSameOrigin(request);
-        response = await handleAdminSettings({ request, env, user, parts });
+        if (['POST', 'PATCH', 'DELETE'].includes(request.method)) requireSameOrigin(request);
+        response = parts[2] === 'users' ? await handleAdminUsers({ request, env, user, parts }) : await handleAdminSettings({ request, env, user, parts });
       } else if (parts[1] === 'settings') {
         const user = await requireUser(request, env);
         if (['POST', 'PATCH'].includes(request.method.toUpperCase())) requireSameOrigin(request);

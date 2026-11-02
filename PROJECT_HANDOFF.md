@@ -1,5 +1,17 @@
 # Nexora — Project Handoff
 
+## Administrator user management — 3 November 2026
+
+- Admin Settings links to `/admin/users`, backed by admin-authenticated `GET/POST /api/admin/users` and `PATCH/DELETE /api/admin/users/:id`. Admins can create ordinary users, edit name/email, activate/deactivate and delete; new accounts do not automatically receive storage. Admin accounts cannot be edited or deleted through these routes, and user deletion is blocked when any mount remains. Passwords use the existing 12-byte minimum and hash helper.
+- User list is limited to 500, and account creation and deletion are local application features; no production data was touched. Profile images remain unimplemented.
+- `pnpm lint`, `pnpm test` (142/142) and `git diff --check` passed. Tests cover admin authorization, origin validation, duplicate emails, activation, deletion and mount safeguards. Browser/device and live D1/provider QA were not performed; no migration or deployment was run.
+
+## Account page — partial, 3 November 2026
+
+- Header account control opens `/account`, showing the current email and role and allowing display-name edits. `PATCH /api/auth/me` checks authentication, same origin and a strict field allowlist; it updates only the session owner. No migration is needed for this portion.
+- Profile images remain unimplemented. User deletion is now blocked for accounts with storage mounts; see the later user-management entry above.
+- `pnpm lint` and `pnpm test` (141/141) passed, including session ownership, origin and input validation. Browser and device QA were not performed. No production change was performed.
+
 ## Settings Phase 2 — partial maintenance controls, 3 November 2026
 
 - Added `0007_system_settings.sql`, admin-only `GET/PATCH /api/admin/settings`, public `GET /api/config`, and a maintenance control in Settings. Only `maintenanceMode` and `maintenanceMessage` are implemented. The server checks the current D1 policy on user storage/share mutations; admins still pass ordinary ownership and capability checks. Public reads and existing shares remain available; in-flight operations are not cancelled. Config banner reloads on window focus and when this tab changes the setting.

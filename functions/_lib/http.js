@@ -1,4 +1,5 @@
 const messages = {
+  USER_HAS_STORAGE: 'Remove or transfer this user’s storage mounts before deleting the account.',
   MAINTENANCE: 'Nexora is currently undergoing maintenance. Changes are temporarily unavailable.',
   SHARE_UNAVAILABLE: 'This shared item is unavailable.',
   UNAUTHENTICATED: 'Sign in to continue.',

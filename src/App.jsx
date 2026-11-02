@@ -12,6 +12,8 @@ import LoginRoute from "./components/auth/LoginRoute";
 import SharedPage from "./pages/SharedPage";
 import PublicSharePage from "./pages/PublicSharePage";
 import ActivityPage from "./pages/ActivityPage";
+import AccountPage from "./pages/AccountPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 import { SharesProvider } from "./context/SharesProvider";
 import { useAuth } from "./hooks/useAuth";
 
@@ -38,6 +40,8 @@ function WorkspaceRoutes() {
                         <Route path="/files" element={<Files />} />
                         <Route path="/shared" element={<SharedPage />} />
                         <Route path="/activity" element={<ActivityPage />} />
+                        <Route path="/account" element={<AccountPage />} />
+                        <Route path="/admin/users" element={<AdminUsersPage />} />
                         {navigationItems
                             .filter((item) => !["/files", "/shared", "/activity"].includes(item.to))
                             .map((item) => (

@@ -337,12 +337,13 @@ function StoragePage({ page }) {
 
 function SettingsPage({ page }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   return <div className={cx("flex flex-col gap-6")}>
     <PageHeading eyebrow="Preferences" title={page.label} description="Adjust the appearance of this workspace." />
     <section className={cx("glass-surface flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between")}>
       <div><h2 className={cx("text-sm font-semibold")}>Appearance</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Choose light, dark, or follow your system preference.</p></div><ThemeToggle />
     </section>
-    {user?.role === 'admin' && <AdminMaintenance />}
+    {user?.role === 'admin' && <><section className={cx('glass-surface flex flex-wrap items-center justify-between gap-3 p-5')}><div><h2 className={cx('font-semibold')}>Administration · Users</h2><p className={cx('mt-1 text-sm text-muted-foreground')}>Create and manage user accounts.</p></div><Button variant="outline" onClick={() => navigate('/admin/users')}>Manage users</Button></section><AdminMaintenance /></>}
     <section className={cx("glass-surface p-5")}>
       <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Recent, Favorites, File Browser, and Trash use connected Nexora data where available. Shared manages persistent public links; Theme preference is saved locally in this browser.</p></div></div>
     </section>

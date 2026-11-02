@@ -20,5 +20,7 @@ export const navigationGroups = [
 
 export const navigationItems = navigationGroups.flatMap((group) => group.items);
 export function getPageInfo(pathname) {
+    if (pathname === '/account') return { label: 'Account', description: 'View and update your account information.' };
+    if (pathname === '/admin/users') return { label: 'User management', description: 'Manage user accounts.' };
     return navigationItems.find((item) => item.to === pathname);
 }

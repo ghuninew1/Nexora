@@ -1,5 +1,9 @@
 # Nexora UI Foundation
 
+The Header account control opens the account page and remains accessible by keyboard and on mobile.
+
+User management is linked from admin Settings and uses responsive rows, shared controls and a confirmation dialog for deletion.
+
 Settings แสดง maintenance control เฉพาะ admin พร้อม dialog ยืนยันและข้อความสถานะใน workspace; server เป็นผู้บังคับสิทธิ์การเปลี่ยนข้อมูล
 
 Nexora ใช้ React, Tailwind CSS v4 และ Base UI/shadcn components เดิม โดยยึด Liquid Glass ของ IssueDesk เป็น reference ด้านภาพ ไม่ใช้ business logic หรือสิทธิ์ของ IssueDesk

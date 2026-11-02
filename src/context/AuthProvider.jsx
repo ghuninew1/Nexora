@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthContext } from './auth-context';
-import { getCurrentUser, signIn, signOut } from '../services/auth';
+import { getCurrentUser, signIn, signOut, updateDisplayName } from '../services/auth';
 
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState({ status: 'loading', user: null });
@@ -54,6 +54,12 @@ export function AuthProvider({ children }) {
     void restoreSession();
   }, [restoreSession]);
 
+  const updateProfile = useCallback(async (displayName) => {
+    const version = sessionVersion.current;
+    const user = await updateDisplayName(displayName);
+    if (version === sessionVersion.current) setAuth(current => current.status === 'authenticated' ? { ...current, user } : current);
+  }, []);
+
   useEffect(() => {
     if (auth.status !== 'authenticated') return undefined;
     let mounted = true;
@@ -85,6 +91,6 @@ export function AuthProvider({ children }) {
     };
   }, [auth.status]);
 
-  const value = useMemo(() => ({ ...auth, login, logout, retrySession, expireSession }), [auth, login, logout, retrySession, expireSession]);
+  const value = useMemo(() => ({ ...auth, login, logout, retrySession, expireSession, updateProfile }), [auth, login, logout, retrySession, expireSession, updateProfile]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

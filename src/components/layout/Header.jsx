@@ -73,7 +73,7 @@ function Header({ onMenuClick, menuButtonRef, isMobileOpen }) {
                 </div>
             </div>
             <div className={cx("flex shrink-0 items-center gap-3")}>
-                <div className={cx("flex min-w-0 items-center gap-2")}>
+                <Button type="button" variant="ghost" className={cx("min-h-11 min-w-11 gap-2")} onClick={() => navigate('/account')} aria-label="Account settings">
                     <span
                         aria-hidden="true"
                         className={cx(
@@ -85,7 +85,7 @@ function Header({ onMenuClick, menuButtonRef, isMobileOpen }) {
                     <span className={cx("hidden max-w-44 truncate text-sm font-medium sm:block")} title={displayName}>
                         {displayName}
                     </span>
-                </div>
+                </Button>
                 <ThemeToggle />
                 <Button
                     type="button"

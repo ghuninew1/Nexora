@@ -94,6 +94,14 @@ export async function signOut({ fetchImpl = fetch } = {}) {
   }
 }
 
+export async function updateDisplayName(displayName) {
+  const response = await fetch('/api/auth/me', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName }) });
+  if (!response.ok) throw new Error(response.status === 400 ? 'Enter a name between 1 and 120 characters.' : 'Unable to save your account. Try again.');
+  const user = safeUser((await response.json())?.data?.user);
+  if (!user) throw new Error('Unable to save your account. Try again.');
+  return user;
+}
+
 export function getSafeReturnTo(destination, origin) {
   if (typeof destination !== 'string' || !destination.startsWith('/') || destination.startsWith('//') || destination.includes('\\')) return null;
   try {

@@ -146,6 +146,44 @@ before(async () => {
 
 after(() => sqlite?.close());
 
+test('admin manages user accounts with ownership and storage deletion safeguards', async () => {
+  const adminResponse = await login('other@example.test', 'another correct horse battery staple');
+  const adminCookie = adminResponse.headers.get('set-cookie').split(';')[0];
+  const call = (method, path, body, authCookie = adminCookie, originValue = origin) => handler(new Request(`${origin}${path}`, {
+    method, headers: { Cookie: authCookie, Origin: originValue, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}),
+  }), env);
+  assert.equal((await call('GET', '/api/admin/users', null, cookie)).status, 403);
+  assert.equal((await call('POST', '/api/admin/users', {}, adminCookie, 'https://evil.test')).status, 403);
+  assert.equal((await call('POST', '/api/admin/users', { email: 'new@example.test', displayName: 'New User', password: 'too short' })).status, 400);
+  assert.equal((await call('POST', '/api/admin/users', { email: 'new@example.test', displayName: 'New User', password: 'long enough password', role: 'admin' })).status, 400);
+  const created = await call('POST', '/api/admin/users', { email: 'new@example.test', displayName: 'New User', password: 'long enough password' });
+  assert.equal(created.status, 201);
+  const id = (await created.json()).data.user.id;
+  assert.equal((await call('POST', '/api/admin/users', { email: 'NEW@example.test', displayName: 'Duplicate', password: 'long enough password' })).status, 409);
+  assert.equal((await call('PATCH', `/api/admin/users/${id}`, { displayName: 'Renamed', active: false })).status, 200);
+  assert.equal((await login('new@example.test', 'long enough password')).status, 401);
+  assert.equal((await call('PATCH', `/api/admin/users/${id}`, { active: true })).status, 200);
+  assert.equal((await login('new@example.test', 'long enough password')).status, 200);
+  assert.equal((await call('DELETE', `/api/admin/users/${user.id}`)).status, 409);
+  assert.equal((await call('DELETE', `/api/admin/users/${otherUser.id}`)).status, 403);
+  assert.equal((await call('DELETE', `/api/admin/users/${id}`)).status, 200);
+  assert.equal((await login('new@example.test', 'long enough password')).status, 401);
+});
+
+test('account name update is authenticated, origin-checked and scoped to current user', async () => {
+  const url = `${origin}/api/auth/me`;
+  const update = (headers, body) => handler(new Request(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }), env);
+  assert.equal((await update({ Origin: origin }, { displayName: 'Name' })).status, 401);
+  assert.equal((await update({ Cookie: cookie, Origin: 'https://evil.test' }, { displayName: 'Name' })).status, 403);
+  assert.equal((await update({ Cookie: cookie, Origin: origin }, { displayName: 'Name', role: 'admin' })).status, 400);
+  assert.equal((await update({ Cookie: cookie, Origin: origin }, { displayName: '   ' })).status, 400);
+  const response = await update({ Cookie: cookie, Origin: origin }, { displayName: 'Updated Owner' });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.user.displayName, 'Updated Owner');
+  assert.equal(sqlite.prepare('SELECT display_name FROM users WHERE id = ?').get(otherUser.id).display_name, 'Other Admin');
+  await update({ Cookie: cookie, Origin: origin }, { displayName: 'Storage Owner' });
+});
+
 test('admin maintenance setting is authorized, validated and enforced on storage mutations', async () => {
   const adminLogin = await login('other@example.test', 'another correct horse battery staple');
   const adminCookie = adminLogin.headers.get('set-cookie').split(';')[0];
