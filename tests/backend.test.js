@@ -33,7 +33,7 @@ test('preferences defaults, validation and account-owned storage', async () => {
   assert.equal(defaults.uploadConcurrency, 3);
   assert.equal(defaults.shareExpiration, '7d');
   const headers = { Origin: origin, 'Content-Type': 'application/json' };
-  for (const body of [{ role: 'admin' }, { theme: 'blue' }, { confirmDelete: 1 }, { defaultStorageId: 'missing' }]) {
+  for (const body of [{ role: 'admin' }, { theme: 'blue' }, { confirmDelete: 1 }, { uploadConcurrency: 4 }, { autoClearUploads: 'false' }, { defaultStorageId: 'missing' }]) {
     const response = await request('/api/settings/preferences', { method: 'PATCH', headers, body: JSON.stringify(body) });
     assert.ok([400, 404].includes(response.status));
   }
@@ -42,6 +42,11 @@ test('preferences defaults, validation and account-owned storage', async () => {
   assert.equal((await saved.json()).data.confirmDelete, false);
   const again = await request('/api/settings/preferences');
   assert.equal((await again.json()).data.defaultStorageId, storageId);
+  const upload = await request('/api/settings/preferences', { method: 'PATCH', headers, body: JSON.stringify({ uploadConcurrency: 5, autoClearUploads: false }) });
+  assert.equal(upload.status, 200);
+  const savedUpload = (await upload.json()).data;
+  assert.equal(savedUpload.uploadConcurrency, 5);
+  assert.equal(savedUpload.autoClearUploads, false);
 });
 
 test('logout other sessions preserves current session', async () => {
@@ -201,6 +206,8 @@ test('admin maintenance setting is authorized, validated and enforced on storage
     assert.equal((await config.json()).data.maintenanceMode, true);
     const blocked = await call(`/api/storage/v1/storages/${storageId}/objects/folders`, 'POST', { name: 'Test' }, cookie);
     assert.equal(blocked.status, 503);
+    const favorite = await call('/api/favorites', 'POST', { storageId, objectId }, cookie);
+    assert.equal(favorite.status, 503);
     const read = await call(`/api/storage/v1/storages/${storageId}/capabilities`, 'GET', undefined, cookie);
     assert.equal(read.status, 200);
     // The admin bypass reaches normal mount authorization, rather than the maintenance gate.

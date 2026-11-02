@@ -54,7 +54,7 @@ function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRen
           <DropdownMenuTrigger render={<Button variant="outline" size="icon-sm" aria-label={`Sort loaded items by ${sortBy}, ${sortDirection}ending`}><ArrowUpDown /></Button>} />
           <DropdownMenuContent align="end">
             <DropdownMenuRadioGroup value={sortBy} onValueChange={onSortChange}>
-              {[{ key: "name", label: "Name" }, { key: "modified", label: "Last modified" }, { key: "size", label: "File size" }].map((item) => <DropdownMenuRadioItem key={item.key} value={item.key} closeOnClick>{item.label}</DropdownMenuRadioItem>)}
+              {[{ key: "name", label: "Name" }, { key: "modified", label: "Last modified" }, { key: "size", label: "File size" }, { key: "type", label: "File type" }].map((item) => <DropdownMenuRadioItem key={item.key} value={item.key} closeOnClick>{item.label}</DropdownMenuRadioItem>)}
             </DropdownMenuRadioGroup>
             <Separator className={cx("my-1")} />
             <DropdownMenuItem onClick={onSortDirectionChange}>Order: {sortDirection === "asc" ? "Ascending" : "Descending"}</DropdownMenuItem>

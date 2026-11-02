@@ -72,7 +72,7 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
         response = await handleStorageApi({ request, env, user, parts, fetchImpl, logger });
       } else if (parts[1] === 'favorites') {
         const user = await requireUser(request, env);
-        if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) requireSameOrigin(request);
+        if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) { requireSameOrigin(request); await requireWritableSystem(env, user); }
         response = await handleFavoritesApi({ request, env, user, parts, fetchImpl });
       } else if (parts[1] === 'recent') {
         const user = await requireUser(request, env);

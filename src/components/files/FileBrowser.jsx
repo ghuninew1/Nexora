@@ -1,5 +1,6 @@
 import ShareDialog from './ShareDialog';
 import { useStorage } from '../../hooks/useStorage';
+import { usePreferences } from '../../hooks/usePreferences';
 import { useEffect, useRef, useState } from "react";
 import { useFilesData } from "../../context/FilesProvider";
 import { emptyFileClipboard, invalidCutDestination, isEditableShortcutTarget, remainingCutClipboard } from "../../utils/file-clipboard";
@@ -32,6 +33,7 @@ function FileListLoading() {
 
 function FileBrowser() {
   const browser = useFiles();
+  const { preferences } = usePreferences();
   const { clipboard, setClipboard } = useFilesData();
   const [clipboardMessage, setClipboardMessage] = useState("");
   const pasteBusy = useRef(false);
@@ -164,6 +166,12 @@ function FileBrowser() {
     }
   }
 
+  async function requestTrash(file) {
+    if (preferences?.confirmDelete !== false) { setTrashFile(file); return; }
+    const result = await browser.trashObject(file);
+    if (result.ok) browser.clearSelection();
+  }
+
   return (
     <div className={cx("relative")}>
       <section className={cx("flex min-w-0 flex-col gap-5")}>
@@ -195,7 +203,7 @@ function FileBrowser() {
           onToggleFavoriteSelected={() => selectedFile && void browser.toggleFavorite(selectedFile)}
           onMoveSelected={() => selectedFiles.length && setDestinationAction({ action: "move", file: selectedFiles.length > 1 ? selectedFiles : selectedFile, key: crypto.randomUUID() })}
           onCopySelected={() => selectedFile && setDestinationAction({ action: "copy", file: selectedFile, key: crypto.randomUUID() })}
-          onTrashSelected={() => selectedCount > 1 ? setBulkTrashOpen(true) : selectedFile && setTrashFile(selectedFile)}
+          onTrashSelected={() => selectedCount > 1 ? setBulkTrashOpen(true) : selectedFile && void requestTrash(selectedFile)}
           onNewFolder={() => setNewFolderOpen(true)}
           canCreateFolder={browser.canCreateFolder}
           isCreatingFolder={browser.isCreatingFolder}
@@ -247,7 +255,7 @@ function FileBrowser() {
             onMove={(file) => setDestinationAction({ action: "move", file, key: crypto.randomUUID() })}
             onCopy={(file) => setDestinationAction({ action: "copy", file, key: crypto.randomUUID() })}
             onShare={(file) => setShareFile({ file, storageId: browser.storageId, folderId: browser.folderId })}
-            onTrash={setTrashFile}
+            onTrash={(file) => void requestTrash(file)}
             onToggleFavorite={(id) => { const file = browser.currentFiles.find((item) => item.id === id); if (file) void browser.toggleFavorite(file); }}
             allowFavorites
             capabilities={{ share: canShare, download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}

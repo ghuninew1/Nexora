@@ -16,7 +16,7 @@ function errorMessage(error) {
   return 'Upload failed. Try again later.';
 }
 
-export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, maxConcurrency = MAX_UPLOAD_CONCURRENCY } = {}) {
+export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, maxConcurrency = MAX_UPLOAD_CONCURRENCY, autoClear = true } = {}) {
   const [items, setItems] = useState([]);
   const tasksRef = useRef(new Map());
   const pendingRef = useRef([]);
@@ -27,10 +27,18 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const onCompleteRef = useRef(onComplete);
   const onUnauthorizedRef = useRef(onUnauthorized);
   const processQueueRef = useRef(null);
+  const autoClearRef = useRef(autoClear);
 
   useEffect(() => { uploadFileRef.current = uploadFile; }, [uploadFile]);
   useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
   useEffect(() => { onUnauthorizedRef.current = onUnauthorized; }, [onUnauthorized]);
+  useEffect(() => {
+    autoClearRef.current = autoClear;
+    if (!autoClear) {
+      for (const timer of dismissTimersRef.current.values()) clearTimeout(timer);
+      dismissTimersRef.current.clear();
+    }
+  }, [autoClear]);
 
   const updateItem = useCallback((id, changes) => {
     if (!mountedRef.current) return;
@@ -59,7 +67,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           if (controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
           task.status = 'success';
           updateItem(task.id, { status: 'success', result });
-          if (mountedRef.current) {
+          if (mountedRef.current && autoClearRef.current) {
             const timer = setTimeout(() => {
               dismissTimersRef.current.delete(task.id);
               tasksRef.current.delete(task.id);
@@ -93,7 +101,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     }
   }, [maxConcurrency, updateItem]);
 
-  useEffect(() => { processQueueRef.current = processQueue; }, [processQueue]);
+  useEffect(() => { processQueueRef.current = processQueue; queueMicrotask(() => processQueueRef.current?.()); }, [processQueue]);
 
   useEffect(() => {
     mountedRef.current = true;

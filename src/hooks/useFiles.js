@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useFilesData } from "../context/FilesProvider";
 import { RemoteFilesContext } from "../context/files-context";
+import { usePreferences } from './usePreferences';
 
 export function useDemoFiles() {
   const {
@@ -106,11 +107,16 @@ function formatModified(value) {
 }
 
 export default function useFiles() {
+  const { preferences } = usePreferences();
   const remote = useContext(RemoteFilesContext);
   if (!remote) throw new Error('useFiles must be used inside FilesProvider');
   const [query, setQuery] = useState('');
-  const [sortBy, setSortBy] = useState('name');
-  const [sortDirection, setSortDirection] = useState('asc');
+  const [sortOverride, setSortOverride] = useState(null);
+  const [directionOverride, setDirectionOverride] = useState(null);
+  const sortBy = sortOverride ?? preferences?.fileSort ?? 'name';
+  const sortDirection = directionOverride ?? preferences?.fileSortDirection ?? 'asc';
+  const setSortBy = (value) => setSortOverride(typeof value === 'function' ? value(sortBy) : value);
+  const setSortDirection = (value) => setDirectionOverride(typeof value === 'function' ? value(sortDirection) : value);
   const [view, setView] = useState('list');
   const [selection, setSelection] = useState({ storageId: null, folderId: null, ids: [] });
 
@@ -136,8 +142,8 @@ export default function useFiles() {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const filtered = files.filter((file) => file.name.toLocaleLowerCase().includes(normalizedQuery));
     return [...filtered].sort((a, b) => {
-      const left = sortBy === 'size' ? (a.sizeBytes ?? -1) : sortBy === 'modified' ? (a.modifiedAt ?? '') : a.name.toLocaleLowerCase();
-      const right = sortBy === 'size' ? (b.sizeBytes ?? -1) : sortBy === 'modified' ? (b.modifiedAt ?? '') : b.name.toLocaleLowerCase();
+      const left = sortBy === 'size' ? (a.sizeBytes ?? -1) : sortBy === 'modified' ? (a.modifiedAt ?? '') : sortBy === 'type' ? (a.type === 'folder' ? 'folder' : a.extension ?? a.mimeType ?? '') : a.name.toLocaleLowerCase();
+      const right = sortBy === 'size' ? (b.sizeBytes ?? -1) : sortBy === 'modified' ? (b.modifiedAt ?? '') : sortBy === 'type' ? (b.type === 'folder' ? 'folder' : b.extension ?? b.mimeType ?? '') : b.name.toLocaleLowerCase();
       const order = typeof left === 'string' ? left.localeCompare(right) : left - right;
       return sortDirection === 'asc' ? order : -order;
     });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useStorage } from './useStorage';
+import { usePreferences } from './usePreferences';
 import {
   copyStorageObject,
   addStorageFavorite,
@@ -76,6 +77,7 @@ function operationErrorMessage(code, operation = null) {
 }
 
 export default function useRemoteFilesState() {
+  const { preferences } = usePreferences();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -515,7 +517,8 @@ export default function useRemoteFilesState() {
     ),
     onComplete: refreshAfterUpload,
     onUnauthorized: expireSession,
-    maxConcurrency: 2,
+    maxConcurrency: preferences?.uploadConcurrency ?? 2,
+    autoClear: preferences?.autoClearUploads ?? true,
   });
   const { addFiles, cancelUpload, retryUpload, clearFinished: clearFinishedUploads, cancelAll: cancelAllUploads } = uploadQueue;
 

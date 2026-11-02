@@ -8,7 +8,7 @@ import { findActivitySnapshot, recordActivity } from './activity.js';
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const SECRET = /^[A-Za-z0-9_-]{43}$/u;
-const EXPIRY_MS = Object.freeze({ '1h': 60 * 60 * 1000, '1d': 24 * 60 * 60 * 1000, '1month': 30 * 24 * 60 * 60 * 1000, never: null });
+const EXPIRY_MS = Object.freeze({ '1h': 60 * 60 * 1000, '1d': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000, '30d': 30 * 24 * 60 * 60 * 1000, '1month': 30 * 24 * 60 * 60 * 1000, never: null });
 const unavailable = () => new ApiError('NOT_FOUND', 404);
 const unwrap = (p) => p?.data && typeof p.data === 'object' ? p.data : p;
 async function upstream(ctx, path) {

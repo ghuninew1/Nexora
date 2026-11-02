@@ -16,17 +16,18 @@ import AccountPage from "./pages/AccountPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import { SharesProvider } from "./context/SharesProvider";
 import { useAuth } from "./hooks/useAuth";
+import { PreferencesProvider } from "./context/PreferencesProvider";
 
 function WorkspaceProviders() {
     const { user } = useAuth();
     return (
-        <StorageProvider key={user?.id}>
+        <PreferencesProvider key={user?.email}><StorageProvider key={user?.id}>
             <SharesProvider>
                 <FilesProvider>
                     <AppShell><Outlet /></AppShell>
                 </FilesProvider>
             </SharesProvider>
-        </StorageProvider>
+        </StorageProvider></PreferencesProvider>
     );
 }
 function WorkspaceRoutes() {

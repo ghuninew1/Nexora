@@ -5,13 +5,16 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
 import { cx } from '../../utils/cx';
+import { usePreferences } from '../../hooks/usePreferences';
 
 export default function ShareDialog({ file, storageId, initialShare, initialConfirm = null, onClose }) {
   const shares = useShares();
+  const { preferences } = usePreferences();
   const { expireSession } = useAuth();
   const [state, setState] = useState({ status: initialShare ? 'ready' : 'loading', share: initialShare ?? null, message: '' });
   const [confirm, setConfirm] = useState(initialConfirm);
-  const [expiresIn, setExpiresIn] = useState('never');
+  const [expirationOverride, setExpiresIn] = useState(null);
+  const expiresIn = expirationOverride ?? preferences?.shareExpiration ?? 'never';
   useEffect(() => {
     if (initialShare) return;
     const c = new AbortController();
@@ -38,7 +41,7 @@ export default function ShareDialog({ file, storageId, initialShare, initialConf
     {state.message && <p role="status" aria-live="polite">{state.message}</p>}
     {!busy && state.status !== 'error' && <label className={cx('flex flex-col gap-1.5 text-sm font-medium')}>Link expiration
       <select className={cx('glass-control min-h-11 rounded-lg px-3 text-sm font-normal')} value={expiresIn} onChange={event => setExpiresIn(event.target.value)}>
-        <option value="1h">1 hour</option><option value="1d">1 day</option><option value="1month">1 month (30 days)</option><option value="never">Never expires</option>
+        <option value="1h">1 hour</option><option value="1d">1 day</option><option value="7d">7 days</option><option value="30d">30 days</option><option value="never">Never expires</option>
       </select>
       <span className={cx('text-xs font-normal text-muted-foreground')}>{state.share ? 'Applied when you replace the current link.' : 'The link stops working after this period.'}</span>
     </label>}

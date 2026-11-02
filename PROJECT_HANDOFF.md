@@ -1,5 +1,23 @@
 # Nexora — Project Handoff
 
+## File preferences — partial, 3 November 2026
+
+- Settings now saves default file sort/direction, single-item Move to Trash confirmation, and public-share expiry alongside upload preferences. File Browser uses the default until a temporary sort choice is made, preserves it across folder navigation, and supports type sorting. Skipping confirmation applies only to a single normal Move to Trash; bulk and permanent deletion still confirm. Share creation/replacement accepts 7d and 30d as well as existing choices.
+- Theme, default storage, upload conflict behavior and password change are not integrated; Phase 2 and Phase 3 are unfinished. No migration or production changes were made. Browser/device and live-provider QA remain pending.
+- `pnpm lint`, `pnpm test` (143/143, including 7d/30d share expiry), and `git diff --check` passed. The new preference UI and queue behavior have not been browser-tested.
+
+## Upload preferences — 3 November 2026
+
+- Added shared authenticated preference loading and a Settings form for upload concurrency (1, 2, 3, 5) and automatic clearing of completed uploads. The real queue consumes both values; before the request completes or if it fails, the previous two-upload/auto-clear behavior remains. Already active transfers are not cancelled when the limit is reduced. Disabling auto-clear cancels pending dismissal timers. Existing unsupported rename/replace behavior is not presented as functional.
+- Phase 1 remains incomplete: theme, sort, deletion, conflict behavior, default storage, share expiration and password change are not integrated. Phase 2 and Phase 3 remain incomplete. No migration or remote operation was performed.
+- `pnpm lint`, `pnpm test` (142/142, including upload preference API validation) and `git diff --check` passed. Browser interaction, queue timing and live-provider QA were not performed.
+
+## Settings audit and partial follow-up — 3 November 2026
+
+- Audited Settings phases 1–3 against current source in `docs/PHASE_SETTINGS_3.md`. Connected the existing logout-other-sessions API to Account with a confirmation dialog; the current session is retained. Maintenance now blocks normal-user Favorites mutations server-side as well as storage and share mutations.
+- Most Phase 1 preference integrations, Phase 2 policies and all Phase 3 notifications/audit remain incomplete. No mail provider was found in source; no provider secrets or remote infrastructure were inspected. No migration, production deployment or data change was performed.
+- `pnpm lint`, `pnpm test` (142/142) and `git diff --check` passed; browser and production QA were not performed.
+
 ## Administrator user management — 3 November 2026
 
 - Admin Settings links to `/admin/users`, backed by admin-authenticated `GET/POST /api/admin/users` and `PATCH/DELETE /api/admin/users/:id`. Admins can create ordinary users, edit name/email, activate/deactivate and delete; new accounts do not automatically receive storage. Admin accounts cannot be edited or deleted through these routes, and user deletion is blocked when any mount remains. Passwords use the existing 12-byte minimum and hash helper.

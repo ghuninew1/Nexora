@@ -61,6 +61,19 @@ test('share authentication, ownership, origin, missing object and capability che
   f.db.close();
 });
 
+test('share creation accepts seven and thirty day expiry preferences', async () => {
+  const f = await fixture();
+  for (const [objectId, choice, days] of [['single', '7d', 7], ['file', '30d', 30]]) {
+    const before = Date.now();
+    const response = await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId, expiresIn: choice } });
+    assert.equal(response.status, 201);
+    const { share } = (await response.json()).data;
+    const duration = Date.parse(share.expiresAt) - before;
+    assert.ok(duration >= days * 86400000 && duration < days * 86400000 + 5000);
+  }
+  f.db.close();
+});
+
 test('maintenance blocks user share mutations but leaves existing public reads available', async () => {
   const f = await fixture();
   const existing = await f.create('single');
