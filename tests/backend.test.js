@@ -156,6 +156,59 @@ before(async () => {
 
 after(() => sqlite?.close());
 
+test('password policy is validated and enforced for user creation and password change', async () => {
+  const admin = await login('other@example.test', 'another correct horse battery staple');
+  const adminCookie = admin.headers.get('set-cookie').split(';')[0];
+  const requestAs = (path, method, body, activeCookie) => handler(new Request(`${origin}${path}`, { method, headers: { Cookie: activeCookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), env);
+  assert.equal((await requestAs('/api/admin/settings', 'PATCH', { passwordMinLength: 11 }, adminCookie)).status, 400);
+  assert.equal((await requestAs('/api/admin/settings', 'PATCH', { strongPasswordRequired: true }, cookie)).status, 403);
+  try {
+    assert.equal((await requestAs('/api/admin/settings', 'PATCH', { passwordMinLength: 16 }, adminCookie)).status, 200);
+    assert.equal((await requestAs('/api/admin/settings', 'PATCH', { strongPasswordRequired: true }, adminCookie)).status, 200);
+    const body = { email: 'policy-user@example.test', displayName: 'Policy User' };
+    assert.equal((await requestAs('/api/admin/users', 'POST', { ...body, password: 'short12A' }, adminCookie)).status, 400);
+    assert.equal((await requestAs('/api/admin/users', 'POST', { ...body, password: 'onlylowercase123456' }, adminCookie)).status, 400);
+    const created = await requestAs('/api/admin/users', 'POST', { ...body, password: 'LongPassword123456' }, adminCookie);
+    assert.equal(created.status, 201);
+    const id = (await created.json()).data.user.id;
+    const session = await login(body.email, 'LongPassword123456');
+    const activeCookie = session.headers.get('set-cookie').split(';')[0];
+    assert.equal((await requestAs('/api/settings/change-password', 'POST', { currentPassword: 'LongPassword123456', newPassword: 'weakpassword123456' }, activeCookie)).status, 400);
+    assert.equal((await requestAs('/api/settings/change-password', 'POST', { currentPassword: 'LongPassword123456', newPassword: 'AnotherStrong123456' }, activeCookie)).status, 200);
+    sqlite.prepare('DELETE FROM users WHERE id = ?').run(id);
+  } finally {
+    sqlite.prepare("DELETE FROM system_settings WHERE key IN ('passwordMinLength', 'strongPasswordRequired')").run();
+  }
+});
+
+test('session policy applies to new logins and preserves the newest session', async () => {
+  const account = await createUser({ db: env.DB, email: 'session-policy@example.test', displayName: 'Policy', password: 'long password example' });
+  const adminResponse = await login('other@example.test', 'another correct horse battery staple');
+  const adminCookie = adminResponse.headers.get('set-cookie').split(';')[0];
+  const patch = (body, activeCookie = adminCookie) => handler(new Request(`${origin}/api/admin/settings`, { method: 'PATCH', headers: { Cookie: activeCookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), env);
+  assert.equal((await patch({ sessionLifetimeDays: 2 })).status, 400);
+  assert.equal((await patch({ maxActiveSessions: 2 })).status, 400);
+  assert.equal((await patch({ maxActiveSessions: 1 }, cookie)).status, 403);
+  try {
+    assert.equal((await patch({ sessionLifetimeDays: 1 })).status, 200);
+    assert.equal((await patch({ maxActiveSessions: 1 })).status, 200);
+    const first = await login('session-policy@example.test', 'long password example');
+    const oldCookie = first.headers.get('set-cookie').split(';')[0];
+    assert.match(first.headers.get('set-cookie'), /Max-Age=86400/u);
+    const second = await login('session-policy@example.test', 'long password example');
+    const newCookie = second.headers.get('set-cookie').split(';')[0];
+    assert.equal((await handler(new Request(`${origin}/api/auth/me`, { headers: { Cookie: oldCookie } }), env)).status, 401);
+    assert.equal((await handler(new Request(`${origin}/api/auth/me`, { headers: { Cookie: newCookie } }), env)).status, 200);
+    const config = await handler(new Request(`${origin}/api/config`), env);
+    const publicConfig = (await config.json()).data;
+    assert.equal(Object.hasOwn(publicConfig, 'maxActiveSessions'), false);
+    assert.equal(Object.hasOwn(publicConfig, 'sessionLifetimeDays'), false);
+  } finally {
+    sqlite.prepare("DELETE FROM system_settings WHERE key IN ('maxActiveSessions', 'sessionLifetimeDays')").run();
+    sqlite.prepare('DELETE FROM users WHERE id = ?').run(account.id);
+  }
+});
+
 test('change password verifies old password and retains only current session', async () => {
   const created = await createUser({ db: env.DB, email: 'password@example.test', displayName: 'Password User', password: 'original password' });
   const first = await login('password@example.test', 'original password');

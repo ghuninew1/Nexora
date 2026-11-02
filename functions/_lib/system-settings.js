@@ -7,13 +7,25 @@ const defaults = Object.freeze({
   publicDownloadEnabled: true,
   requireShareExpiration: false,
   maxShareLifetimeDays: null,
+  sessionLifetimeDays: 14,
+  maxActiveSessions: 10,
+  passwordMinLength: 12,
+  strongPasswordRequired: false,
 });
 
 function normalize(key, value) {
-  if (['maintenanceMode', 'publicSharingEnabled', 'publicDownloadEnabled', 'requireShareExpiration'].includes(key) && typeof value === 'boolean') return value;
+  if (['maintenanceMode', 'publicSharingEnabled', 'publicDownloadEnabled', 'requireShareExpiration', 'strongPasswordRequired'].includes(key) && typeof value === 'boolean') return value;
   if (key === 'maxShareLifetimeDays' && [null, 1, 7, 30, 90].includes(value)) return value;
+  if (key === 'sessionLifetimeDays' && [1, 7, 14, 30].includes(value)) return value;
+  if (key === 'maxActiveSessions' && [null, 1, 3, 5, 10].includes(value)) return value;
+  if (key === 'passwordMinLength' && [8, 10, 12, 14, 16].includes(value)) return value;
   if (key === 'maintenanceMessage' && typeof value === 'string' && value.trim().length > 0 && value.length <= 300 && [...value].every(character => character.codePointAt(0) >= 32 && character.codePointAt(0) !== 127)) return value.trim();
   throw new ApiError('INVALID_INPUT', 400);
+}
+
+export async function getPublicConfig(db) {
+  const { maintenanceMode, maintenanceMessage, publicSharingEnabled, publicDownloadEnabled, requireShareExpiration, maxShareLifetimeDays, passwordMinLength, strongPasswordRequired } = await getSystemSettings(db);
+  return { maintenanceMode, maintenanceMessage, publicSharingEnabled, publicDownloadEnabled, requireShareExpiration, maxShareLifetimeDays, passwordMinLength, strongPasswordRequired };
 }
 
 export async function getSystemSettings(db) {

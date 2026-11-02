@@ -1,5 +1,6 @@
 import { ApiError } from './http.js';
 import { hashPassword, randomToken, sha256Hex, verifyPassword } from './password.js';
+import { getSystemSettings } from './system-settings.js';
 
 const COOKIE = 'nexora_session';
 const SESSION_SECONDS = 60 * 60 * 24 * 14;
@@ -43,8 +44,8 @@ export function normalizeDisplayName(value) {
   return value.trim();
 }
 
-export function validateNewUserPassword(value) {
-  if (typeof value !== 'string' || new TextEncoder().encode(value).length < 12 || new TextEncoder().encode(value).length > MAX_PASSWORD_BYTES) {
+export function validateNewUserPassword(value, policy = { passwordMinLength: 12, strongPasswordRequired: false }) {
+  if (typeof value !== 'string' || new TextEncoder().encode(value).length < policy.passwordMinLength || new TextEncoder().encode(value).length > MAX_PASSWORD_BYTES || (policy.strongPasswordRequired && (!/[a-z]/u.test(value) || !/[A-Z]/u.test(value) || !/[0-9]/u.test(value)))) {
     throw new ApiError('INVALID_INPUT', 400);
   }
   return value;
@@ -54,7 +55,7 @@ export async function createUser({ db, email: inputEmail, displayName, password,
   const email = normalizeEmail(inputEmail);
   const normalizedDisplayName = normalizeDisplayName(displayName);
   if (!['admin', 'user'].includes(role)) throw new ApiError('INVALID_INPUT', 400);
-  const normalizedPassword = validateNewUserPassword(password);
+  const normalizedPassword = validateNewUserPassword(password, await getSystemSettings(db));
   const passwordHash = await hashPassword(normalizedPassword);
   const id = crypto.randomUUID();
   await db.prepare('INSERT INTO users (id, email, display_name, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
@@ -98,14 +99,18 @@ export async function login(request, env, body, now = Date.now()) {
   }
   await env.DB.prepare('DELETE FROM login_attempts WHERE email_hash = ? OR ip_hash = ?').bind(emailHash, ipHash).run();
   await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(now).run();
-  await env.DB.prepare(`DELETE FROM sessions WHERE id IN
-    (SELECT id FROM sessions WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET 10)`).bind(user.id).run();
+  const settings = await getSystemSettings(env.DB);
   const token = randomToken();
   const tokenHash = await sha256Hex(token);
-  const expiresAt = now + SESSION_SECONDS * 1000;
-  await env.DB.prepare('INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(crypto.randomUUID(), user.id, tokenHash, expiresAt, now, now).run();
-  return { user: publicUser(user), token, expiresAt };
+  const sessionSeconds = settings.sessionLifetimeDays * 86400;
+  const expiresAt = now + sessionSeconds * 1000;
+  const sessionId = crypto.randomUUID();
+  const statements = [env.DB.prepare('INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(sessionId, user.id, tokenHash, expiresAt, now, now)];
+  if (settings.maxActiveSessions !== null) statements.push(env.DB.prepare(`DELETE FROM sessions WHERE id IN
+    (SELECT id FROM sessions WHERE user_id = ? AND id != ? ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?)`).bind(user.id, sessionId, settings.maxActiveSessions - 1));
+  await env.DB.batch(statements);
+  return { user: publicUser(user), token, expiresAt, sessionSeconds };
 }
 
 export async function logout(request, env) {
@@ -116,6 +121,6 @@ export async function logout(request, env) {
   return cookieHeader('', 0);
 }
 
-export function sessionCookie(token) { return cookieHeader(token); }
+export function sessionCookie(token, maxAge = SESSION_SECONDS) { return cookieHeader(token, maxAge); }
 export function clearedSessionCookie() { return cookieHeader('', 0); }
 export function serializeUser(user) { return publicUser(user); }

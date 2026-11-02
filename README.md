@@ -18,7 +18,7 @@ Nexora เป็นเว็บจัดการไฟล์สำหรับ 
 - **File preferences:** ตั้งค่าเริ่มต้นการเรียงไฟล์ การยืนยันย้ายรายการเดี่ยวไป Trash และอายุ public link ที่สร้างใหม่ได้ใน Settings
 - **Account settings:** ตั้งธีมและ storage เริ่มต้นตามบัญชี เปลี่ยนรหัสผ่าน และออกจาก session อื่นได้; การอัปโหลดชื่อซ้ำจะแจ้ง conflict โดยยังไม่รองรับ rename หรือ replace อัตโนมัติ
 - **User management:** Admin สร้าง แก้ไข ระงับ และลบบัญชี user ได้จาก Settings; บัญชีที่มี storage mount ต้องจัดการ mount ก่อนลบ และ storage ของบัญชีใหม่ต้อง provision แยก
-- **Administration:** ผู้ดูแลเปิด maintenance mode และควบคุมการสร้าง public link, การดาวน์โหลดสาธารณะ และอายุสูงสุดของ link ใหม่ได้ การปิดสร้าง link ไม่ลบ link เดิม
+- **Administration:** ผู้ดูแลเปิด maintenance mode ควบคุม public link ตั้งอายุ/จำนวน session และ password policy สำหรับการสร้าง user ผ่านแอปและเปลี่ยนรหัสผ่านได้ การปิดสร้าง link ไม่ลบ link เดิม และอายุ session ใหม่ไม่เปลี่ยน session ที่มีอยู่
 
 ความสามารถของไฟล์ขึ้นอยู่กับสิทธิ์และ capabilities ของ storage ที่เชื่อมต่อ การค้นหาและเรียงลำดับครอบคลุมเฉพาะรายการที่โหลดแล้ว ขนาดรวมของโฟลเดอร์และ storage usage จะแสดงว่าไม่พร้อมใช้งานเมื่อไม่มีข้อมูลจาก provider
 
@@ -66,6 +66,8 @@ Shared Storage Service ── object storage
 ```
 
 Browser ใช้ Nexora logical IDs และไม่รับ credentials หรือ provider references ส่วน Pages Functions ตรวจ session, ownership และ capabilities ก่อนเรียก Storage Service ซึ่งเป็นระบบแยกจาก Nexora ข้อมูลใน `src/data/files.js` เป็น fixture สำหรับตัวอย่าง legacy เท่านั้น
+
+Storage ใน source ปัจจุบันยังจำกัดตามเจ้าของ mount; การ assign storage และกำหนดสิทธิ์รายผู้ใช้ยังไม่เปิดใช้งาน
 
 ```text
 src/                 React app, pages, components, hooks และ API clients

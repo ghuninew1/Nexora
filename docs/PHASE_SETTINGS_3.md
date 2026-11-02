@@ -4,7 +4,11 @@
 
 Admin can enable/disable new public-share creation and public downloads, require expiration, and set a maximum link lifetime. Server checks policy on creation, replacement and public downloads, while existing links and supported previews remain available. Preview content is delivered to the browser and cannot be made unsaveable. Maintenance controls remain in place. Remaining Phase 2 policies and Phase 3 notifications/audit are not implemented; the older audit below remains historical.
 
-Local checks: lint, build, diff check and 148 tests passed. Browser/device and live-provider QA were not performed. No new migration or production operation was performed.
+Admin can also set new-session lifetime (1/7/14/30 days) and maximum sessions (1/3/5/10/unlimited). Defaults are 14 days and 10 sessions; no pre-existing session environment override exists in source. Login uses an atomic D1 batch and keeps the newly created session. `/api/config` excludes these admin-only session values. Migration 0007 is required before deploying this login code.
+
+Admin can configure the password minimum (8/10/12/14/16 UTF-8 bytes) and optionally require lowercase, uppercase and a number. These apply to app user creation and password changes; out-of-band provisioning scripts still use their own 12-byte baseline without reading D1 policy. The user reported migration 0007 ready; no independent production check was performed.
+
+Local checks: lint, build, diff check and 150 tests passed. Browser/device and live-provider QA were not performed. No new migration or production operation was performed.
 
 ## Current Phase 1 implementation
 

@@ -5,7 +5,7 @@ import { ApiError, decodePath, fail, json, readJson, requireJsonContentType, req
 import { handleFavoritesApi, handleRecentApi, handleStorageApi } from './storage-api.js';
 import { handleActivityApi } from './activity.js';
 import { handleSettingsApi } from './settings-api.js';
-import { getSystemSettings, handleAdminSettings, requireWritableSystem } from './system-settings.js';
+import { getPublicConfig, handleAdminSettings, requireWritableSystem } from './system-settings.js';
 import { handleAdminUsers } from './admin-users.js';
 
 async function handleAuth({ request, env, parts }) {
@@ -15,7 +15,7 @@ async function handleAuth({ request, env, parts }) {
     requireSameOrigin(request);
     requireJsonContentType(request);
     const result = await login(request, env, await readJson(request));
-    return json({ user: result.user }, 200, { 'Set-Cookie': sessionCookie(result.token) });
+    return json({ user: result.user }, 200, { 'Set-Cookie': sessionCookie(result.token, result.sessionSeconds) });
   }
   if (parts.length === 3 && route === 'logout' && method === 'POST') {
     requireSameOrigin(request);
@@ -53,7 +53,7 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
         if (['POST', 'DELETE'].includes(request.method.toUpperCase())) { requireSameOrigin(request); await requireWritableSystem(env, user); }
         response = await handleSharesApi({ request, env, user, parts, fetchImpl });
       } else if (parts[1] === 'config' && parts.length === 2 && request.method === 'GET') {
-        response = json(await getSystemSettings(env.DB));
+        response = json(await getPublicConfig(env.DB));
       } else if (parts[1] === 'admin') {
         const user = await requireAdmin(request, env);
         if (['POST', 'PATCH', 'DELETE'].includes(request.method)) requireSameOrigin(request);

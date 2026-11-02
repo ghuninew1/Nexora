@@ -1,5 +1,23 @@
 # Nexora — Project Handoff
 
+## Storage assignment Phase 1.5 — groundwork only, 3 November 2026
+
+- Added additive `0008_storage_access.sql` with per-user/mount permission columns, uniqueness and dependency constraints, plus a standalone strict permission validator. Neither is connected to discovery, authorization or UI. Existing owner-scoped storage behavior remains authoritative; no assignment can be made or exercised yet. No owner backfill or remote migration was performed.
+- Remaining work: design and implement admin assignment/revoke endpoints and UI, permission mapping at every storage/Trash/Favorites/Recent/share endpoint, effective capability intersection, default selection and revoked-access behavior. Existing share links need a deliberate public authorization path independent of a former assignee's membership. Preserve provider mappings and protect existing owners. Do not claim Phase 1.5 complete or deploy this schema as a functioning permission system.
+- `pnpm lint`, `pnpm test` (152/152) and `git diff --check` passed; the migration test used in-memory SQLite. Browser, provider and production verification were not performed. See `docs/PHASE_STORAGE_ASSIGNMENT.md`.
+
+## Password policy — partial Settings Phase 2, 3 November 2026
+
+- Admin can set minimum password size to 8/10/12/14/16 UTF-8 bytes and require lowercase, uppercase and a number. App user creation and password change enforce the policy server-side; forms retrieve and show the current requirements. Existing passwords are not changed. Explicit admin provisioning scripts remain out-of-band and retain their 12-byte baseline, without consulting D1; this is a remaining policy gap.
+- The user reported that migration 0007 is ready; this was not independently verified. No deploy, migration or production data change was performed. Phase 2 and Phase 3 remain incomplete.
+- `pnpm lint`, `pnpm test` (150/150), `pnpm build`, and `git diff --check` passed. Browser/device and live D1 QA remain pending.
+
+## Session policy — partial Settings Phase 2, 3 November 2026
+
+- Admin can configure lifetime of new sessions (1, 7, 14, 30 days) and max active sessions (1, 3, 5, 10, unlimited). Login applies the selected lifetime to cookie and server expiry and inserts the session plus revokes oldest excess sessions in one D1 batch while preserving the new session. Existing sessions retain their expiry when the setting changes. Default lifetime is 14 days and max is 10; current source had no session ENV fallback. The public config endpoint explicitly excludes session settings.
+- Other Phase 2 work and Phase 3 remain incomplete. No migration, deploy or production data change was performed. Browser and live D1 verification remain pending.
+- `pnpm lint`, `pnpm test` (149/149), `pnpm build`, and `git diff --check` passed, including session policy and public config tests.
+
 ## Public share expiry policy — partial Phase 2, 3 November 2026
 
 - Added admin settings to require expiration and cap new or replacement public-link lifetimes at 1, 7, 30 or 90 days. The server rejects `never` when expiration is required and clamps longer lifetimes to the configured maximum. The owner dialog adjusts choices to the effective policy. Existing links are not altered.

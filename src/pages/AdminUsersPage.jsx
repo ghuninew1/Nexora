@@ -4,10 +4,12 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { cx } from '../utils/cx';
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy';
 
 const emptyForm = { email: '', displayName: '', password: '', active: true };
 
 export default function AdminUsersPage() {
+  const passwordPolicy = usePasswordPolicy();
   const { user } = useAuth();
   const [rows, setRows] = useState(null);
   const [truncated, setTruncated] = useState(false);
@@ -64,10 +66,10 @@ export default function AdminUsersPage() {
       <form onSubmit={submit} className={cx('flex flex-col gap-4')}>
         <label className={cx('flex flex-col gap-1 text-sm')}>Display name<Input required maxLength={120} value={form.displayName} disabled={busy} onChange={e => setForm({ ...form, displayName: e.target.value })} /></label>
         <label className={cx('flex flex-col gap-1 text-sm')}>Email<Input type="email" required maxLength={254} value={form.email} disabled={busy} aria-invalid={emailConflict} aria-describedby={emailConflict ? 'user-email-error' : undefined} onChange={e => { setEmailConflict(false); setForm({ ...form, email: e.target.value }); }} /></label>
-        {!editor?.id && <label className={cx('flex flex-col gap-1 text-sm')}>Initial password<Input type="password" autoComplete="new-password" required value={form.password} disabled={busy} onChange={e => setForm({ ...form, password: e.target.value })} /><span className={cx('text-xs text-muted-foreground')}>At least 12 UTF-8 bytes.</span></label>}
+        {!editor?.id && <label className={cx('flex flex-col gap-1 text-sm')}>Initial password<Input type="password" autoComplete="new-password" required value={form.password} disabled={busy} onChange={e => setForm({ ...form, password: e.target.value })} /><span className={cx('text-xs text-muted-foreground')}>{passwordPolicy ? `At least ${passwordPolicy.passwordMinLength} UTF-8 bytes.${passwordPolicy.strongPasswordRequired ? ' Include lowercase, uppercase and a number.' : ''}` : 'Password requirements unavailable. Reload and try again.'}</span></label>}
         {editor?.id && <label className={cx('flex items-center gap-2 text-sm')}><input type="checkbox" checked={form.active} disabled={busy} onChange={e => setForm({ ...form, active: e.target.checked })} />Account active (changing this signs out existing sessions)</label>}
         {error && <p id={emailConflict ? 'user-email-error' : undefined} role="alert" className={cx('text-sm text-destructive')}>{error}</p>}
-        <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => setEditor(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => setEditor(null)}>Cancel</Button><Button type="submit" disabled={busy || (!editor?.id && !passwordPolicy)}>{busy ? 'Saving…' : 'Save'}</Button></DialogFooter>
       </form></DialogContent></Dialog>
     <Dialog open={Boolean(deleting)} onOpenChange={open => { if (!open && !busy) setDeleting(null); }}><DialogContent><DialogHeader><DialogTitle>Delete user?</DialogTitle><DialogDescription>This removes the account and its session and account metadata. Accounts with storage mounts cannot be deleted. This cannot be undone.</DialogDescription></DialogHeader><p className={cx('break-all text-sm')}>{deleting?.email}</p>{error && <p role="alert" className={cx('text-sm text-destructive')}>{error}</p>}<DialogFooter><Button variant="outline" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => void perform('DELETE', `/api/admin/users/${encodeURIComponent(deleting.id)}`)}>{busy ? 'Deleting…' : 'Delete user'}</Button></DialogFooter></DialogContent></Dialog>
   </div>;

@@ -2,6 +2,7 @@ import { ApiError, json, readJson } from './http.js';
 import { requireStorageMount } from './authorization.js';
 import { validateNewUserPassword } from './auth.js';
 import { hashPassword, verifyPassword } from './password.js';
+import { getSystemSettings } from './system-settings.js';
 
 const fields = {
   theme: ['theme', 'dark', ['dark', 'light', 'system']],
@@ -54,7 +55,7 @@ export async function handleSettingsApi({ request, env, user, parts }) {
   if (parts[2] === 'change-password' && method === 'POST') {
     const body = await readJson(request);
     if (Object.keys(body).some(key => !['currentPassword', 'newPassword'].includes(key)) || typeof body.currentPassword !== 'string' || !body.currentPassword || new TextEncoder().encode(body.currentPassword).length > 1024) throw new ApiError('INVALID_INPUT', 400);
-    const password = validateNewUserPassword(body.newPassword);
+    const password = validateNewUserPassword(body.newPassword, await getSystemSettings(env.DB));
     const row = await env.DB.prepare('SELECT password_hash FROM users WHERE id = ?').bind(user.id).first();
     if (!row || !(await verifyPassword(body.currentPassword, row.password_hash))) throw new ApiError('FORBIDDEN', 403);
     const hash = await hashPassword(password);
