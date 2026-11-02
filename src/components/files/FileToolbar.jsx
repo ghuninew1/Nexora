@@ -9,7 +9,7 @@ import { Separator } from "../ui/separator";
 import { cx } from "../../utils/cx";
 import UploadButton from "./UploadButton";
 
-function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRenameSelected, canRenameSelected, canShareSelected, onShareSelected, selectedCount, selectedFile, selectedFavorite, isSelectionBusy = false, canPreviewSelected = false, canMoveSelected = false, canCopySelected = false, canTrashSelected = false, onPreviewSelected, onToggleFavoriteSelected, onMoveSelected, onCopySelected, onTrashSelected, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange }) {
+function FileToolbar({ canFavorite, canPaste, onClipboardCopy, onClipboardCut, onPaste, onRenameSelected, canRenameSelected, canShareSelected, onShareSelected, selectedCount, selectedFile, selectedFavorite, isSelectionBusy = false, canPreviewSelected = false, canMoveSelected = false, canCopySelected = false, canTrashSelected = false, onPreviewSelected, onToggleFavoriteSelected, onMoveSelected, onCopySelected, onTrashSelected, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange }) {
   const hasSelection = selectedCount > 0;
   const isBusy = isRefreshing || isCreatingFolder;
   return (
@@ -27,7 +27,7 @@ function FileToolbar({ canPaste, onClipboardCopy, onClipboardCut, onPaste, onRen
             <Button variant="outline" size="sm" onClick={onTrashSelected} disabled={!canTrashSelected || isSelectionBusy} title="Move selected items to Trash"><Trash2 />Move to Trash</Button>
           </div> : selectedCount === 1 && selectedFile && <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label={`Actions for ${selectedFile.name}`}>
             {selectedFile.type === "file" && <Button variant="ghost" size="sm" onClick={onPreviewSelected} disabled={!canPreviewSelected || isSelectionBusy} title="Preview selected file"><Eye />Preview</Button>}
-            <Button variant="ghost" size="sm" onClick={onToggleFavoriteSelected} disabled={isSelectionBusy} aria-pressed={selectedFavorite} title={selectedFavorite ? "Remove from Favorites" : "Add to Favorites"}><Star className={cx(selectedFavorite && "fill-amber-400 text-amber-500")} />{selectedFavorite ? "Unfavorite" : "Favorite"}</Button>
+            <Button variant="ghost" size="sm" onClick={onToggleFavoriteSelected} disabled={isSelectionBusy || !canFavorite} aria-pressed={selectedFavorite} title={selectedFavorite ? "Remove from Favorites" : "Add to Favorites"}><Star className={cx(selectedFavorite && "fill-amber-400 text-amber-500")} />{selectedFavorite ? "Unfavorite" : "Favorite"}</Button>
             <Button variant="ghost" size="sm" onClick={onShareSelected} disabled={!canShareSelected || isSelectionBusy}><Share2 />Share</Button>
             <Button variant="ghost" size="sm" onClick={onCopySelected} disabled={!canCopySelected || isSelectionBusy} title="Copy selected item to a folder"><Copy />Copy to…</Button>
             <Button variant="ghost" size="sm" onClick={onMoveSelected} disabled={!canMoveSelected || isSelectionBusy} title="Move selected item"><ArrowRightLeft />Move</Button>

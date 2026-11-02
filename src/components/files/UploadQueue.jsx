@@ -18,7 +18,7 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-function UploadQueue({ items, concurrency, onCancel, onRetry, onClearFinished }) {
+function UploadQueue({ items, concurrency, onCancel, onRetry, onClearFinished, canRetry = true }) {
   if (items.length === 0) return null;
   const activeCount = items.filter((item) => item.status === 'uploading').length;
   const queuedCount = items.filter((item) => item.status === 'queued').length;
@@ -52,7 +52,7 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onClearFinished })
             {item.error && <p className={cx('mt-1 text-xs text-destructive')} role="alert">{item.error}</p>}
           </div>
           {canCancel && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-10 min-w-10 shrink-0')} onClick={() => onCancel(item.id)} aria-label={`Cancel upload ${item.name}`}><XCircle aria-hidden="true" /></Button>}
-          {item.status === 'error' && <Button type="button" variant="outline" size="sm" className={cx('min-h-10 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />Retry</Button>}
+          {item.status === 'error' && canRetry && <Button type="button" variant="outline" size="sm" className={cx('min-h-10 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />Retry</Button>}
         </li>;
       })}
     </ul>

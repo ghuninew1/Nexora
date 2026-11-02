@@ -434,3 +434,7 @@ Files and Dashboard/Storage empty states now explain when no storage is assigned
 ## Admin storage assignment UI
 
 Users page now includes assigned storage listing and assignment/edit/revoke dialogs using admin APIs. Preset and custom permission dependencies, default badge, loading/error/retry and catalog truncation states are included. User changes cancel or ignore stale requests. Lint, 161 tests, build and diff check passed. Browser and mobile QA were not run, including interactive submit flow. User permission gating, Favorites, Recent and Public Share integration remain pending. No deployment, migration or production mutation was performed.
+
+## User permission gating checkpoint
+
+File Browser capability checks intersect discovery permissions for mutations and download, Preview checks its own permission, Favorite and Share controls use the active assignment, and queued upload starts and retries are guarded. UI gating remains partial: action visibility, all alternate paths, refresh behavior and browser flow need further verification. Admin UI implementation exists but browser QA is not run. Lint, 161 tests, build and diff check were run locally; no production work was performed.

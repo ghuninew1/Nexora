@@ -312,7 +312,7 @@ export default function useRemoteFilesState() {
     if (!file || file.type === 'folder') return;
     const spec = getStoragePreviewSpec(file);
     if (!(storageStatus === 'ready' && activeStorage
-      && canUseStorageCapability(capabilities, activeStorage, 'download'))) {
+      && activeStorage.permissions?.preview === true)) {
       setPreview({ file, status: 'unsupported', message: 'Preview is not available for this file.' });
       return;
     }
@@ -369,7 +369,7 @@ export default function useRemoteFilesState() {
             : 'Preview failed. Try again.',
       });
     }
-  }, [storageId, storageStatus, activeStorage, capabilities, closePreview, expireSession, refreshRecent]);
+  }, [storageId, storageStatus, activeStorage, closePreview, expireSession, refreshRecent]);
 
   useEffect(() => {
     if (!preview?.objectUrl) return undefined;
@@ -508,13 +508,18 @@ export default function useRemoteFilesState() {
       }, 120);
     }
   }, []);
+  const uploadAllowedRef = useRef(false);
+  uploadAllowedRef.current = storageStatus === 'ready' && activeStorage?.permissions?.upload === true && capabilities?.upload === true;
   const uploadQueue = useUploadQueue({
-    uploadFile: ({ file, storageId: targetStorageId, parentId, maxUploadBytes, signal }) => uploadStorageFile(
+    uploadFile: ({ file, storageId: targetStorageId, parentId, maxUploadBytes, signal }) => {
+      if (!uploadAllowedRef.current || targetStorageId !== storageId) return Promise.reject({ code: 'FORBIDDEN' });
+      return uploadStorageFile(
       targetStorageId,
       file,
       parentId,
       { maxUploadBytes, signal },
-    ),
+    );
+    },
     onComplete: refreshAfterUpload,
     onUnauthorized: expireSession,
     maxConcurrency: preferences?.uploadConcurrency ?? 3,
@@ -525,6 +530,7 @@ export default function useRemoteFilesState() {
   const canUseCapability = useCallback((name) => Boolean(
     storageStatus === 'ready'
     && activeStorage
+    && activeStorage.permissions?.[({ trash: 'delete', restore: 'delete' })[name] || name] === true
     && canUseStorageCapability(capabilities, activeStorage, name),
   ), [storageStatus, activeStorage, capabilities]);
 
@@ -1040,6 +1046,7 @@ export default function useRemoteFilesState() {
     paginationError: displayState.paginationError,
     revalidationError: displayState.revalidationError ?? null,
     notice: location.state?.fileBrowserNotice || notice,
+    canFavorite: activeStorage?.permissions?.favorite === true,
     canCreateFolder: canUseCapability('createFolder'),
     canUpload: canUseCapability('upload'),
     canDownload: canUseCapability('download'),
@@ -1050,7 +1057,7 @@ export default function useRemoteFilesState() {
     preview,
     canPreviewFile: (file) => {
       const spec = getStoragePreviewSpec(file);
-      return Boolean(canUseCapability('download') && spec
+      return Boolean(activeStorage?.permissions?.preview === true && spec
         && (!Number.isSafeInteger(file?.sizeBytes) || file.sizeBytes <= spec.maxBytes));
     },
     openPreview,
@@ -1088,7 +1095,7 @@ export default function useRemoteFilesState() {
     uploadQueue,
     uploadFiles,
     cancelUpload,
-    retryUpload,
+    retryUpload: (id) => { if (canUseCapability('upload')) retryUpload(id); },
     clearFinishedUploads,
     renameObject,
     moveObject,

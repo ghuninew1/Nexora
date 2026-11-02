@@ -39,7 +39,7 @@ function FileBrowser() {
   const pasteBusy = useRef(false);
   const { capabilities, activeStorage, status: storageStatus } = useStorage();
   const [shareFile, setShareFile] = useState(null);
-  const canShare = file => Boolean(file && !activeStorage?.readOnly && !capabilities?.readOnly && capabilities?.stat && capabilities?.[file.type === "folder" ? "list" : "download"]);
+  const canShare = file => Boolean(file && activeStorage?.permissions?.share === true && !activeStorage?.readOnly && !capabilities?.readOnly && capabilities?.stat && capabilities?.[file.type === "folder" ? "list" : "download"]);
   const navigate = useNavigate();
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
@@ -184,6 +184,7 @@ function FileBrowser() {
         {browser.revalidationError && <div className={cx("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><span>{browser.revalidationError}</span><Button type="button" variant="ghost" size="sm" onClick={() => void browser.refreshCurrentFolder()}>Refresh</Button></div>}
         <FileToolbar
           selectedCount={selectedCount}
+          canFavorite={browser.canFavorite}
           canPaste={canPaste}
           onClipboardCopy={() => captureClipboard("copy")}
           onClipboardCut={() => captureClipboard("cut")}
@@ -226,7 +227,7 @@ function FileBrowser() {
         {clipboardMessage && <div className={cx("flex items-center justify-between gap-3 text-sm text-muted-foreground")}><p role="status" aria-live="polite">{clipboardMessage}</p><Button type="button" variant="ghost" size="icon-sm" onClick={() => setClipboardMessage("")} aria-label="Dismiss clipboard message" title="Dismiss message"><X aria-hidden="true" /></Button></div>}
         {clipboard.mode && clipboard.sourceStorageId !== browser.storageId && <p className={cx("text-sm text-muted-foreground")} role="status">Paste is unavailable across storages.</p>}
         {browser.operationFeedback && <div className={cx("flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm", browser.operationFeedback.type === "error" ? "border-destructive/30 text-destructive" : "border-primary/30 text-foreground")}><p role={browser.operationFeedback.type === "error" ? "alert" : "status"} aria-live="polite">{browser.operationFeedback.message}</p><Button type="button" variant="ghost" size="icon-sm" onClick={browser.clearOperationFeedback} aria-label="Dismiss operation message" title="Dismiss message"><X aria-hidden="true" /></Button></div>}
-        <UploadQueue items={browser.uploadQueue.items} concurrency={browser.uploadQueue.concurrency} onCancel={browser.cancelUpload} onRetry={browser.retryUpload} onClearFinished={browser.clearFinishedUploads} />
+        <UploadQueue items={browser.uploadQueue.items} concurrency={browser.uploadQueue.concurrency} onCancel={browser.cancelUpload} onRetry={browser.retryUpload} canRetry={browser.canUpload} onClearFinished={browser.clearFinishedUploads} />
 
         {isLoading && <FileListLoading />}
         {storageStatus === "empty" && <div className={cx("glass-surface p-5")} role="status"><h2 className={cx("text-sm font-semibold")}>No storage assigned</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>You do not currently have access to any storage. Contact an administrator for access.</p></div>}
@@ -258,7 +259,7 @@ function FileBrowser() {
             onShare={(file) => setShareFile({ file, storageId: browser.storageId, folderId: browser.folderId })}
             onTrash={(file) => void requestTrash(file)}
             onToggleFavorite={(id) => { const file = browser.currentFiles.find((item) => item.id === id); if (file) void browser.toggleFavorite(file); }}
-            allowFavorites
+            allowFavorites={browser.canFavorite}
             capabilities={{ share: canShare, download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}
             mutatingIds={browser.mutatingIds}
             canCreateFolder={browser.canCreateFolder}

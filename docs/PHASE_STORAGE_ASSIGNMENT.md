@@ -57,3 +57,5 @@ The core route migration supersedes earlier partial-route checkpoints. Favorites
 Files and Dashboard/Storage explain an empty assignment list. Default selection tests cover route, user preference, admin default and revoked default fallback. Admin assignment UI and complete permission gating remain partial. Browser QA has not been run.
 
 Admin Users now provides assignment list, catalog, preset/custom editing, default selection and revoke confirmation using the existing admin APIs. Dependency controls enforce read/preview/download/favorite, delete/permanentDelete and share/manageShare relationships. The catalog reports when its 500-item limit truncates results. Browser flow and narrow-screen QA remain unverified. User action gating, Favorites, Recent and Public Share integration remain pending.
+
+Admin assignment UI implementation is present with assign/edit/default/revoke. Browser QA is not run. User permission gating is partial: File Browser intersects assignment permissions for capability actions, Preview, Favorite, Share and upload retry/start, while remaining action visibility and alternative paths require further verification.

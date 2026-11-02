@@ -246,3 +246,5 @@ Admin-only `GET /api/admin/storages` returns bounded safe storage catalog summar
 Core storage v1 operations now enforce session-scoped storage assignments, including object reads, transfers, mutations, Trash lifecycle and operation status. See docs/PHASE_STORAGE_ASSIGNMENT.md for the route matrix. Favorites, Recent, Public Share and UI integration remain separate.
 
 Admin Users includes storage assignment management using the existing admin catalog and assignment APIs. The UI supports presets, custom permissions, default selection and revoke confirmation; browser QA is pending.
+
+File Browser assignment permission gating is partial and requires further UI and alternative-path verification. Admin assignment UI implementation exists; browser QA is pending.
