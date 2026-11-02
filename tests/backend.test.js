@@ -11,6 +11,7 @@ import { sha256Hex, randomToken } from '../functions/_lib/password.js';
 
 const migration = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
 const activityMigration = readFileSync(new URL('../migrations/0003_activity_events.sql', import.meta.url), 'utf8');
+const preferencesMigration = readFileSync(new URL('../migrations/0006_user_preferences.sql', import.meta.url), 'utf8');
 const origin = 'https://nexora.example.test';
 const storageId = 'mount_alpha';
 const projectId = 'private_project_alpha';
@@ -23,6 +24,35 @@ let user;
 let otherUser;
 let cookie;
 let requests;
+
+test('preferences defaults, validation and account-owned storage', async () => {
+  const get = await request('/api/settings/preferences');
+  assert.equal(get.status, 200);
+  const defaults = (await get.json()).data;
+  assert.equal(defaults.theme, 'dark');
+  assert.equal(defaults.uploadConcurrency, 3);
+  assert.equal(defaults.shareExpiration, '7d');
+  const headers = { Origin: origin, 'Content-Type': 'application/json' };
+  for (const body of [{ role: 'admin' }, { theme: 'blue' }, { confirmDelete: 1 }, { defaultStorageId: 'missing' }]) {
+    const response = await request('/api/settings/preferences', { method: 'PATCH', headers, body: JSON.stringify(body) });
+    assert.ok([400, 404].includes(response.status));
+  }
+  const saved = await request('/api/settings/preferences', { method: 'PATCH', headers, body: JSON.stringify({ theme: 'system', defaultStorageId: storageId, confirmDelete: false }) });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).data.confirmDelete, false);
+  const again = await request('/api/settings/preferences');
+  assert.equal((await again.json()).data.defaultStorageId, storageId);
+});
+
+test('logout other sessions preserves current session', async () => {
+  const second = await login();
+  const secondCookie = second.headers.get('set-cookie').split(';')[0];
+  const response = await request('/api/settings/logout-other-sessions', { method: 'POST', headers: { Origin: origin } });
+  assert.equal(response.status, 200);
+  assert.equal((await request('/api/auth/me')).status, 200);
+  const other = await handler(new Request(`${origin}/api/auth/me`, { headers: { Cookie: secondCookie } }), env);
+  assert.equal(other.status, 401);
+});
 
 function d1(database) {
   return {
@@ -99,6 +129,7 @@ before(async () => {
   sqlite = new DatabaseSync(':memory:');
   sqlite.exec(migration);
   sqlite.exec(activityMigration);
+  sqlite.exec(preferencesMigration);
   env = { DB: d1(sqlite), STORAGE_API_URL: 'https://storage.example.test', STORAGE_APP_SECRET: 'server-app-secret',
     CF_ACCESS_CLIENT_ID: 'server-access-id', CF_ACCESS_CLIENT_SECRET: 'server-access-secret' };
   handler = createApiHandler({ fetchImpl: upstreamResponse, logger: silentLogger });

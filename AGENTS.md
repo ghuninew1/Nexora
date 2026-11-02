@@ -224,3 +224,7 @@ List rows have a minimum height of 52px and the header uses compact vertical spa
 File preview supports MP4, WebM and Ogg video up to 20 MiB through the existing on-demand preview route. Playback depends on browser codec support; video bytes are buffered before playback, and larger files remain downloadable. Public shares use the same preview policy.
 
 File Browser row action and New menus highlight enabled items on hover or keyboard focus, with a distinct destructive highlight for Move to Trash.
+
+## Settings Phase 1 — incomplete backend groundwork
+
+Migration `0006_user_preferences.sql` and authenticated settings preference GET/PATCH and logout-other-sessions endpoints exist locally. Values are validated and default storage is checked against the user's active mount. The existing Settings page does not yet use these endpoints; theme remains browser-local and the requested behavior integrations and password change remain unfinished. Do not describe Settings Phase 1 as complete. See `PROJECT_HANDOFF.md` for validation and pending work. Production migration and deployment require explicit authorization.

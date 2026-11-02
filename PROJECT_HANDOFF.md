@@ -1,5 +1,11 @@
 # Nexora — Project Handoff
 
+## Settings Phase 1 — work in progress, 3 November 2026
+
+- Added migration `0006_user_preferences.sql` and authenticated `GET/PATCH /api/settings/preferences` with server defaults, strict field validation, owner-scoped active mount validation and same-origin mutation protection. `POST /api/settings/logout-other-sessions` revokes only the current user's other sessions.
+- This is backend groundwork, not a completed Settings feature: the existing Settings page and client behaviors do not consume these preferences; change password, safe duplicate rename, share expiry integration, and all other requested UI integrations remain to be implemented. The existing theme remains browser-local. Do not present Phase 1 as complete.
+- `pnpm lint` passed; `pnpm test` passed 138/138 including preference and session checks. Browser/regression QA, local migration application, production migration and deployment were not performed. Review README and AGENTS for current source; no user-facing Settings behavior changed.
+
 ## Sidebar Liquid Glass hover — 1 พฤศจิกายน 2026
 
 - คืน Liquid Glass hover ให้ NavLink แต่ละรายการเหมือนปุ่ม Collapse รวมแสงตามเมาส์ ขอบและเงา พร้อมคง active และ focus state เดิม
