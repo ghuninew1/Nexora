@@ -1,5 +1,10 @@
 # Nexora — Project Handoff
 
+## Storage permission mapping — groundwork only, 3 November 2026
+
+- Added and tested a standalone fail-closed storage-route permission map and a preliminary intersection of grants, provider capabilities, read-only and maintenance. These helpers are not wired into runtime authorization or the UI. Phase 1.5 assignment remains incomplete; owner-scoped routes and public-share behavior are unchanged. No migration, deployment or production change was performed.
+- `pnpm lint`, `pnpm test` (154/154) and `git diff --check` passed. No browser or provider QA was performed.
+
 ## Storage assignment Phase 1.5 — groundwork only, 3 November 2026
 
 - Added additive `0008_storage_access.sql` with per-user/mount permission columns, uniqueness and dependency constraints, plus a standalone strict permission validator. Neither is connected to discovery, authorization or UI. Existing owner-scoped storage behavior remains authoritative; no assignment can be made or exercised yet. No owner backfill or remote migration was performed.

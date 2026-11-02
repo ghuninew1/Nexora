@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { STORAGE_PERMISSION_NAMES, validateStoragePermissions } from '../functions/_lib/storage-permissions.js';
+import { STORAGE_PERMISSION_NAMES, validateStoragePermissions, requiredStoragePermissions, intersectStoragePermissions } from '../functions/_lib/storage-permissions.js';
 
 test('storage permissions reject missing, unknown, non-boolean and inconsistent values', () => {
   const all = Object.fromEntries(STORAGE_PERMISSION_NAMES.map(name => [name, true]));
@@ -14,6 +14,40 @@ test('storage permissions reject missing, unknown, non-boolean and inconsistent 
   assert.throws(() => validateStoragePermissions({ ...all, read: 1 }));
   const missing = { ...all }; delete missing.copy;
   assert.throws(() => validateStoragePermissions(missing));
+});
+
+test('storage route permission map covers file operations and fails closed for unknown paths', () => {
+  const cases = [
+    ['GET', ['objects'], ['read']], ['GET', ['objects', 'id'], ['read']],
+    ['GET', ['objects', 'id', 'preview'], ['read', 'preview']],
+    ['GET', ['objects', 'id', 'download'], ['read', 'download']],
+    ['GET', ['files', 'id', 'download'], ['read', 'download']],
+    ['POST', ['files'], ['upload']], ['POST', ['folders'], ['createFolder']],
+    ['PATCH', ['objects', 'id'], ['rename']], ['POST', ['objects', 'id', 'move'], ['move']],
+    ['POST', ['objects', 'id', 'copy'], ['copy']], ['DELETE', ['objects', 'id'], ['delete']],
+    ['GET', ['trash'], ['read', 'delete']], ['POST', ['trash', 'id', 'restore'], ['delete']],
+    ['DELETE', ['trash', 'id', 'permanent'], ['permanentDelete']],
+  ];
+  for (const [method, path, expected] of cases) assert.deepEqual(requiredStoragePermissions(method, path), expected);
+  assert.throws(() => requiredStoragePermissions('POST', ['objects', 'id', 'unknown']));
+  assert.throws(() => requiredStoragePermissions('DELETE', ['capabilities']));
+});
+
+test('effective permissions only narrow grants according to provider and policy', () => {
+  const grants = Object.fromEntries(STORAGE_PERMISSION_NAMES.map(name => [name, true]));
+  const caps = { list: true, stat: true, download: true, upload: true, createFolder: true, rename: true, move: true, copy: true, trash: true, permanentDelete: true };
+  assert.equal(intersectStoragePermissions(grants, caps).upload, true);
+  assert.equal(intersectStoragePermissions(grants, { ...caps, upload: false }).upload, false);
+  const readOnly = intersectStoragePermissions(grants, caps, { readOnly: true });
+  assert.equal(readOnly.read, true);
+  assert.equal(readOnly.download, true);
+  assert.equal(readOnly.upload, false);
+  assert.equal(readOnly.permanentDelete, false);
+  const maintenance = intersectStoragePermissions(grants, caps, { maintenance: true });
+  assert.equal(maintenance.favorite, false);
+  assert.equal(maintenance.share, false);
+  assert.equal(maintenance.preview, true);
+  assert.equal(intersectStoragePermissions(grants, {}).read, false);
 });
 
 test('storage access migration enforces ownership references, uniqueness and dependencies', () => {
