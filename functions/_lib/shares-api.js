@@ -5,10 +5,11 @@ import { createStorageClient, normalizeObject } from './storage-client.js';
 import { previewObjectResponse, streamResponse } from './storage-api.js';
 import { encryptShareSecret, decryptShareSecret } from './share-secret.js';
 import { findActivitySnapshot, recordActivity } from './activity.js';
+import { getSystemSettings } from './system-settings.js';
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const SECRET = /^[A-Za-z0-9_-]{43}$/u;
-const EXPIRY_MS = Object.freeze({ '1h': 60 * 60 * 1000, '1d': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000, '30d': 30 * 24 * 60 * 60 * 1000, '1month': 30 * 24 * 60 * 60 * 1000, never: null });
+const EXPIRY_MS = Object.freeze({ '1h': 60 * 60 * 1000, '1d': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000, '30d': 30 * 24 * 60 * 60 * 1000, '90d': 90 * 24 * 60 * 60 * 1000, '1month': 30 * 24 * 60 * 60 * 1000, never: null });
 const unavailable = () => new ApiError('NOT_FOUND', 404);
 const unwrap = (p) => p?.data && typeof p.data === 'object' ? p.data : p;
 async function upstream(ctx, path) {
@@ -42,10 +43,14 @@ function ownerShare(row, object = null, status = 'active') {
     expiresAt: Number.isSafeInteger(row.expires_at) ? new Date(row.expires_at).toISOString() : null,
     status: row.revoked_at !== null ? 'revoked' : status !== 'active' ? status : expired ? 'expired' : status };
 }
-function expiryFromRequest(body, now = Date.now()) {
+function expiryFromRequest(body, policy, now = Date.now()) {
   const choice = body?.expiresIn;
   if (!Object.hasOwn(EXPIRY_MS, choice)) throw new ApiError('INVALID_INPUT', 400);
-  return EXPIRY_MS[choice] === null ? null : now + EXPIRY_MS[choice];
+  const duration = EXPIRY_MS[choice];
+  const maximum = policy.maxShareLifetimeDays === null ? null : policy.maxShareLifetimeDays * 86400000;
+  if (duration === null && policy.requireShareExpiration) throw new ApiError('INVALID_INPUT', 400);
+  const effective = maximum === null ? duration : duration === null ? maximum : Math.min(duration, maximum);
+  return effective === null ? null : now + effective;
 }
 async function owned(db, user, id) {
   requireObjectId(id);
@@ -95,8 +100,10 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
     return json({ shares, nextCursor: rows.results.length > 20 ? page.at(-1).id : null });
   }
   if (parts.length === 2 && method === 'POST') {
+    const policy = await getSystemSettings(env.DB);
+    if (!policy.publicSharingEnabled) throw new ApiError('FORBIDDEN', 403);
     const body = await readJson(request);
-    const expiresAt = expiryFromRequest(body);
+    const expiresAt = expiryFromRequest(body, policy);
     const mount = await requireStorageMount(env.DB, user, body.storageId, { mutation: true });
     const objectId = requireObjectId(body.objectId);
     const scope = { ...ctx, mount };
@@ -133,7 +140,7 @@ export async function handleSharesApi({ request, env, user, parts, fetchImpl }) 
     }
     if (parts.length === 4 && parts[3] === 'replace' && method === 'POST') {
       const body = await readJson(request);
-      const expiresAt = expiryFromRequest(body);
+      const expiresAt = expiryFromRequest(body, await getSystemSettings(env.DB));
       const mount = await requireStorageMount(env.DB, user, row.storage_mount_id, { mutation: true });
       const object = await stat({ ...ctx, mount }, row.object_id);
       required(await capabilities({ ...ctx, mount }), object);
@@ -171,6 +178,7 @@ async function within(ctx, root, id) {
 export async function handlePublicSharesApi({ request, env, parts, fetchImpl }) {
   try {
     if (request.method !== 'GET' || !ID.test(parts[3] || '') || !SECRET.test(parts[4] || '')) throw unavailable();
+    const settings = await getSystemSettings(env.DB);
     const hash = await sha256Hex(parts[4]);
     const row = await env.DB.prepare(`SELECT s.* FROM public_shares s JOIN users u ON u.id = s.user_id
       WHERE s.id = ? AND s.token_hash = ? AND s.revoked_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) AND u.active = 1`).bind(parts[3], hash, Date.now()).first();
@@ -184,7 +192,7 @@ export async function handlePublicSharesApi({ request, env, parts, fetchImpl }) 
       const active = await env.DB.prepare('SELECT id FROM public_shares WHERE id = ? AND token_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)').bind(row.id, hash, Date.now()).first();
       if (!active) throw unavailable();
     };
-    if (parts.length === 5) { await stillActive(); return json({ object: safeObject(root), download: caps.download === true }); }
+    if (parts.length === 5) { await stillActive(); return json({ object: safeObject(root), preview: caps.download === true, download: settings.publicDownloadEnabled && caps.download === true }); }
     if (parts[5] === 'objects' && parts.length === 6 && root.type === 'folder') {
       const url = new URL(request.url);
       const parentId = url.searchParams.get('parentId') || root.objectId;
@@ -208,6 +216,7 @@ export async function handlePublicSharesApi({ request, env, parts, fetchImpl }) 
       return json({ items, nextCursor: typeof p.nextCursor === 'string' && p.nextCursor.length <= 2048 ? p.nextCursor : null });
     }
     if (parts[5] === 'objects' && parts.length === 8 && ['download', 'preview'].includes(parts[7])) {
+      if (parts[7] === 'download' && !settings.publicDownloadEnabled) throw unavailable();
       const object = await within(ctx, root, parts[6]);
       if (object.type !== 'file' || caps.download !== true) throw unavailable();
       let response;
@@ -219,7 +228,7 @@ export async function handlePublicSharesApi({ request, env, parts, fetchImpl }) 
         response.headers.set('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(object.name).replaceAll("'", '%27')}`);
         response.headers.set('Content-Security-Policy', "sandbox; default-src 'none'");
       }
-      try { await within(ctx, await stat(ctx, root.objectId), object.objectId); await stillActive(); }
+      try { await within(ctx, await stat(ctx, root.objectId), object.objectId); await stillActive(); if (parts[7] === 'download' && !(await getSystemSettings(env.DB)).publicDownloadEnabled) throw unavailable(); }
       catch (error) { await response.body?.cancel(); throw error; }
       return response;
     }

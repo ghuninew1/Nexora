@@ -67,7 +67,7 @@ export async function revokeShare(id, options) { const p = await request(`/api/s
 export async function getPublicShare(capability, options) {
   const p = await request(publicApi(capability), { ...options, isPublic: true });
   const root = object(p.object); if (!root) throw new ShareApiError(502, true);
-  return { object: root, download: p.download === true };
+  return { object: root, download: p.download === true, preview: p.preview === true || (p.preview === undefined && p.download === true) };
 }
 export async function listPublicObjects(capability, { parentId, cursor, ...options } = {}) {
   const q = new URLSearchParams({ limit: '50' }); if (parentId) q.set('parentId', parentId); if (cursor) q.set('cursor', cursor);

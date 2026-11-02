@@ -28,7 +28,7 @@ export default function StorageFilePreviewDialog({ preview, onOpenChange, onDown
         <div className={cx("min-h-0 overflow-auto")}><PreviewBody preview={preview} maxTextPreviewBytes={maxTextPreviewBytes} /></div>
         <DialogFooter className={cx("-mx-4 -mb-4 sm:-mx-6 sm:-mb-6")}>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button type="button" onClick={() => onDownload(file)} disabled={preview.status === "loading"}><Download aria-hidden="true" />Download</Button>
+          {onDownload && <Button type="button" onClick={() => onDownload(file)} disabled={preview.status === "loading"}><Download aria-hidden="true" />Download</Button>}
         </DialogFooter>
       </DialogContent>}
     </Dialog>

@@ -84,6 +84,40 @@ test('maintenance blocks user share mutations but leaves existing public reads a
   f.db.close();
 });
 
+test('sharing policy blocks creation and downloads while preserving existing previews', async () => {
+  const f = await fixture();
+  const existing = await f.create('single');
+  const set = f.db.prepare('INSERT INTO system_settings (key,value,updated_at,updated_by) VALUES (?, ?, ?, ?)');
+  set.run('publicSharingEnabled', 'false', Date.now(), 'alice');
+  set.run('publicDownloadEnabled', 'false', Date.now(), 'alice');
+  assert.equal((await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId: 'file' } })).status, 403);
+  const api = f.publicApi(existing.publicPath);
+  const meta = await (await f.call(api, { user: null })).json();
+  assert.equal(meta.data.download, false);
+  assert.equal(meta.data.preview, true);
+  assert.equal((await f.call(`${api}/objects/single/download`, { user: null })).status, 404);
+  assert.equal((await f.call(`${api}/objects/single/preview`, { user: null })).status, 200);
+  f.db.close();
+});
+
+test('share expiration policy rejects indefinite links and clamps new and replacement lifetimes', async () => {
+  const f = await fixture();
+  const set = f.db.prepare('INSERT INTO system_settings (key,value,updated_at,updated_by) VALUES (?, ?, ?, ?)');
+  set.run('requireShareExpiration', 'true', Date.now(), 'alice');
+  const indefinite = await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId: 'single', expiresIn: 'never' } });
+  assert.equal(indefinite.status, 400);
+  set.run('maxShareLifetimeDays', '7', Date.now(), 'alice');
+  const before = Date.now();
+  const created = await f.call('/api/shares', { method: 'POST', body: { storageId: 'mount_alice', objectId: 'single', expiresIn: '30d' } });
+  assert.equal(created.status, 201);
+  const share = (await created.json()).data.share;
+  assert.ok(Date.parse(share.expiresAt) - before <= 7 * 86400000 + 5000);
+  const replaced = await f.call(`/api/shares/${share.id}/replace`, { method: 'POST', body: { expiresIn: '30d' } });
+  assert.equal(replaced.status, 200);
+  assert.ok(Date.parse((await replaced.json()).data.share.expiresAt) - before <= 7 * 86400000 + 5000);
+  f.db.close();
+});
+
 test('create encrypts secret, duplicates do not rotate, owner listing/get serialize safely', async () => {
   const f = await fixture(); const p = await f.create('single');
   const secret = p.publicPath.split('/').at(-1);

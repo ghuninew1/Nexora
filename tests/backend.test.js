@@ -222,6 +222,8 @@ test('admin maintenance setting is authorized, validated and enforced on storage
   assert.equal((await call('/api/admin/settings', 'PATCH', { maintenanceMode: true }, cookie)).status, 403);
   assert.equal((await call('/api/admin/settings', 'PATCH', { role: 'admin' })).status, 400);
   assert.equal((await call('/api/admin/settings', 'PATCH', { maintenanceMode: 'true' })).status, 400);
+  assert.equal((await call('/api/admin/settings', 'PATCH', { publicSharingEnabled: false }, cookie)).status, 403);
+  assert.equal((await call('/api/admin/settings', 'PATCH', { publicSharingEnabled: 'false' })).status, 400);
   assert.equal((await call('/api/admin/settings', 'PATCH', { maintenanceMode: true })).status, 200);
   try {
     const config = await handler(new Request(`${origin}/api/config`), env);

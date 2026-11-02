@@ -25,7 +25,7 @@ function PublicContent({ capability }) {
       try {
         const metadata = await getPublicShare(capability, { signal: c.signal });
         const page = metadata.object.type === 'folder' ? await listPublicObjects(capability, { parentId, signal: c.signal }) : { items: [], nextCursor: null };
-        if (!c.signal.aborted) setState({ status: 'ready', root: metadata.object, download: metadata.download, ...page });
+        if (!c.signal.aborted) setState({ status: 'ready', root: metadata.object, download: metadata.download, canPreview: metadata.preview, ...page });
       } catch { if (!c.signal.aborted) setState({ status: 'unavailable', root: null, items: [], nextCursor: null }); }
     }
     void load();
@@ -55,13 +55,13 @@ function PublicContent({ capability }) {
     const a = document.createElement('a'); a.href = publicObjectUrl(capability, file.objectId); a.referrerPolicy = 'no-referrer'; a.download = ''; document.body.append(a); a.click(); a.remove();
   }
   function actions(file) { return <div className={cx('flex shrink-0 flex-wrap gap-2')}>
-    {state.download && getStoragePreviewSpec(file) && <Button className={cx("min-h-11")} variant="outline" onClick={() => void openPreview(file)}><Eye data-icon="inline-start" />Preview</Button>}
+    {state.canPreview && getStoragePreviewSpec(file) && <Button className={cx("min-h-11")} variant="outline" onClick={() => void openPreview(file)}><Eye data-icon="inline-start" />Preview</Button>}
     {state.download && <Button className={cx("min-h-11")} onClick={() => download(file)}><Download data-icon="inline-start" />Download</Button>}
   </div>; }
   if (state.status === 'loading') return <p role="status" aria-live="polite">Loading shared item…</p>;
   if (state.status === 'unavailable') return <p role="alert">{SHARE_UNAVAILABLE}</p>;
   return <>
-    <header className={cx('glass-surface min-w-0 p-5')}><h1 className={cx('break-words text-2xl font-semibold [overflow-wrap:anywhere]')}>{state.root.name}</h1><p className={cx('my-3 text-sm text-muted-foreground')}>{state.root.type === 'folder' ? 'Shared folder' : `Shared file · ${state.root.sizeBytes === null ? 'Size not reported' : `${state.root.sizeBytes.toLocaleString()} bytes`}`} · View + Download</p>{state.root.type === 'file' && actions(state.root)}</header>
+    <header className={cx('glass-surface min-w-0 p-5')}><h1 className={cx('break-words text-2xl font-semibold [overflow-wrap:anywhere]')}>{state.root.name}</h1><p className={cx('my-3 text-sm text-muted-foreground')}>{state.root.type === 'folder' ? 'Shared folder' : `Shared file · ${state.root.sizeBytes === null ? 'Size not reported' : `${state.root.sizeBytes.toLocaleString()} bytes`}`} · {state.download ? 'View + Download' : 'View'}</p>{state.root.type === 'file' && actions(state.root)}</header>
     {state.root.type === 'folder' && <>
       <nav aria-label="Shared folder breadcrumb" className={cx('flex flex-wrap items-center gap-2 [overflow-wrap:anywhere]')}><Button variant="ghost" className={cx('h-auto min-h-11 min-w-0 max-w-full whitespace-normal break-all')} onClick={() => { closePreview(); setPath([]); }}>{state.root.name}</Button>{path.map((f, i) => <Button key={f.objectId} variant="ghost" className={cx('h-auto min-h-11 min-w-0 max-w-full whitespace-normal break-all')} onClick={() => { closePreview(); setPath(path.slice(0, i + 1)); }}>/ {f.name}</Button>)}</nav>
       {state.items.length === 0 && <p role="status">This folder is empty.</p>}
@@ -71,7 +71,7 @@ function PublicContent({ capability }) {
       {state.nextCursor && <Button variant="outline" onClick={() => void more()} disabled={state.status === 'more'}>{state.status === 'more' ? 'Loading…' : 'Load more'}</Button>}
     </>}
     {notice && <p role="alert">{notice}</p>}
-    <StorageFilePreviewDialog preview={preview} onOpenChange={open => { if (!open) closePreview(); }} onDownload={download} maxTextPreviewBytes={MAX_TEXT_PREVIEW_BYTES} />
+    <StorageFilePreviewDialog preview={preview} onOpenChange={open => { if (!open) closePreview(); }} onDownload={state.download ? download : null} maxTextPreviewBytes={MAX_TEXT_PREVIEW_BYTES} />
   </>;
 }
 export default function PublicSharePage() {

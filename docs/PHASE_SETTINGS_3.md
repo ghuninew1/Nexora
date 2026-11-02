@@ -1,5 +1,11 @@
 # Settings phases 1–3: source audit and work in progress
 
+## Current Phase 2 partial implementation
+
+Admin can enable/disable new public-share creation and public downloads, require expiration, and set a maximum link lifetime. Server checks policy on creation, replacement and public downloads, while existing links and supported previews remain available. Preview content is delivered to the browser and cannot be made unsaveable. Maintenance controls remain in place. Remaining Phase 2 policies and Phase 3 notifications/audit are not implemented; the older audit below remains historical.
+
+Local checks: lint, build, diff check and 148 tests passed. Browser/device and live-provider QA were not performed. No new migration or production operation was performed.
+
 ## Current Phase 1 implementation
 
 All rows below are stored in D1, loaded by the shared preference provider, exposed in Settings, consumed by the indicated behavior, server validated and have a fallback. These are source-level findings; browser/device and production verification remain pending.

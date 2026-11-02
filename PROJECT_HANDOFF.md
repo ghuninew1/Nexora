@@ -1,5 +1,16 @@
 # Nexora — Project Handoff
 
+## Public share expiry policy — partial Phase 2, 3 November 2026
+
+- Added admin settings to require expiration and cap new or replacement public-link lifetimes at 1, 7, 30 or 90 days. The server rejects `never` when expiration is required and clamps longer lifetimes to the configured maximum. The owner dialog adjusts choices to the effective policy. Existing links are not altered.
+- `pnpm lint`, `pnpm test` (148/148), `pnpm build`, and `git diff --check` passed. Browser/device and live-provider QA remain pending. Phase 2 and 3 remain incomplete; no migration, deployment or production change was made.
+
+## Public sharing controls — partial Phase 2, 3 November 2026
+
+- Added admin-only switches for new public-share creation and public downloads in the existing system settings table. Disabled creation leaves existing links intact; disabled downloads block the public download API while metadata and supported preview remain available. The public UI hides download controls and shows previews independently. Already delivered bytes and preview content cannot be recalled or technically prevented from being saved by recipients.
+- Phase 2 remains incomplete: branding, upload/extension, expiry and session/password policies are not implemented. Phase 3 notifications, audit and email remain unimplemented. No migration, deploy or production change was performed.
+- `pnpm lint`, `pnpm test` (147/147), `pnpm build` and `git diff --check` passed. Tests cover role/validation and existing-link, creation, download and preview behavior. Browser/device and live-provider verification remain pending.
+
 ## Settings Phase 1 — source implementation, 3 November 2026
 
 - Added account-backed theme synchronization, validated default storage selection (explicit accessible route, then preference, then first active mount), and Change Password using the existing PBKDF2 helper. Password change commits hash update and revocation of other sessions in one D1 batch, keeping the current session. Unsupported duplicate rename/replace are disabled in UI and rejected by the API; pre-existing unsupported values resolve to conflict reporting.

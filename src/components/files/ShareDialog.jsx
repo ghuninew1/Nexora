@@ -14,7 +14,17 @@ export default function ShareDialog({ file, storageId, initialShare, initialConf
   const [state, setState] = useState({ status: initialShare ? 'ready' : 'loading', share: initialShare ?? null, message: '' });
   const [confirm, setConfirm] = useState(initialConfirm);
   const [expirationOverride, setExpiresIn] = useState(null);
-  const expiresIn = expirationOverride ?? preferences?.shareExpiration ?? 'never';
+  const [sharingEnabled, setSharingEnabled] = useState(null);
+  const [sharePolicy, setSharePolicy] = useState(null);
+  const requestedExpiration = expirationOverride ?? preferences?.shareExpiration ?? 'never';
+  const days = { '1h': 1 / 24, '1d': 1, '7d': 7, '30d': 30, never: Infinity };
+  const maximum = sharePolicy?.maxShareLifetimeDays;
+  const expiresIn = maximum && days[requestedExpiration] > maximum ? `${maximum}d` : sharePolicy?.requireShareExpiration && requestedExpiration === 'never' ? '1d' : requestedExpiration;
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/config', { signal: controller.signal, cache: 'no-store' }).then(response => { if (!response.ok) throw new Error(); return response.json(); }).then(result => { setSharingEnabled(result.data.publicSharingEnabled === true); setSharePolicy(result.data); }).catch(() => { if (!controller.signal.aborted) setSharingEnabled(false); });
+    return () => controller.abort();
+  }, []);
   useEffect(() => {
     if (initialShare) return;
     const c = new AbortController();
@@ -41,11 +51,11 @@ export default function ShareDialog({ file, storageId, initialShare, initialConf
     {state.message && <p role="status" aria-live="polite">{state.message}</p>}
     {!busy && state.status !== 'error' && <label className={cx('flex flex-col gap-1.5 text-sm font-medium')}>Link expiration
       <select className={cx('glass-control min-h-11 rounded-lg px-3 text-sm font-normal')} value={expiresIn} onChange={event => setExpiresIn(event.target.value)}>
-        <option value="1h">1 hour</option><option value="1d">1 day</option><option value="7d">7 days</option><option value="30d">30 days</option><option value="never">Never expires</option>
+        <option value="1h">1 hour</option><option value="1d">1 day</option><option value="7d" disabled={Boolean(maximum && maximum < 7)}>7 days</option><option value="30d" disabled={Boolean(maximum && maximum < 30)}>30 days</option><option value="90d" disabled={Boolean(maximum && maximum < 90)}>90 days</option><option value="never" disabled={Boolean(sharePolicy?.requireShareExpiration || maximum)}>Never expires</option>
       </select>
       <span className={cx('text-xs font-normal text-muted-foreground')}>{state.share ? 'Applied when you replace the current link.' : 'The link stops working after this period.'}</span>
     </label>}
-    {state.status === 'error' ? <Button className={cx("min-h-11")} variant="outline" onClick={onClose}>Close and try again</Button> : !busy && !state.share ? <Button className={cx("min-h-11")} onClick={() => void action('create')}>Create public link</Button> : state.share && <div className={cx('flex min-w-0 flex-col gap-3')}>
+    {state.status === 'error' ? <Button className={cx("min-h-11")} variant="outline" onClick={onClose}>Close and try again</Button> : !busy && !state.share ? <><Button className={cx("min-h-11")} disabled={sharingEnabled !== true} onClick={() => void action('create')}>Create public link</Button>{sharingEnabled === false && <p role="status">Public link creation is unavailable.</p>}</> : state.share && <div className={cx('flex min-w-0 flex-col gap-3')}>
       <p className={cx('text-xs text-muted-foreground')}>{state.share.expiresAt ? `Expires ${new Date(state.share.expiresAt).toLocaleString()}` : 'Never expires'}{state.share.status === 'expired' ? ' · Expired' : ''}</p>
       {link && state.share.status === 'active' ? <><p className={cx('break-all rounded-lg border border-border p-3 text-xs')}>{new URL(link, window.location.origin).href}</p><div className={cx('flex flex-wrap gap-2')}><Button className={cx("min-h-11")} disabled={busy} onClick={async () => { try { await navigator.clipboard.writeText(new URL(link, window.location.origin).href); setState(s => ({ ...s, message: 'Link copied.' })); } catch { setState(s => ({ ...s, message: 'Could not copy. Select and copy the link above.' })); } }}>Copy Link</Button><Button className={cx("min-h-11")} variant="outline" nativeButton={false} render={<a href={link} target="_blank" rel="noopener noreferrer" />}>Open</Button></div></> : <p className={cx('text-sm text-muted-foreground')}>{state.share.status === 'expired' ? 'This link has expired.' : 'This link cannot be recovered. Replace it to enable copying on all devices.'} Replace the link to issue a new secret; the previous link will stop working.</p>}
       <div className={cx('flex flex-wrap gap-2')}><Button className={cx("min-h-11")} variant="outline" disabled={busy} onClick={() => setConfirm('replace')}>Replace link</Button><Button className={cx("min-h-11")} variant="destructive" disabled={busy} onClick={() => setConfirm('revoke')}>Revoke</Button></div>

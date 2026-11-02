@@ -3,10 +3,15 @@ import { ApiError, json, readJson } from './http.js';
 const defaults = Object.freeze({
   maintenanceMode: false,
   maintenanceMessage: 'Nexora is currently undergoing maintenance.',
+  publicSharingEnabled: true,
+  publicDownloadEnabled: true,
+  requireShareExpiration: false,
+  maxShareLifetimeDays: null,
 });
 
 function normalize(key, value) {
-  if (key === 'maintenanceMode' && typeof value === 'boolean') return value;
+  if (['maintenanceMode', 'publicSharingEnabled', 'publicDownloadEnabled', 'requireShareExpiration'].includes(key) && typeof value === 'boolean') return value;
+  if (key === 'maxShareLifetimeDays' && [null, 1, 7, 30, 90].includes(value)) return value;
   if (key === 'maintenanceMessage' && typeof value === 'string' && value.trim().length > 0 && value.length <= 300 && [...value].every(character => character.codePointAt(0) >= 32 && character.codePointAt(0) !== 127)) return value.trim();
   throw new ApiError('INVALID_INPUT', 400);
 }
