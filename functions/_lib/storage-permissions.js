@@ -59,7 +59,7 @@ export function intersectStoragePermissions(grants, capabilities, { readOnly = f
     createFolder: checked.createFolder && writable && provider.createFolder === true,
     rename: checked.rename && writable && provider.rename === true,
     move: checked.move && writable && provider.move === true,
-    copy: checked.copy && writable && provider.copy === true,
+    copy: read && checked.copy && writable && provider.copy === true,
     delete: remove,
     permanentDelete: remove && checked.permanentDelete && provider.permanentDelete === true,
     share,

@@ -740,7 +740,7 @@ test('copy uses the owner project, S2 POST contract, manual redirects, and safe 
     fetchImpl: async (url, init) => {
       const parsed = new URL(url);
       calls.push({ url: parsed, init });
-      if (parsed.pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      if (parsed.pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } });
       if (parsed.pathname.endsWith('/copy')) {
         return new Response(null, { status: 308, headers: { Location: `${parsed.pathname}/` } });
       }
@@ -778,7 +778,7 @@ test('copy blocks cross-origin redirects without sending Access or Bearer header
     fetchImpl: async (url, init) => {
       const parsed = new URL(url);
       calls.push({ parsed, init });
-      if (parsed.pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      if (parsed.pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } });
       return new Response(null, { status: 307, headers: { Location: 'https://untrusted.example/copy' } });
     },
   });
@@ -805,7 +805,7 @@ test('copy preserves safe S2 error codes and classifies provider and transport f
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({ parentId: null }), logger: { warn(line) { lines.push(line); } },
       fetchImpl: async (url) => new URL(url).pathname.endsWith('/capabilities')
-        ? Response.json({ success: true, capabilities: { copy: true } })
+        ? Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } })
         : Response.json({ success: false, error: { code, message: 'sensitive provider internals' } }, { status }),
     });
     const payload = await response.json();
@@ -824,7 +824,7 @@ test('copy preserves safe S2 error codes and classifies provider and transport f
     method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
     logger: { warn(line) { transportLines.push(line); } },
     fetchImpl: async (url) => {
-      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } });
       throw new TypeError('private network details');
     },
   });
@@ -839,7 +839,7 @@ test('copy distinguishes non-JSON upstream 502 from a Shared Storage provider er
     method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
     logger: { warn(line) { lines.push(line); } },
     fetchImpl: async (url) => new URL(url).pathname.endsWith('/capabilities')
-      ? Response.json({ success: true, capabilities: { copy: true } })
+      ? Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } })
       : new Response('<html>private gateway detail</html>', { status: 502, headers: { 'Content-Type': 'text/html' } }),
   });
   assert.equal(response.status, 503);
@@ -857,7 +857,7 @@ test('copy classifies timeout and malformed successful responses without exposin
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
       logger: { warn(line) { timeoutLines.push(line); } },
       fetchImpl: async (url, init) => {
-        if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+        if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } });
         return new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('private timeout details')), { once: true }));
       },
     });
@@ -870,7 +870,7 @@ test('copy classifies timeout and malformed successful responses without exposin
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId: null }),
       logger: { warn(line) { invalidLines.push(line); } },
       fetchImpl: async (url) => new URL(url).pathname.endsWith('/capabilities')
-        ? Response.json({ success: true, capabilities: { copy: true } })
+        ? Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } })
         : Response.json({ success: true, message: 'provider internals' }, { status: 201 }),
     });
     assert.equal(invalid.status, 502);
@@ -894,6 +894,7 @@ test('Trash listing preserves cursor pagination and exposes only normalized logi
   const calls = [];
   const response = await request(`/api/storage/v1/storages/${storageId}/trash?limit=25&cursor=page_2`, {
     fetchImpl: async (url, init) => {
+      if (new URL(url).pathname.endsWith('/capabilities')) return upstreamResponse(url, init);
       calls.push({ url: new URL(url), init });
       return Response.json({ success: true, items: [{
         ...object('object_trashed'), deletedAt: '2026-10-27T12:00:00.000Z',
@@ -1270,7 +1271,7 @@ test('copy size errors retain their safe operation-specific meaning', async () =
     body: JSON.stringify({ parentId: null }),
     fetchImpl: async (url) => {
       calls += 1;
-      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { copy: true } });
+      if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({ success: true, capabilities: { list: true, stat: true, copy: true } });
       return Response.json({ success: false, error: { code: 'OPERATION_TOO_LARGE', message: 'private tree details' } }, { status: 413 });
     },
   });
@@ -1289,6 +1290,7 @@ test('session values are cryptographically random and owner sessions can be revo
 test('recent-access rows are capped at 100 objects per user', async () => {
   const fetchImpl = async (url) => {
     const id = new URL(url).pathname.split('/').at(-1);
+    if (id === 'capabilities') return upstreamResponse(url);
     return Response.json({ success: true, object: object(id) });
   };
   for (let index = 0; index < 101; index += 1) {
@@ -1315,7 +1317,62 @@ test('admin assignment enables member discovery and listing, revoke removes both
   assert.equal((await discovery.json()).data.storages[0].storageId, storageId);
   const listPath = `/api/storage/v1/storages/${storageId}/objects`;
   assert.equal((await request(listPath, { headers: memberHeaders })).status, 200);
+  const base = listPath.slice(0, -8);
+  const actions = [
+    ['GET', '/objects/object_alpha', null, 'read'], ['GET', '/objects/object_alpha/preview', null, 'preview'],
+    ['GET', '/objects/object_alpha/download', null, 'download'], ['POST', '/files', 'upload', 'upload'],
+    ['POST', '/folders', { name: 'Folder' }, 'createFolder'], ['PATCH', '/objects/object_alpha', { name: 'Rename' }, 'rename'],
+    ['POST', '/objects/object_alpha/move', { parentId: null }, 'move'],
+    ['POST', '/objects/object_alpha/copy', { parentId: null }, 'copy'],
+    ['DELETE', '/objects/object_alpha', null, 'delete'], ['POST', '/trash/object_trashed/restore', {}, 'delete'],
+    ['DELETE', '/trash/object_trashed/permanent', null, 'permanentDelete'],
+  ];
+  for (const extra of [[], ['upload','createFolder'], ['rename','move','copy','delete','favorite'], ['permanentDelete','share','manageShare']]) {
+    for (const key of extra) permissions[key] = true;
+    assert.equal((await request(path + '/' + storageId, { method: 'PATCH', headers: { ...headers, Cookie: adminCookie }, body: JSON.stringify({ permissions, isDefault: true }) })).status, 200);
+    for (const [method, suffix, data, key] of actions) {
+      const upload = key === 'upload';
+      const response = await request(base + suffix, { method, headers: { ...headers, ...memberHeaders, ...(upload ? { 'Content-Type': 'multipart/form-data; boundary=test' } : {}) }, body: upload ? 'bytes' : data ? JSON.stringify(data) : undefined });
+      assert.equal(permissions[key] ? response.ok : response.status === 403, true, method + ' ' + suffix + ' ' + response.status);
+      await response.body?.cancel();
+    }
+  }
+  for (const policy of ['provider', 'read-only', 'maintenance']) {
+    if (policy === 'read-only') sqlite.prepare('UPDATE storage_mounts SET read_only = 1 WHERE id = ?').run(storageId);
+    if (policy === 'maintenance') sqlite.prepare("INSERT OR REPLACE INTO system_settings (key,value,updated_at) VALUES ('maintenanceMode','true',1)").run();
+    try {
+      for (const [method, suffix, data, key] of actions) {
+        if (policy !== 'provider' && method === 'GET') continue;
+        const upload = key === 'upload';
+        const fetchImpl = policy === 'provider' ? async url => {
+          assert.ok(new URL(url).pathname.endsWith('/capabilities'));
+          return Response.json({ capabilities: {} });
+        } : upstreamResponse;
+        const response = await request(base + suffix, { method, headers: { ...headers, ...memberHeaders, ...(upload ? { 'Content-Type': 'multipart/form-data; boundary=test' } : {}) }, body: upload ? 'bytes' : data ? JSON.stringify(data) : undefined, fetchImpl });
+        assert.equal(response.status, policy === 'provider' ? 422 : policy === 'maintenance' ? 503 : 403, policy + ' ' + suffix);
+      }
+    } finally {
+      sqlite.prepare('UPDATE storage_mounts SET read_only = 0 WHERE id = ?').run(storageId);
+      sqlite.prepare("DELETE FROM system_settings WHERE key = 'maintenanceMode'").run();
+    }
+  }
   assert.equal((await request(path + '/' + storageId, { method: 'DELETE', headers: { ...headers, Cookie: adminCookie } })).status, 200);
+  for (const [method, suffix] of [...actions, ['GET', '/capabilities'], ['GET', '/usage'], ['GET', '/operations/operation_alpha'], ['GET', '/trash']]) {
+    const response = await request(base + suffix, { method, headers: { ...headers, ...memberHeaders }, fetchImpl: () => { throw new Error('unexpected upstream request'); } });
+    assert.equal(response.status, 404, method + ' ' + suffix);
+  }
   assert.deepEqual((await (await request('/api/storage/v1/storages', { headers: memberHeaders })).json()).data.storages, []);
   assert.equal((await request(listPath, { headers: memberHeaders })).status, 404);
+});
+
+
+test('admin storage catalog is admin-only and omits provider mapping', async () => {
+  assert.equal((await request('/api/admin/storages')).status, 403);
+  const signedIn = await login('other@example.test', 'another correct horse battery staple');
+  const response = await request('/api/admin/storages', { headers: { Cookie: signedIn.headers.get('set-cookie').split(';')[0] } });
+  assert.equal(response.status, 200);
+  const payload = (await response.json()).data;
+  assert.ok(payload.storages.some(row => row.storageId === storageId));
+  for (const row of payload.storages) assert.deepEqual(Object.keys(row).sort(), ['name', 'readOnly', 'status', 'storageId']);
+  assert.equal(JSON.stringify(payload).includes(projectId), false);
 });

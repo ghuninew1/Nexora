@@ -1,4 +1,6 @@
-import { requireStorageAccess, requireStoragePermission } from './storage-access.js';
+import { requiredStoragePermissions, intersectStoragePermissions } from './storage-permissions.js';
+import { getSystemSettings } from './system-settings.js';
+import { getStorageAccessForUser, requireStorageAccess } from './storage-access.js';
 import { requireStorageMount, requireObjectId } from './authorization.js';
 import { ApiError, json, normalizeUpstreamError, readJson, statusFor } from './http.js';
 import { createStorageClient, normalizeCapabilities, normalizeObject, readBoundedJson } from './storage-client.js';
@@ -68,6 +70,10 @@ async function callJson(client, request, mount, path, options = {}) {
 
 async function requireCapability(client, request, mount, capability) {
   const payload = await callJson(client, request, mount, '/capabilities');
+  if (mount.grants) {
+    const effective = intersectStoragePermissions(mount.grants, payload?.capabilities, { readOnly: mount.read_only });
+    if (mount.required.some(name => !effective[name])) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
+  }
   if (payload?.capabilities?.[capability] !== true) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
 }
 
@@ -232,19 +238,20 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
   if (rest.length === 0) throw new ApiError('NOT_FOUND', 404);
   const [mountId, ...tail] = rest;
   if (!mountId) throw new ApiError('NOT_FOUND', 404);
-  const knownSubroutes = ['capabilities', 'usage', 'objects', 'trash', 'operations'];
-  if (!knownSubroutes.includes(tail[0])) {
-    const mount = await requireStorageMount(env.DB, user, mountId, { allowInactive: tail.length === 0 && method === 'GET' });
-    if (tail.length === 0 && method === 'GET') return json({ storage: { storageId: mount.id, name: mount.name,
-      providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only } });
-  }
   const route = tail[0];
-  const mount = route === 'objects' && tail.length === 1 && method === 'GET'
-    ? (await requireStoragePermission({ request, env, user, storageId: mountId, fetchImpl }, 'read')).mount
-    : await requireStorageMount(env.DB, user, mountId, {
-    diagnosticOperation: route === 'capabilities' ? 'capabilities' : undefined,
-    logger,
-  });
+  const required = requiredStoragePermissions(method, tail);
+  const access = await getStorageAccessForUser(env.DB, user, mountId);
+  if (!access || (access.mount.status !== 'active' && tail.length)) throw new ApiError('NOT_FOUND', 404);
+  const { mount, grants } = access;
+  mount.grants = grants;
+  mount.required = tail[2] === 'copy' ? [...required, 'read'] : required;
+  if (mount.provider !== 'garage') throw new ApiError('PROVIDER_UNAVAILABLE', 503);
+  if (required.some(key => !grants[key]) || (tail[2] === 'copy' && !grants.read)) throw new ApiError('FORBIDDEN', 403);
+  if (method !== 'GET' && mount.read_only) throw new ApiError('FORBIDDEN', 403);
+  if (!tail.length) return json({ storage: { storageId: mount.id, name: mount.name, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only } });
+  if (route === 'objects' && method === 'GET' && tail.length <= 2) {
+    await requireCapability(client, request, mount, tail.length === 1 ? 'list' : 'stat');
+  }
   const restTail = tail.slice(1);
   if (route === 'objects' && restTail[1] === 'copy' && method === 'POST') {
     copyDiagnostic(logger, 'stage=mount-resolved');
@@ -257,7 +264,13 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     }
     const configuredLimit = Number(env.STORAGE_MAX_UPLOAD_BYTES || MAX_UPLOAD_BYTES);
     const maxUploadBytes = Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? Math.min(configuredLimit, MAX_UPLOAD_BYTES) : MAX_UPLOAD_BYTES;
-    return json({ capabilities: normalizeCapabilities(payload?.capabilities, mount, maxUploadBytes) });
+    const caps = normalizeCapabilities(payload?.capabilities, mount, maxUploadBytes);
+    const policy = await getSystemSettings(env.DB);
+    const permissions = intersectStoragePermissions(grants, payload?.capabilities, { readOnly: mount.read_only, maintenance: user.role !== 'admin' && policy.maintenanceMode });
+    if (!policy.publicSharingEnabled) { permissions.share = false; permissions.manageShare = false; }
+    caps.copy = caps.copy && permissions.read;
+    for (const [flag, permission] of Object.entries({ list: 'read', stat: 'read', download: 'download', upload: 'upload', createFolder: 'createFolder', rename: 'rename', move: 'move', copy: 'copy', trash: 'delete', restore: 'delete', permanentDelete: 'permanentDelete' })) caps[flag] = caps[flag] && permissions[permission];
+    return json({ capabilities: caps, permissions });
   }
   if (route === 'usage' && method === 'GET' && restTail.length === 0) {
     return json({ usage: { status: 'unavailable', usedBytes: null, quotaBytes: null, objectCount: null, measuredAt: null } });
@@ -284,7 +297,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     return json({ object });
   }
   if (route === 'folders' && method === 'POST' && restTail.length === 0) {
-    const writable = await requireStorageMount(env.DB, user, mountId, { mutation: true });
+    const writable = mount;
     const body = await readJson(request);
     const name = validateName(body.name);
     const parentId = body.parentId ?? null;
@@ -298,7 +311,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     return json({ folder: object }, 201);
   }
   if (route === 'files' && method === 'POST' && restTail.length === 0) {
-    const writable = await requireStorageMount(env.DB, user, mountId, { mutation: true });
+    const writable = mount;
     const contentType = request.headers.get('Content-Type') || '';
     if (!/^multipart\/form-data;\s*boundary=/i.test(contentType) || !request.body) throw new ApiError('INVALID_INPUT', 415);
     const maxUploadBytes = Number(env.STORAGE_MAX_UPLOAD_BYTES || MAX_UPLOAD_BYTES);
@@ -329,7 +342,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
   if (route === 'objects' && restTail.length >= 1) {
     const objectId = requireObjectId(restTail[0]);
     const suffix = restTail.slice(1);
-    const writable = method === 'GET' ? mount : await requireStorageMount(env.DB, user, mountId, { mutation: true });
+    const writable = mount;
     if (suffix.length === 0 && method === 'PATCH') {
       const body = await readJson(request);
       const name = validateName(body.name);
@@ -423,6 +436,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     if (cursor && (cursor.length > 512 || !/^[A-Za-z0-9_-]+$/u.test(cursor))) throw new ApiError('INVALID_INPUT', 400);
     const query = new URLSearchParams({ limit: String(limit) });
     if (cursor) query.set('cursor', cursor);
+    await requireCapability(client, request, mount, 'trash');
     const payload = await callJson(client, request, mount, `/trash?${query}`);
     const nextCursor = payload?.nextCursor ?? null;
     if (nextCursor !== null && (typeof nextCursor !== 'string' || nextCursor.length > 512 || !/^[A-Za-z0-9_-]+$/u.test(nextCursor))) {
@@ -431,7 +445,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     return json({ items: (Array.isArray(payload?.items) ? payload.items : []).map(normalizeObject).filter(Boolean), nextCursor });
   }
   if (route === 'trash' && restTail.length === 2 && restTail[1] === 'restore' && method === 'POST') {
-    const writable = await requireStorageMount(env.DB, user, mountId, { mutation: true });
+    const writable = mount;
     const objectId = requireObjectId(restTail[0]);
     const body = await readJson(request);
     if (body.parentId !== undefined && body.parentId !== null) requireObjectId(body.parentId);
@@ -446,7 +460,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     return json({ object });
   }
   if (route === 'trash' && restTail.length === 2 && restTail[1] === 'permanent' && method === 'DELETE') {
-    const writable = await requireStorageMount(env.DB, user, mountId, { mutation: true });
+    const writable = mount;
     const objectId = requireObjectId(restTail[0]);
     await requireCapability(client, request, writable, 'permanentDelete');
     const snapshot = await findActivitySnapshot(env.DB, user.id, writable.id, objectId);
@@ -458,6 +472,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     return json({ operationId, deleted: true });
   }
   if (route === 'operations' && restTail.length === 1 && method === 'GET') {
+    await requireCapability(client, request, mount, 'stat');
     const operationId = requireObjectId(restTail[0]);
     const payload = await callJson(client, request, mount, `/operations/${encodeURIComponent(operationId)}`);
     const operation = payload?.operation;

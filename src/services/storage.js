@@ -84,6 +84,8 @@ function safeStorage(value) {
     || typeof value.name !== 'string' || !value.name.trim()
     || !['active', 'inactive'].includes(value.status)) return null;
   return {
+    ...(typeof value.isDefault === 'boolean' ? { isDefault: value.isDefault } : {}),
+    ...(value.permissions && typeof value.permissions === 'object' ? { permissions: value.permissions } : {}),
     storageId: value.storageId,
     name: value.name,
     providerLabel: typeof value.providerLabel === 'string' ? value.providerLabel : 'Private storage',

@@ -32,7 +32,7 @@ export async function requireStorageAccess({ request, env, user, storageId, fetc
   if (access.mount.provider !== 'garage') throw new ApiError('PROVIDER_UNAVAILABLE', 503);
   const client = createStorageClient({ env, fetchImpl });
   const [response, policy] = await Promise.all([
-    client.jsonRequest({ request, projectId: access.mount.shared_storage_project_id, path: '/capabilities' }),
+    client.jsonRequest({ request, projectId: access.mount.shared_storage_project_id, path: '/capabilities', operation: 'capabilities' }),
     getSystemSettings(env.DB),
   ]);
   const payload = response?.data && typeof response.data === 'object' ? response.data : response;

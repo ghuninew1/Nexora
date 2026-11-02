@@ -414,3 +414,15 @@ Documentation preference: README contains project information, setup and usage; 
 ## Assignment API wiring checkpoint
 
 Connected admin assignment CRUD, assignment-based discovery and object-list read authorization. API integration covers assign → member discovery/list → revoke → denied list. Other storage routes and frontend remain pending; do not claim complete. No deploy, remote migration or production verification performed.
+
+## Admin storage catalog
+
+Added admin-only GET /api/admin/storages with safe, bounded catalog fields and truncation flag. Added integration coverage for normal-user denial and omission of provider mapping. Remaining storage assignment integration and UI are not complete. No deployment or remote migration performed.
+
+Validation: lint, tests (158/158), build and diff check passed. Browser QA was not run.
+
+Default storage follow-up: preference writes now validate an active assignment with read grants rather than mount ownership. Discovery parsing retains permissions and assignment defaults; selection uses the admin initial default after an explicit route and user preference. Broad route wiring was attempted and withdrawn after regressions in redirect/diagnostic/capability tests; other routes remain owner-only. Lint/build/diff and the 158-test suite passed after withdrawing that wiring; no browser QA or production operation was performed.
+
+Core storage v1 operations now enforce session-scoped storage assignments, including object reads, transfers, mutations, Trash lifecycle and operation status. See docs/PHASE_STORAGE_ASSIGNMENT.md for the route matrix. Favorites, Recent, Public Share and UI integration remain separate.
+
+Verified locally with in-memory D1 and mocked storage: Viewer, Contributor, Editor and Full Access operations, provider denial, maintenance, read-only, and revoked requests. All 158 tests passed, as did lint, build and diff check. No production operations performed.

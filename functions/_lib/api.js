@@ -57,6 +57,10 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
       } else if (parts[1] === 'admin') {
         const user = await requireAdmin(request, env);
         if (['POST', 'PATCH', 'DELETE'].includes(request.method)) requireSameOrigin(request);
+        if (parts[2] === 'storages' && parts.length === 3 && request.method === 'GET') {
+          const rows = await env.DB.prepare('SELECT id, name, status, read_only FROM storage_mounts ORDER BY name, id LIMIT 501').bind().all();
+          response = json({ storages: rows.results.slice(0, 500).map(row => ({ storageId: row.id, name: row.name, status: row.status, readOnly: Number(row.read_only) === 1 })), truncated: rows.results.length > 500 });
+        } else
         response = parts[2] === 'users' ? await handleAdminUsers({ request, env, user, parts }) : await handleAdminSettings({ request, env, user, parts });
       } else if (parts[1] === 'settings') {
         const user = await requireUser(request, env);

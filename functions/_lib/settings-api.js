@@ -1,5 +1,5 @@
 import { ApiError, json, readJson } from './http.js';
-import { requireStorageMount } from './authorization.js';
+import { getStorageAccessForUser } from './storage-access.js';
 import { validateNewUserPassword } from './auth.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { getSystemSettings } from './system-settings.js';
@@ -38,7 +38,8 @@ export async function handleSettingsApi({ request, env, user, parts }) {
       if (allowed && !allowed.includes(value)) throw new ApiError('INVALID_INPUT', 400);
       if (key === 'defaultStorageId' && value !== null) {
         if (typeof value !== 'string') throw new ApiError('INVALID_INPUT', 400);
-        await requireStorageMount(env.DB, user, value);
+        const access = await getStorageAccessForUser(env.DB, user, value);
+        if (!access || !access.grants.read || access.mount.status !== 'active') throw new ApiError('NOT_FOUND', 404);
       }
     }
     const now = Date.now();

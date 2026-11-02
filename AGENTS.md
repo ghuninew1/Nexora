@@ -239,4 +239,8 @@ Admin-configurable password minimum (8/10/12/14/16 UTF-8 bytes) and optional low
 
 The Header account control opens `/account`, where the signed-in user can view identity, update their display name and sign out other sessions while keeping the current session. Profile images are not implemented. Admins can manage ordinary users at `/admin/users` using server-protected `/api/admin/users` routes; admin accounts remain provisioned separately. Creation does not provision storage. Deletion is blocked while any mount belongs to the user; account metadata and sessions otherwise cascade on deletion. Never delete a user without addressing ownership of their storage mounts and dependent records.
 
-Runtime assignment checkpoint: admin assignment CRUD, assignment discovery and object-list read authorization are wired. All other owner-only paths and UI remain pending; see docs/PHASE_STORAGE_ASSIGNMENT.md.
+Runtime storage v1 requests resolve assignments for every route. Favorites, Recent and public-share handlers have separate authorization paths. See docs/PHASE_STORAGE_ASSIGNMENT.md.
+
+Admin-only `GET /api/admin/storages` returns bounded safe storage catalog summaries (500 maximum plus truncation flag), without provider mapping. Assignment UI and remaining authorization migration are not complete.
+
+Core storage v1 operations now enforce session-scoped storage assignments, including object reads, transfers, mutations, Trash lifecycle and operation status. See docs/PHASE_STORAGE_ASSIGNMENT.md for the route matrix. Favorites, Recent, Public Share and UI integration remain separate.

@@ -67,7 +67,7 @@ Shared Storage Service ── object storage
 
 Browser ใช้ Nexora logical IDs และไม่รับ credentials หรือ provider references ส่วน Pages Functions ตรวจ session, ownership และ capabilities ก่อนเรียก Storage Service ซึ่งเป็นระบบแยกจาก Nexora ข้อมูลใน `src/data/files.js` เป็น fixture สำหรับตัวอย่าง legacy เท่านั้น
 
-Storage discovery และการ list objects ใช้ assignment แล้ว แต่ API อื่นยังจำกัดตามเจ้าของ mount; Admin assignment API มีแล้ว ส่วน UI และการบังคับสิทธิ์ครบทุกเส้นทางยังอยู่ระหว่างพัฒนา
+Storage discovery และทุก operation ใน Storage API v1 ตรวจ assignment ของผู้ใช้ ส่วน Favorites, Recent และ Public Share ยังอยู่ระหว่างการเชื่อมสิทธิ์
 
 ```text
 src/                 React app, pages, components, hooks และ API clients
@@ -92,3 +92,7 @@ tests/               automated tests
 ## License
 
 ดู [LICENSE](LICENSE)
+
+Admin API มีรายการ storage สำหรับการ assign ที่ `/api/admin/storages`; UI จัดการ assignment ยังอยู่ระหว่างพัฒนา
+
+Core storage v1 operations now enforce session-scoped storage assignments, including object reads, transfers, mutations, Trash lifecycle and operation status. See docs/PHASE_STORAGE_ASSIGNMENT.md for the route matrix. Favorites, Recent, Public Share and UI integration remain separate.
