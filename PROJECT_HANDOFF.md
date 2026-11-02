@@ -1,5 +1,10 @@
 # Nexora — Project Handoff
 
+## Storage assignment — partial follow-up, 3 November 2026
+
+- The user reports migration 0009 applied; this was not independently verified. Added an isolated assignment lookup and permission gate intersecting grants with provider capabilities, mount read-only, maintenance and sharing policy. It is not wired into runtime routes, discovery or UI; existing owner-only behavior remains in force. Public share lifecycle and all assignment integration remain outstanding.
+- `pnpm lint`, `pnpm test` (156/156) and `git diff --check` passed. The new test uses in-memory SQLite and a mocked provider. No build, browser QA, deployment or remote migration was performed.
+
 ## Storage assignment — partial, 3 November 2026
 
 - The user reports migration 0008 applied; this was not independently verified. Added `0009_storage_access_defaults.sql` to enforce one assignment default per user and backfill existing mount owners without overwriting existing assignments. This migration has not been applied. Existing user preferences and provider mappings are unchanged.
