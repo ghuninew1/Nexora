@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { cx } from '../utils/cx';
+import StorageAssignments from '../components/admin/StorageAssignments';
 import { usePasswordPolicy } from '../hooks/usePasswordPolicy';
 
 const emptyForm = { email: '', displayName: '', password: '', active: true };
@@ -12,6 +13,7 @@ export default function AdminUsersPage() {
   const passwordPolicy = usePasswordPolicy();
   const { user } = useAuth();
   const [rows, setRows] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [truncated, setTruncated] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
@@ -57,11 +59,12 @@ export default function AdminUsersPage() {
     void perform(editor.id ? 'PATCH' : 'POST', editor.id ? `/api/admin/users/${encodeURIComponent(editor.id)}` : '/api/admin/users', body);
   }
   return <div className={cx('flex flex-col gap-5')}>
-    <div className={cx('flex flex-wrap items-center justify-between gap-3')}><div><h1 className={cx('text-2xl font-semibold')}>User management</h1><p className={cx('mt-1 text-sm text-muted-foreground')}>Create and manage user accounts. Storage access is provisioned separately.</p></div><Button onClick={() => edit(null)}>Create user</Button></div>
+    <div className={cx('flex flex-wrap items-center justify-between gap-3')}><div><h1 className={cx('text-2xl font-semibold')}>User management</h1><p className={cx('mt-1 text-sm text-muted-foreground')}>Create and manage user accounts. Manage storage access for each account.</p></div><Button onClick={() => edit(null)}>Create user</Button></div>
     {feedback && <p role="status" className={cx('text-sm')}>{feedback}</p>}
     {!rows && !feedback && <p role="status">Loading users…</p>}
     {truncated && <p role="status">Showing the first 500 users.</p>}
-    {rows && <div className={cx('glass-surface divide-y divide-border overflow-hidden')}>{rows.map(row => <div key={row.id} className={cx('flex flex-wrap items-center justify-between gap-3 p-4')}><div className={cx('min-w-0')}><p className={cx('break-words font-medium')}>{row.displayName}</p><p className={cx('break-all text-sm text-muted-foreground')}>{row.email} · {row.role} · {row.active ? 'Active' : 'Inactive'}</p></div>{row.role === 'user' && <div className={cx('flex gap-2')}><Button variant="outline" onClick={() => edit(row)}>Edit</Button><Button variant="destructive" onClick={() => { setError(''); setDeleting(row); }}>Delete</Button></div>}</div>)}</div>}
+    {rows && <div className={cx('glass-surface divide-y divide-border overflow-hidden')}>{rows.map(row => <div key={row.id} className={cx('flex flex-wrap items-center justify-between gap-3 p-4')}><div className={cx('min-w-0')}><p className={cx('break-words font-medium')}>{row.displayName}</p><p className={cx('break-all text-sm text-muted-foreground')}>{row.email} · {row.role} · {row.active ? 'Active' : 'Inactive'}</p></div><div className={cx('flex flex-wrap gap-2')}><Button variant="outline" onClick={() => setSelectedUser(row)}>Storage access</Button>{row.role === 'user' && <><Button variant="outline" onClick={() => edit(row)}>Edit</Button><Button variant="destructive" onClick={() => { setError(''); setDeleting(row); }}>Delete</Button></>}</div></div>)}</div>}
+    {selectedUser && <StorageAssignments key={selectedUser.id} selectedUser={selectedUser} />}
     <Dialog open={Boolean(editor)} onOpenChange={open => { if (!open && !busy) setEditor(null); }}><DialogContent><DialogHeader><DialogTitle>{editor?.id ? 'Edit user' : 'Create user'}</DialogTitle><DialogDescription>New accounts have the user role. Administrator accounts are managed through provisioning.</DialogDescription></DialogHeader>
       <form onSubmit={submit} className={cx('flex flex-col gap-4')}>
         <label className={cx('flex flex-col gap-1 text-sm')}>Display name<Input required maxLength={120} value={form.displayName} disabled={busy} onChange={e => setForm({ ...form, displayName: e.target.value })} /></label>

@@ -135,7 +135,7 @@ function RecentPage({ page }) {
   useEffect(() => { void refreshRecent(); }, [refreshRecent]);
   return <div className={cx("flex flex-col gap-6")}>
     <PageHeading eyebrow="Your library" title={page.label} description="Files and folders you explicitly accessed most recently." action={<Button type="button" variant="outline" onClick={() => void browser.refreshRecent()} disabled={["loading", "refreshing"].includes(browser.recentStatus)} aria-busy={["loading", "refreshing"].includes(browser.recentStatus)}><RefreshCw data-icon="inline-start" />Refresh</Button>} />
-    {storage.status === "empty" && <div className={cx("glass-surface px-4 py-3 text-sm text-muted-foreground")} role="status">No active storage mount is connected.</div>}
+    {storage.status === "empty" && <div className={cx("glass-surface px-4 py-3 text-sm text-muted-foreground")} role="status">No storage assigned. Contact an administrator for access.</div>}
     <RecentPanel browser={browser} items={browser.recentItems} emptyTitle="No recent activity" />
   </div>;
 }
@@ -301,7 +301,7 @@ function StoragePage({ page }) {
   const description = status === "ready"
     ? "Nexora can reach this storage through its secure server-side connection. File Browser operations use this mount when the required capability is available; upload progress is reported as status only."
     : status === "empty"
-      ? "No active storage mount is available for this account. Connect a mount to use the File Browser operations."
+      ? "No storage assigned. Contact an administrator for access."
       : status === "unavailable"
         ? (error || "Storage could not be reached. Try refreshing the connection.")
         : "Checking the storage mount assigned to this account.";

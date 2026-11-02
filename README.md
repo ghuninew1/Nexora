@@ -93,6 +93,6 @@ tests/               automated tests
 
 ดู [LICENSE](LICENSE)
 
-Admin API มีรายการ storage สำหรับการ assign ที่ `/api/admin/storages`; UI จัดการ assignment ยังอยู่ระหว่างพัฒนา
+Admin สามารถจัดการ storage assignment ของผู้ใช้ได้ใน Administration > Users
 
 Core storage v1 operations now enforce session-scoped storage assignments, including object reads, transfers, mutations, Trash lifecycle and operation status. See docs/PHASE_STORAGE_ASSIGNMENT.md for the route matrix. Favorites, Recent, Public Share and UI integration remain separate.

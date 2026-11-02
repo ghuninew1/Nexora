@@ -19,7 +19,7 @@ Admin POST/PATCH/DELETE and GET assignment routes at `/api/admin/users/:userId/s
 | --- | --- |
 | Admin assign API | PARTIAL (dependency normalization pending) |
 | Admin storage catalog | COMPLETE |
-| Admin assign UI | PARTIAL (not implemented) |
+| Admin assign UI | PARTIAL (implementation added; browser flow not verified) |
 | Discovery | COMPLETE |
 | Core Storage v1 route authorization | COMPLETE |
 | Default storage | PARTIAL (assignment uniqueness and revoke cleanup only) |
@@ -53,3 +53,7 @@ Every user-facing route below resolves the session user's assignment before acce
 | Permanent delete | permanentDelete (depends on delete) | trash and permanentDelete |
 
 The core route migration supersedes earlier partial-route checkpoints. Favorites, Recent, Public Share and UI integration remain separate work.
+
+Files and Dashboard/Storage explain an empty assignment list. Default selection tests cover route, user preference, admin default and revoked default fallback. Admin assignment UI and complete permission gating remain partial. Browser QA has not been run.
+
+Admin Users now provides assignment list, catalog, preset/custom editing, default selection and revoke confirmation using the existing admin APIs. Dependency controls enforce read/preview/download/favorite, delete/permanentDelete and share/manageShare relationships. The catalog reports when its 500-item limit truncates results. Browser flow and narrow-screen QA remain unverified. User action gating, Favorites, Recent and Public Share integration remain pending.

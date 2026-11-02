@@ -37,7 +37,7 @@ function FileBrowser() {
   const { clipboard, setClipboard } = useFilesData();
   const [clipboardMessage, setClipboardMessage] = useState("");
   const pasteBusy = useRef(false);
-  const { capabilities, activeStorage } = useStorage();
+  const { capabilities, activeStorage, status: storageStatus } = useStorage();
   const [shareFile, setShareFile] = useState(null);
   const canShare = file => Boolean(file && !activeStorage?.readOnly && !capabilities?.readOnly && capabilities?.stat && capabilities?.[file.type === "folder" ? "list" : "download"]);
   const navigate = useNavigate();
@@ -229,7 +229,8 @@ function FileBrowser() {
         <UploadQueue items={browser.uploadQueue.items} concurrency={browser.uploadQueue.concurrency} onCancel={browser.cancelUpload} onRetry={browser.retryUpload} onClearFinished={browser.clearFinishedUploads} />
 
         {isLoading && <FileListLoading />}
-        {browser.status === "unavailable" && <div className={cx("glass-surface flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between")} role="alert"><div className={cx("flex items-start gap-3")}><AlertCircle className={cx("mt-0.5 size-5 shrink-0 text-destructive")} aria-hidden="true" /><div><h2 className={cx("text-sm font-semibold")}>Storage is not ready</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>{browser.error || "No active storage is available for this account."}</p></div></div><Button variant="outline" onClick={() => navigate("/storage")}>View storage</Button></div>}
+        {storageStatus === "empty" && <div className={cx("glass-surface p-5")} role="status"><h2 className={cx("text-sm font-semibold")}>No storage assigned</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>You do not currently have access to any storage. Contact an administrator for access.</p></div>}
+        {browser.status === "unavailable" && storageStatus !== "empty" && <div className={cx("glass-surface flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between")} role="alert"><div className={cx("flex items-start gap-3")}><AlertCircle className={cx("mt-0.5 size-5 shrink-0 text-destructive")} aria-hidden="true" /><div><h2 className={cx("text-sm font-semibold")}>Storage is not ready</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>{browser.error || "No active storage is available for this account."}</p></div></div><Button variant="outline" onClick={() => navigate("/storage")}>View storage</Button></div>}
         {browser.status === "error" && <div className={cx("glass-surface flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between")} role="alert"><div className={cx("flex items-start gap-3")}><AlertCircle className={cx("mt-0.5 size-5 shrink-0 text-destructive")} aria-hidden="true" /><div><h2 className={cx("text-sm font-semibold")}>Could not load this folder</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>{browser.error}</p></div></div><div className={cx("flex gap-2")}><Button variant="outline" onClick={() => void browser.refreshCurrentFolder()}>Try again</Button>{browser.folderId && <Button variant="ghost" onClick={browser.navigateRoot}><FolderOpen />My Files</Button>}</div></div>}
         {isReady && <>
           <div aria-live="polite" aria-atomic="true" className={cx("sr-only")}>{isRefreshing ? "Refreshing folder contents" : `${browser.items.length} items loaded`}</div>

@@ -426,3 +426,11 @@ Default storage follow-up: preference writes now validate an active assignment w
 Core storage v1 operations now enforce session-scoped storage assignments, including object reads, transfers, mutations, Trash lifecycle and operation status. See docs/PHASE_STORAGE_ASSIGNMENT.md for the route matrix. Favorites, Recent, Public Share and UI integration remain separate.
 
 Verified locally with in-memory D1 and mocked storage: Viewer, Contributor, Editor and Full Access operations, provider denial, maintenance, read-only, and revoked requests. All 158 tests passed, as did lint, build and diff check. No production operations performed.
+
+## Storage assignment UI checkpoint
+
+Files and Dashboard/Storage empty states now explain when no storage is assigned. Added default-selection coverage for admin initial default, user preference, route override and revoked-default fallback. Admin assignment UI and complete action gating remain outstanding. Lint, 159 tests, build and diff check passed. Browser QA was not run. No production operations were performed.
+
+## Admin storage assignment UI
+
+Users page now includes assigned storage listing and assignment/edit/revoke dialogs using admin APIs. Preset and custom permission dependencies, default badge, loading/error/retry and catalog truncation states are included. User changes cancel or ignore stale requests. Lint, 161 tests, build and diff check passed. Browser and mobile QA were not run, including interactive submit flow. User permission gating, Favorites, Recent and Public Share integration remain pending. No deployment, migration or production mutation was performed.
