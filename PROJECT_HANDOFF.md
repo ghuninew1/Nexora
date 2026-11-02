@@ -1,5 +1,11 @@
 # Nexora — Project Handoff
 
+## Settings Phase 1 — source implementation, 3 November 2026
+
+- Added account-backed theme synchronization, validated default storage selection (explicit accessible route, then preference, then first active mount), and Change Password using the existing PBKDF2 helper. Password change commits hash update and revocation of other sessions in one D1 batch, keeping the current session. Unsupported duplicate rename/replace are disabled in UI and rejected by the API; pre-existing unsupported values resolve to conflict reporting.
+- Phase 1 behavior and its deferred conflict modes are inventoried in `docs/PHASE_SETTINGS_3.md`. No Phase 2/3 work, migration, deploy or production change was made. Browser/device and live-provider verification remain pending.
+- Local validation: `pnpm lint`, `pnpm test` (146/146), `pnpm build`, and `git diff --check` passed. Tests cover password verification/session revocation, password confirmation and storage selection; UI interactions and live D1 behavior were not browser-tested.
+
 ## File preferences — partial, 3 November 2026
 
 - Settings now saves default file sort/direction, single-item Move to Trash confirmation, and public-share expiry alongside upload preferences. File Browser uses the default until a temporary sort choice is made, preserves it across folder navigation, and supports type sorting. Skipping confirmation applies only to a single normal Move to Trash; bulk and permanent deletion still confirm. Share creation/replacement accepts 7d and 30d as well as existing choices.

@@ -1,6 +1,8 @@
 import { Sun, Moon, Monitor } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { cx } from "../utils/cx";
+import { useState } from 'react';
+import { usePreferences } from '../hooks/usePreferences';
 import { Button } from "../components/ui/button";
 import {
     DropdownMenu,
@@ -20,10 +22,20 @@ const options = [
 
 export default function ThemeToggle() {
     const { theme, setTheme } = useTheme();
+    const { preferences, save } = usePreferences();
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState('');
     const current = options.find((option) => option.value === theme) ?? options[1];
     const Icon = current.icon;
 
-    return (
+    async function changeTheme(value) {
+        const previous = theme;
+        setError(''); setPending(true); setTheme(value);
+        try { await save({ theme: value }); }
+        catch { setTheme(previous); setError('Could not save theme. Try again.'); }
+        finally { setPending(false); }
+    }
+    return (<>
         <DropdownMenu>
             <DropdownMenuTrigger
                 render={
@@ -32,6 +44,7 @@ export default function ThemeToggle() {
                         size="icon-lg"
                         aria-label={`Theme: ${current.label}`}
                         title={`Theme: ${current.label}`}
+                        disabled={pending || !preferences}
                     />
                 }
             >
@@ -40,7 +53,7 @@ export default function ThemeToggle() {
             <DropdownMenuContent align="end" className={cx("min-w-40")}>
                 <DropdownMenuGroup>
                     <DropdownMenuLabel>Appearance</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+                    <DropdownMenuRadioGroup value={theme} onValueChange={changeTheme}>
                         {options.map(({ value, label, icon: OptionIcon }) => (
                             <DropdownMenuRadioItem key={value} value={value} closeOnClick>
                                 <OptionIcon />
@@ -50,6 +63,6 @@ export default function ThemeToggle() {
                     </DropdownMenuRadioGroup>
                 </DropdownMenuGroup>
             </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>{error && <span role="alert" className={cx('text-xs text-destructive')}>{error}</span>}</>
     );
 }

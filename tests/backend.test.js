@@ -33,7 +33,7 @@ test('preferences defaults, validation and account-owned storage', async () => {
   assert.equal(defaults.uploadConcurrency, 3);
   assert.equal(defaults.shareExpiration, '7d');
   const headers = { Origin: origin, 'Content-Type': 'application/json' };
-  for (const body of [{ role: 'admin' }, { theme: 'blue' }, { confirmDelete: 1 }, { uploadConcurrency: 4 }, { autoClearUploads: 'false' }, { defaultStorageId: 'missing' }]) {
+  for (const body of [{ role: 'admin' }, { theme: 'blue' }, { confirmDelete: 1 }, { uploadConcurrency: 4 }, { autoClearUploads: 'false' }, { uploadConflictBehavior: 'rename' }, { uploadConflictBehavior: 'replace' }, { defaultStorageId: 'missing' }]) {
     const response = await request('/api/settings/preferences', { method: 'PATCH', headers, body: JSON.stringify(body) });
     assert.ok([400, 404].includes(response.status));
   }
@@ -61,6 +61,11 @@ test('logout other sessions preserves current session', async () => {
 
 function d1(database) {
   return {
+    async batch(statements) {
+      database.exec('BEGIN');
+      try { const results = []; for (const statement of statements) results.push(await statement.run()); database.exec('COMMIT'); return results; }
+      catch (error) { database.exec('ROLLBACK'); throw error; }
+    },
     prepare(sql) {
       return {
         async run(...values) { return { success: true, meta: database.prepare(sql).run(...values) }; },
@@ -150,6 +155,23 @@ before(async () => {
 });
 
 after(() => sqlite?.close());
+
+test('change password verifies old password and retains only current session', async () => {
+  const created = await createUser({ db: env.DB, email: 'password@example.test', displayName: 'Password User', password: 'original password' });
+  const first = await login('password@example.test', 'original password');
+  const second = await login('password@example.test', 'original password');
+  const firstCookie = first.headers.get('Set-Cookie').split(';')[0];
+  const secondCookie = second.headers.get('Set-Cookie').split(';')[0];
+  const call = (currentPassword, newPassword) => handler(new Request(`${origin}/api/settings/change-password`, { method: 'POST', headers: { Cookie: firstCookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword, newPassword }) }), env);
+  assert.equal((await call('incorrect', 'new long password')).status, 403);
+  assert.equal((await call('original password', 'short')).status, 400);
+  assert.equal((await call('original password', 'new long password')).status, 200);
+  assert.equal((await handler(new Request(`${origin}/api/auth/me`, { headers: { Cookie: firstCookie } }), env)).status, 200);
+  assert.equal((await handler(new Request(`${origin}/api/auth/me`, { headers: { Cookie: secondCookie } }), env)).status, 401);
+  assert.equal((await login('password@example.test', 'original password')).status, 401);
+  assert.equal((await login('password@example.test', 'new long password')).status, 200);
+  sqlite.prepare('DELETE FROM users WHERE id = ?').run(created.id);
+});
 
 test('admin manages user accounts with ownership and storage deletion safeguards', async () => {
   const adminResponse = await login('other@example.test', 'another correct horse battery staple');

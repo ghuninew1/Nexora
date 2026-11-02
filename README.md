@@ -16,6 +16,7 @@ Nexora เป็นเว็บจัดการไฟล์สำหรับ 
 - **Account:** กดชื่อหรือไอคอนผู้ใช้ใน Header เพื่อดูข้อมูลบัญชี เปลี่ยนชื่อที่แสดง และออกจากระบบ session อื่น
 - **Upload preferences:** ตั้งจำนวน upload พร้อมกันและเลือกให้ล้างรายการที่สำเร็จอัตโนมัติได้ใน Settings
 - **File preferences:** ตั้งค่าเริ่มต้นการเรียงไฟล์ การยืนยันย้ายรายการเดี่ยวไป Trash และอายุ public link ที่สร้างใหม่ได้ใน Settings
+- **Account settings:** ตั้งธีมและ storage เริ่มต้นตามบัญชี เปลี่ยนรหัสผ่าน และออกจาก session อื่นได้; การอัปโหลดชื่อซ้ำจะแจ้ง conflict โดยยังไม่รองรับ rename หรือ replace อัตโนมัติ
 - **User management:** Admin สร้าง แก้ไข ระงับ และลบบัญชี user ได้จาก Settings; บัญชีที่มี storage mount ต้องจัดการ mount ก่อนลบ และ storage ของบัญชีใหม่ต้อง provision แยก
 - **Administration:** ผู้ดูแลเปิด maintenance mode เพื่อให้ผู้ใช้ทั่วไปอ่านไฟล์ได้ แต่เปลี่ยนไฟล์ Favorites หรือ public links ไม่ได้ ผู้ดูแลยังทำงานได้ตามสิทธิ์ storage ของตน
 

@@ -347,7 +347,7 @@ function SettingsPage({ page }) {
     <UploadPreferences />
     {user?.role === 'admin' && <><section className={cx('glass-surface flex flex-wrap items-center justify-between gap-3 p-5')}><div><h2 className={cx('font-semibold')}>Administration · Users</h2><p className={cx('mt-1 text-sm text-muted-foreground')}>Create and manage user accounts.</p></div><Button variant="outline" onClick={() => navigate('/admin/users')}>Manage users</Button></section><AdminMaintenance /></>}
     <section className={cx("glass-surface p-5")}>
-      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Recent, Favorites, File Browser, and Trash use connected Nexora data where available. Shared manages persistent public links; Theme preference is saved locally in this browser.</p></div></div>
+      <div className={cx("flex items-start gap-3")}><Activity className={cx("mt-0.5 size-4 text-muted-foreground")} /><div><h2 className={cx("text-sm font-semibold")}>Workspace data</h2><p className={cx("mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground")}>Dashboard, Recent, Favorites, File Browser, and Trash use connected Nexora data where available. Shared manages persistent public links; account preferences are stored with your account.</p></div></div>
     </section>
   </div>;
 }

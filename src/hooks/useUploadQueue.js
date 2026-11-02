@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const MAX_UPLOAD_CONCURRENCY = 2;
+const MAX_UPLOAD_CONCURRENCY = 3;
 const SUCCESS_DISMISS_DELAY_MS = 5000;
 
 function errorMessage(error) {

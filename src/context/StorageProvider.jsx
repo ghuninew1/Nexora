@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getStorageCapabilities, getStorageUsage, listStorages, StorageApiError } from '../services/storage';
 import { StorageContext } from './storage-context';
+import { usePreferences } from '../hooks/usePreferences';
+import { useLocation } from 'react-router-dom';
+import { selectDefaultStorage } from '../utils/default-storage';
 
 const EMPTY_USAGE = { status: 'unavailable', usedBytes: null, quotaBytes: null, objectCount: null, measuredAt: null };
 const initialState = { status: 'loading', storages: [], activeStorage: null, capabilities: null, usage: EMPTY_USAGE, error: null };
@@ -9,6 +12,10 @@ const initialState = { status: 'loading', storages: [], activeStorage: null, cap
 export function StorageProvider({ children }) {
   const auth = useAuth();
   const { status: authStatus, expireSession } = auth;
+  const { preferences, status: preferencesStatus } = usePreferences();
+  const preferredStorageId = preferences?.defaultStorageId;
+  const location = useLocation();
+  const routeStorageId = location.pathname === '/files' ? location.state?.fileBrowser?.storageId : null;
   const [state, setState] = useState(initialState);
   const controllerRef = useRef(null);
   const sequenceRef = useRef(0);
@@ -25,7 +32,7 @@ export function StorageProvider({ children }) {
     try {
       const storages = await listStorages({ signal: controller.signal });
       if (!isCurrent()) return;
-      const activeStorage = storages.find((storage) => storage.status === 'active') ?? null;
+      const activeStorage = selectDefaultStorage(storages, routeStorageId, preferredStorageId);
       if (!activeStorage) {
         setState({ status: 'empty', storages, activeStorage: null, capabilities: null, usage: EMPTY_USAGE, error: null });
         return;
@@ -63,10 +70,10 @@ export function StorageProvider({ children }) {
       if (error instanceof StorageApiError && error.status === 401) expireSession();
       setState({ status: 'unavailable', storages: [], activeStorage: null, capabilities: null, usage: EMPTY_USAGE, error: error?.message || 'Storage is temporarily unavailable. Try again later.' });
     }
-  }, [authStatus, expireSession]);
+  }, [authStatus, expireSession, preferredStorageId, routeStorageId]);
 
   useEffect(() => {
-    if (authStatus !== 'authenticated') {
+    if (authStatus !== 'authenticated' || preferencesStatus === 'loading') {
       controllerRef.current?.abort();
       sequenceRef.current += 1;
       return undefined;
@@ -80,7 +87,7 @@ export function StorageProvider({ children }) {
       controllerRef.current?.abort();
       sequenceRef.current += 1;
     };
-  }, [authStatus, refresh]);
+  }, [authStatus, preferencesStatus, refresh]);
 
   const visibleState = authStatus === 'authenticated' ? state : initialState;
   const value = useMemo(() => ({ ...visibleState, refresh }), [visibleState, refresh]);

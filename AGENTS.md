@@ -99,7 +99,7 @@ Check this map against actual files when changing the architecture; update READM
 - Recent folder actions must navigate to the `/files` pathname with the logical `folder` query and validated breadcrumb state; changing search parameters alone leaves the user on `/recent`.
 - Recent and Dashboard Recent panels must mount the shared preview dialog when exposing Preview; hide Preview for unsupported MIME types and objects larger than their preview limit.
 - Favorites folder rows use the same validated File Browser navigation; file rows can open their containing folder when the hydrated parent ID is available.
-- The connected File Browser upload queue sends bytes through the Nexora API with user-configured concurrency of 1, 2, 3 or 5 (fallback 2 while preferences are unavailable); do not invent byte progress. Download remains streamed through the same-origin API. Rename/move retain IDs and copy creates new IDs. Preview is on-demand through the authenticated inline route. Normal Delete means Move to Trash; restore and permanent delete use separate Trash-only actions.
+- The connected File Browser upload queue sends bytes through the Nexora API with user-configured concurrency of 1, 2, 3 or 5 (fallback 3 while preferences are unavailable); do not invent byte progress. Download remains streamed through the same-origin API. Rename/move retain IDs and copy creates new IDs. Preview is on-demand through the authenticated inline route. Normal Delete means Move to Trash; restore and permanent delete use separate Trash-only actions.
 - The Copy/Move destination picker places New folder at the lower left opposite Cancel and can create a folder in the displayed destination when createFolder is permitted, invalidating its parent listing cache.
 - Folder navigation uses the `folder` query parameter on `/files`; validate logical IDs and breadcrumb history state, and safely return to root for unverified or deleted folders.
 - File Browser Modified shows Asia/Bangkok date and 24-hour time with seconds; sorting still uses the original timestamp.
@@ -225,9 +225,9 @@ File preview supports MP4, WebM and Ogg video up to 20 MiB through the existing 
 
 File Browser row action and New menus highlight enabled items on hover or keyboard focus, with a distinct destructive highlight for Move to Trash.
 
-## Settings Phase 1 — incomplete backend groundwork
+## Settings Phase 1
 
-Migration `0006_user_preferences.sql` and authenticated settings preference GET/PATCH and logout-other-sessions endpoints exist locally. Values are validated and default storage is checked against the user's active mount. Settings connects upload concurrency, completed-upload auto-clear, default sort/direction, normal-delete confirmation and default public-link expiration; account supports logout other sessions. Theme, default storage, conflict behavior and password change remain unfinished; theme remains browser-local. Do not describe Settings Phase 1 as complete. See `PROJECT_HANDOFF.md` for validation and pending work. Production migration and deployment require explicit authorization.
+Migration `0006_user_preferences.sql` and authenticated preference GET/PATCH, change-password and logout-other-sessions endpoints support Phase 1. Settings applies account theme, default storage, sort, normal-delete confirmation, upload concurrency/auto-clear and share expiry. Explicit accessible route storage takes precedence over default storage; inaccessible defaults fall back to the first active mount. Password change uses existing hashing and an atomic D1 batch to preserve current session and revoke others. Duplicate uploads report conflicts; rename/replace are disabled and rejected because safe provider semantics are not established. See `PROJECT_HANDOFF.md` for validation and pending browser/production QA. Production migration and deployment require explicit authorization.
 
 ## Settings Phase 2 — partial maintenance controls
 

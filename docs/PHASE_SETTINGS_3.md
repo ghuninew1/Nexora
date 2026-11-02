@@ -1,5 +1,24 @@
 # Settings phases 1–3: source audit and work in progress
 
+## Current Phase 1 implementation
+
+All rows below are stored in D1, loaded by the shared preference provider, exposed in Settings, consumed by the indicated behavior, server validated and have a fallback. These are source-level findings; browser/device and production verification remain pending.
+
+| Preference | Behavior and fallback |
+| --- | --- |
+| theme | Existing theme system follows saved account value; dark while loading/unavailable. System follows browser media preference. |
+| fileSort / fileSortDirection | File Browser initial sort; name/ascending fallback, temporary choices remain local. |
+| confirmDelete | Controls confirmation for a single normal Trash action; true fallback, bulk/permanent deletion still confirm. |
+| uploadConflictBehavior | `ask` reports the provider conflict; rename/replace are unavailable, disabled and rejected. Old unsupported values resolve to ask. |
+| uploadConcurrency | Queue concurrency 1/2/3/5; 3 fallback. |
+| autoClearUploads | Successful uploads clear after delay when enabled; true fallback; failed/cancelled remain. |
+| defaultStorageId | Accessible route storage, then saved active mount, then first active mount. Null fallback. |
+| shareExpiration | Initial share-dialog choice; 7 days when loaded, existing fallback while unavailable. |
+
+Account provides password change and logout-other-sessions. Password change verifies the current password and retains the current session while revoking others. Phase 2 remains partial, Phase 3 has not started. Automatic duplicate rename/replace are deferred until the provider offers safe semantics. No new migration or environment variable was added in this Phase 1 work.
+
+Local checks: `pnpm lint`, `pnpm test` (146/146), `pnpm build`, and `git diff --check` passed. Browser QA, production deployment and remote migration were not performed. Existing migrations 0006 and 0007 remain subject to operator verification and separately authorized rollout.
+
 Source audit at start of this work (3 November 2026); production state is not inferred.
 
 ## Phase 1

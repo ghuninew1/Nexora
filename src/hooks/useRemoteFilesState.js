@@ -517,7 +517,7 @@ export default function useRemoteFilesState() {
     ),
     onComplete: refreshAfterUpload,
     onUnauthorized: expireSession,
-    maxConcurrency: preferences?.uploadConcurrency ?? 2,
+    maxConcurrency: preferences?.uploadConcurrency ?? 3,
     autoClear: preferences?.autoClearUploads ?? true,
   });
   const { addFiles, cancelUpload, retryUpload, clearFinished: clearFinishedUploads, cancelAll: cancelAllUploads } = uploadQueue;

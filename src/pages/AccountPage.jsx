@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { cx } from '../utils/cx';
+import ChangePassword from '../components/settings/ChangePassword';
 
 export default function AccountPage() {
   const { user, updateProfile } = useAuth();
@@ -35,6 +36,7 @@ export default function AccountPage() {
       {message && <p role={state === 'error' ? 'alert' : 'status'} className={cx('text-sm')}>{message}</p>}
       <div><Button type="submit" disabled={state === 'saving' || !name.trim() || name.trim() === user.displayName}>{state === 'saving' ? 'Saving…' : 'Save changes'}</Button></div>
     </form>
+    <ChangePassword />
     <section className={cx('glass-surface flex flex-col items-start gap-3 p-5')}><h2 className={cx('font-semibold')}>Security</h2><p className={cx('text-sm text-muted-foreground')}>Sign out other sessions while keeping this session active.</p><Button type="button" variant="outline" onClick={() => { setSessionMessage(''); setConfirmSessions(true); }}>Sign out other sessions</Button>{sessionMessage && !confirmSessions && <p className={cx('text-sm')} role="status">{sessionMessage}</p>}</section>
     <Dialog open={confirmSessions} onOpenChange={open => { if (sessionState !== 'saving') setConfirmSessions(open); }}><DialogContent><DialogHeader><DialogTitle>Sign out other sessions?</DialogTitle><DialogDescription>All other sessions for your account will be signed out. This session stays active.</DialogDescription></DialogHeader>{sessionMessage && <p className={cx('text-sm text-destructive')} role="alert">{sessionMessage}</p>}<DialogFooter><Button type="button" variant="outline" disabled={sessionState === 'saving'} onClick={() => setConfirmSessions(false)}>Cancel</Button><Button type="button" disabled={sessionState === 'saving'} onClick={() => void revokeOtherSessions()}>{sessionState === 'saving' ? 'Signing out…' : 'Sign out other sessions'}</Button></DialogFooter></DialogContent></Dialog>
   </div>;
