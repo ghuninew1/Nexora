@@ -1,5 +1,11 @@
 # Nexora — Project Handoff
 
+## Storage assignment — partial, 3 November 2026
+
+- The user reports migration 0008 applied; this was not independently verified. Added `0009_storage_access_defaults.sql` to enforce one assignment default per user and backfill existing mount owners without overwriting existing assignments. This migration has not been applied. Existing user preferences and provider mappings are unchanged.
+- Assignment APIs, UI, discovery and runtime permission enforcement remain unimplemented. Owner-only authorization remains in force. Do not deploy this as a completed assignment system.
+- `pnpm lint`, `pnpm test` (155/155, including an in-memory migration test) and `git diff --check` passed. Build and browser QA were not run; no deployment or remote migration was performed.
+
 ## Storage permission mapping — groundwork only, 3 November 2026
 
 - Added and tested a standalone fail-closed storage-route permission map and a preliminary intersection of grants, provider capabilities, read-only and maintenance. These helpers are not wired into runtime authorization or the UI. Phase 1.5 assignment remains incomplete; owner-scoped routes and public-share behavior are unchanged. No migration, deployment or production change was performed.

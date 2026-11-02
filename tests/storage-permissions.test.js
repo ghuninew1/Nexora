@@ -63,3 +63,21 @@ test('storage access migration enforces ownership references, uniqueness and dep
     assert.throws(() => db.prepare('INSERT INTO storage_access (user_id, storage_id, created_at, updated_at) VALUES (?, ?, 1, 1)').run('unknown', 'm'));
   } finally { db.close(); }
 });
+
+test('default migration preserves assignments, backfills owners and enforces one default', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../migrations/0008_storage_access.sql', import.meta.url), 'utf8'));
+    db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, 'user', 1, 1, 1)").run('u', 'u@example.test', 'User', 'hash');
+    const mount = db.prepare("INSERT INTO storage_mounts VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)");
+    mount.run('m1', 'u', 'One', 'p1');
+    mount.run('m2', 'u', 'Two', 'p2');
+    db.prepare('INSERT INTO storage_access (user_id, storage_id, can_read, created_at, updated_at) VALUES (?, ?, 1, 1, 1)').run('u', 'm1');
+    db.exec(readFileSync(new URL('../migrations/0009_storage_access_defaults.sql', import.meta.url), 'utf8'));
+    assert.equal(db.prepare('SELECT can_upload FROM storage_access WHERE storage_id = ?').get('m1').can_upload, 0);
+    assert.equal(db.prepare('SELECT can_upload FROM storage_access WHERE storage_id = ?').get('m2').can_upload, 1);
+    db.prepare('UPDATE storage_access SET is_default = 1 WHERE storage_id = ?').run('m1');
+    assert.throws(() => db.prepare('UPDATE storage_access SET is_default = 1 WHERE storage_id = ?').run('m2'));
+  } finally { db.close(); }
+});
