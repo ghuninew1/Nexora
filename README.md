@@ -67,7 +67,7 @@ Shared Storage Service ── object storage
 
 Browser ใช้ Nexora logical IDs และไม่รับ credentials หรือ provider references ส่วน Pages Functions ตรวจ session, ownership และ capabilities ก่อนเรียก Storage Service ซึ่งเป็นระบบแยกจาก Nexora ข้อมูลใน `src/data/files.js` เป็น fixture สำหรับตัวอย่าง legacy เท่านั้น
 
-Storage ใน source ปัจจุบันยังจำกัดตามเจ้าของ mount; การ assign storage และกำหนดสิทธิ์รายผู้ใช้ยังไม่เปิดใช้งาน
+Storage discovery และการ list objects ใช้ assignment แล้ว แต่ API อื่นยังจำกัดตามเจ้าของ mount; Admin assignment API มีแล้ว ส่วน UI และการบังคับสิทธิ์ครบทุกเส้นทางยังอยู่ระหว่างพัฒนา
 
 ```text
 src/                 React app, pages, components, hooks และ API clients

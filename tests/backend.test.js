@@ -149,6 +149,7 @@ before(async () => {
   otherUser = await createUser({ db: env.DB, email: 'other@example.test', displayName: 'Other Admin', password: 'another correct horse battery staple', role: 'admin' });
   sqlite.prepare(`INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at)
     VALUES (?, ?, 'Private', 'garage', 'active', 0, ?, 1, 1)`).run(storageId, user.id, projectId);
+  for (const name of ['0008_storage_access.sql', '0009_storage_access_defaults.sql']) sqlite.exec(readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'));
   const response = await login();
   assert.equal(response.status, 200);
   cookie = response.headers.get('Set-Cookie').split(';')[0];
@@ -648,12 +649,12 @@ test('object listing validates and forwards bounded pagination using the server 
   const payload = await response.json();
   assert.equal(payload.data.items[0].objectId, objectId);
   assert.equal(payload.data.nextCursor, 'next_cursor');
-  const upstream = new URL(requests[0].url);
+  const upstream = new URL(requests[1].url);
   assert.equal(upstream.pathname, `/v3/projects/${projectId}/objects`);
   assert.equal(upstream.searchParams.get('parentId'), 'folder_parent');
   assert.equal(upstream.searchParams.get('limit'), '25');
-  assert.equal(requests[0].init.headers.get('Authorization'), 'Bearer server-app-secret');
-  assert.equal(requests[0].init.headers.get('CF-Access-Client-Secret'), 'server-access-secret');
+  assert.equal(requests[1].init.headers.get('Authorization'), 'Bearer server-app-secret');
+  assert.equal(requests[1].init.headers.get('CF-Access-Client-Secret'), 'server-access-secret');
   assert.equal((await request(`/api/storage/v1/storages/${storageId}/objects?limit=1000`)).status, 400);
 });
 
@@ -1295,4 +1296,26 @@ test('recent-access rows are capped at 100 objects per user', async () => {
     assert.equal(response.status, 200);
   }
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM recent_access WHERE user_id = ?').get(user.id).count, 100);
+});
+
+
+test('admin assignment enables member discovery and listing, revoke removes both', async () => {
+  const headers = { Origin: origin, 'Content-Type': 'application/json' };
+  const adminLogin = await login('other@example.test', 'another correct horse battery staple');
+  const adminCookie = adminLogin.headers.get('set-cookie').split(';')[0];
+  const target = await createUser({ db: env.DB, email: 'assigned@example.test', displayName: 'Assigned', password: 'correct horse battery staple' });
+  const permissions = Object.fromEntries(['read','preview','download','upload','createFolder','rename','move','copy','delete','permanentDelete','share','manageShare','favorite'].map(name => [name, ['read','preview','download'].includes(name)]));
+  const path = `/api/admin/users/${target.id}/storages`;
+  const assign = await request(path, { method: 'POST', headers: { ...headers, Cookie: adminCookie }, body: JSON.stringify({ storageId, permissions, isDefault: true }) });
+  assert.equal(assign.status, 201);
+  const memberLogin = await login('assigned@example.test');
+  const memberHeaders = { Cookie: memberLogin.headers.get('set-cookie').split(';')[0] };
+  const discovery = await request('/api/storage/v1/storages', { headers: memberHeaders });
+  assert.equal(discovery.status, 200);
+  assert.equal((await discovery.json()).data.storages[0].storageId, storageId);
+  const listPath = `/api/storage/v1/storages/${storageId}/objects`;
+  assert.equal((await request(listPath, { headers: memberHeaders })).status, 200);
+  assert.equal((await request(path + '/' + storageId, { method: 'DELETE', headers: { ...headers, Cookie: adminCookie } })).status, 200);
+  assert.deepEqual((await (await request('/api/storage/v1/storages', { headers: memberHeaders })).json()).data.storages, []);
+  assert.equal((await request(listPath, { headers: memberHeaders })).status, 404);
 });

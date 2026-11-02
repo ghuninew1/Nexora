@@ -1,4 +1,5 @@
 import { createUser, normalizeDisplayName, normalizeEmail } from './auth.js';
+import { STORAGE_PERMISSION_NAMES, validateStoragePermissions } from './storage-permissions.js';
 import { ApiError, json, readJson } from './http.js';
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
@@ -7,6 +8,40 @@ function safe(row) {
 }
 export async function handleAdminUsers({ request, env, user, parts }) {
   const db = env.DB;
+  if (user.role !== 'admin') throw new ApiError('FORBIDDEN', 403);
+  if (parts[4] === 'storages' && [5, 6].includes(parts.length)) {
+    const targetId = parts[3];
+    if (!ID.test(targetId) || !(await db.prepare('SELECT id FROM users WHERE id = ?').bind(targetId).first())) throw new ApiError('NOT_FOUND', 404);
+    if (request.method === 'GET' && parts.length === 5) {
+      const rows = await db.prepare('SELECT a.*, m.name FROM storage_access a JOIN storage_mounts m ON m.id = a.storage_id WHERE a.user_id = ?').bind(targetId).all();
+      return json({ assignments: rows.results.map(row => ({ storageId: row.storage_id, name: row.name, isDefault: Boolean(row.is_default), permissions: Object.fromEntries(STORAGE_PERMISSION_NAMES.map(name => [name, Boolean(row['can_' + name.replace(/[A-Z]/gu, c => '_' + c.toLowerCase())])])) })) });
+    }
+    const body = request.method === 'DELETE' ? {} : await readJson(request);
+    if (Object.keys(body).some(key => !['storageId', 'permissions', 'isDefault'].includes(key))) throw new ApiError('INVALID_INPUT', 400);
+    const storageId = parts[5] || body.storageId;
+    if (!ID.test(storageId || '') || !(await db.prepare('SELECT id FROM storage_mounts WHERE id = ?').bind(storageId).first())) throw new ApiError('NOT_FOUND', 404);
+    const existing = await db.prepare('SELECT storage_id FROM storage_access WHERE user_id = ? AND storage_id = ?').bind(targetId, storageId).first();
+    if (request.method === 'DELETE' && parts.length === 6) {
+      await db.batch([
+        db.prepare('DELETE FROM storage_access WHERE user_id = ? AND storage_id = ?').bind(targetId, storageId),
+        db.prepare('UPDATE user_preferences SET default_storage_id = NULL WHERE user_id = ? AND default_storage_id = ?').bind(targetId, storageId),
+      ]);
+      return json({ revoked: true });
+    }
+    if (!((request.method === 'POST' && parts.length === 5) || (request.method === 'PATCH' && parts.length === 6))) throw new ApiError('NOT_FOUND', 404);
+    if (request.method === 'POST' && existing) throw new ApiError('NAME_CONFLICT', 409);
+    if (request.method === 'PATCH' && !existing) throw new ApiError('NOT_FOUND', 404);
+    if (typeof body.isDefault !== 'boolean') throw new ApiError('INVALID_INPUT', 400);
+    const permissions = validateStoragePermissions(body.permissions);
+    const columns = STORAGE_PERMISSION_NAMES.map(name => 'can_' + name.replace(/[A-Z]/gu, c => '_' + c.toLowerCase()));
+    const now = Date.now();
+    const statements = [];
+    if (body.isDefault) statements.push(db.prepare('UPDATE storage_access SET is_default = 0 WHERE user_id = ?').bind(targetId));
+    if (request.method === 'POST') statements.push(db.prepare(`INSERT INTO storage_access (user_id, storage_id, ${columns.join(',')}, is_default, created_at, updated_at, created_by) VALUES (${Array(columns.length + 6).fill('?').join(',')})`).bind(targetId, storageId, ...Object.values(permissions).map(Number), Number(body.isDefault), now, now, user.id));
+    else statements.push(db.prepare(`UPDATE storage_access SET ${columns.map(c => c + ' = ?').join(',')}, is_default = ?, updated_at = ? WHERE user_id = ? AND storage_id = ?`).bind(...Object.values(permissions).map(Number), Number(body.isDefault), now, targetId, storageId));
+    await db.batch(statements);
+    return json({ saved: true }, request.method === 'POST' ? 201 : 200);
+  }
   if (parts.length === 3 && request.method === 'GET') {
     const rows = await db.prepare('SELECT id, email, display_name, role, active, created_at FROM users ORDER BY email LIMIT 501').bind().all();
     return json({ users: rows.results.slice(0, 500).map(safe), truncated: rows.results.length > 500 });

@@ -410,3 +410,7 @@ Documentation preference: README contains project information, setup and usage; 
 
 - เพิ่มความสูงขั้นต่ำของแถว List view เป็น 52px โดยคงการจัดกึ่งกลางและขนาดปุ่ม Favorites
 - ตรวจ `pnpm lint` และ `git diff --check` ผ่าน; Browser QA และ deployment ยังไม่ได้ทำ
+
+## Assignment API wiring checkpoint
+
+Connected admin assignment CRUD, assignment-based discovery and object-list read authorization. API integration covers assign → member discovery/list → revoke → denied list. Other storage routes and frontend remain pending; do not claim complete. No deploy, remote migration or production verification performed.

@@ -1,3 +1,4 @@
+import { requireStorageAccess, requireStoragePermission } from './storage-access.js';
 import { requireStorageMount, requireObjectId } from './authorization.js';
 import { ApiError, json, normalizeUpstreamError, readJson, statusFor } from './http.js';
 import { createStorageClient, normalizeCapabilities, normalizeObject, readBoundedJson } from './storage-client.js';
@@ -217,10 +218,13 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
   if (api !== 'api' || version !== 'storage' || storages !== 'v1') throw new ApiError('NOT_FOUND', 404);
 
   if (storageId === 'storages' && rest.length === 0 && method === 'GET') {
-    const rows = await env.DB.prepare(`SELECT id, name, provider, status, read_only FROM storage_mounts
-      WHERE owner_user_id = ? ORDER BY name, id`).bind(user.id).all();
-    return json({ storages: (rows.results || []).map((mount) => ({ storageId: mount.id, name: mount.name,
-      providerLabel: 'Private storage', status: mount.status, readOnly: Number(mount.read_only) === 1 })) });
+    const rows = await env.DB.prepare(`SELECT m.id FROM storage_mounts m JOIN storage_access a ON a.storage_id = m.id WHERE a.user_id = ? AND m.status = 'active' ORDER BY m.name, m.id`).bind(user.id).all();
+    const storages = [];
+    for (const row of rows.results || []) {
+      const { mount, permissions, isDefault } = await requireStorageAccess({ request, env, user, storageId: row.id, fetchImpl });
+      storages.push({ storageId: mount.id, name: mount.name, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only, permissions, isDefault });
+    }
+    return json({ storages });
   }
 
   const storageIdIsRoute = storageId === 'storages';
@@ -235,7 +239,9 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only } });
   }
   const route = tail[0];
-  const mount = await requireStorageMount(env.DB, user, mountId, {
+  const mount = route === 'objects' && tail.length === 1 && method === 'GET'
+    ? (await requireStoragePermission({ request, env, user, storageId: mountId, fetchImpl }, 'read')).mount
+    : await requireStorageMount(env.DB, user, mountId, {
     diagnosticOperation: route === 'capabilities' ? 'capabilities' : undefined,
     logger,
   });
