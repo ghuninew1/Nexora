@@ -443,3 +443,7 @@ File Browser capability checks intersect discovery permissions for mutations and
 
 - Replaced `react-router-dom` 7.18.5 with `react-router` 8.5.1 and updated imports; the declarative route hierarchy, paths, and auth/navigation code were retained. React Router v8 requires Node.js 22.22+ and React/React DOM 19.2.7+; local validation used Node 26.13.0 and React/React DOM 19.3.1.
 - Validation: `pnpm lint`, `pnpm test` (161 passed), and `pnpm build` passed. Browser QA was not completed: the Browser plugin is unavailable and Playwright is not installed. Login/logout, protected and public routes, history, query parameters, direct access, refresh, and deployment remain unverified in a browser.
+
+## Public share text wrapping
+
+- Removed conflicting overflow-wrap utilities from two public share headings, retaining `break-words`, which won in the previously generated CSS. `pnpm lint` passed; browser verification was not performed.
