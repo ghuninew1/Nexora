@@ -1,4 +1,4 @@
-import { requiredStoragePermissions, intersectStoragePermissions } from './storage-permissions.js';
+import { requiredStoragePermissions, intersectStoragePermissions, STORAGE_PERMISSION_NAMES } from './storage-permissions.js';
 import { getSystemSettings } from './system-settings.js';
 import { getStorageAccessForUser, requireStorageAccess } from './storage-access.js';
 import { requireStorageMount, requireObjectId } from './authorization.js';
@@ -225,12 +225,29 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
 
   if (storageId === 'storages' && rest.length === 0 && method === 'GET') {
     const rows = await env.DB.prepare(`SELECT m.id FROM storage_mounts m JOIN storage_access a ON a.storage_id = m.id WHERE a.user_id = ? AND m.status = 'active' ORDER BY m.name, m.id`).bind(user.id).all();
-    const storages = [];
-    for (const row of rows.results || []) {
-      const { mount, permissions, isDefault } = await requireStorageAccess({ request, env, user, storageId: row.id, fetchImpl });
-      storages.push({ storageId: mount.id, name: mount.name, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only, permissions, isDefault });
-    }
-    return json({ storages });
+    // Keep the existing effective-permissions contract while isolating provider failures.
+    const storages = new Array(rows.results.length);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, rows.results.length) }, async () => {
+      while (next < rows.results.length) {
+        const index = next++;
+        const id = rows.results[index].id;
+        let access;
+        let connectionStatus = 'connected';
+        try {
+          access = await requireStorageAccess({ request, env, user, storageId: id, fetchImpl });
+        } catch (error) {
+          if (!(error instanceof ApiError) || (error.status < 500 && error.status !== 429)) throw error;
+          access = await getStorageAccessForUser(env.DB, user, id);
+          if (!access || access.mount.status !== 'active') continue;
+          access.permissions = Object.fromEntries(STORAGE_PERMISSION_NAMES.map(name => [name, false]));
+          connectionStatus = 'unavailable';
+        }
+        const { mount, permissions, isDefault } = access;
+        storages[index] = { storageId: mount.id, name: mount.name, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only, permissions, isDefault, connectionStatus };
+      }
+    }));
+    return json({ storages: storages.filter(Boolean) });
   }
 
   const storageIdIsRoute = storageId === 'storages';
@@ -261,6 +278,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const payload = await callJson(client, request, mount, '/capabilities', { operation: 'capabilities' });
     if (!payload?.capabilities || typeof payload.capabilities !== 'object' || Array.isArray(payload.capabilities)) {
       try { logger?.warn?.('[storage-upstream] operation=capabilities result=schema-error status=200'); } catch { /* diagnostics must not affect response handling */ }
+      throw new ApiError('PROVIDER_UNAVAILABLE', 502);
     }
     const configuredLimit = Number(env.STORAGE_MAX_UPLOAD_BYTES || MAX_UPLOAD_BYTES);
     const maxUploadBytes = Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? Math.min(configuredLimit, MAX_UPLOAD_BYTES) : MAX_UPLOAD_BYTES;

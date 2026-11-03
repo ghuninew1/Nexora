@@ -54,11 +54,20 @@ test('storage discovery uses the same-origin endpoint and keeps only public moun
 
   assert.equal(call.url, '/api/storage/v1/storages');
   assert.equal(call.options.credentials, 'same-origin');
-  assert.deepEqual(storages, [mount]);
+  assert.deepEqual(storages, [{ ...mount, connectionStatus: 'unknown' }]);
   assert.equal(Object.hasOwn(storages[0], 'shared_storage_project_id'), false);
   assert.equal(Object.hasOwn(storages[0], 'provider'), false);
   assert.equal(Object.hasOwn(storages[0], 'provider_reference'), false);
   assert.equal(Object.hasOwn(storages[0], 'bucket'), false);
+});
+
+test('storage discovery preserves individual connection states and treats unrecognized states as unknown', async () => {
+  const rows = await listStorages({ fetchImpl: async () => Response.json({ data: { storages: [
+    { ...mount, connectionStatus: 'connected' },
+    { ...mount, storageId: 'second', connectionStatus: 'unavailable' },
+    { ...mount, storageId: 'third', connectionStatus: 'healthy' },
+  ] } }) });
+  assert.deepEqual(rows.map(row => row.connectionStatus), ['connected', 'unavailable', 'unknown']);
 });
 
 test('storage discovery rejects malformed envelopes and malformed entries', async () => {

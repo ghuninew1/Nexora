@@ -4,7 +4,7 @@ import { Activity, Download, Eye, File, FileText, Files, Folder, FolderClock, Ha
 import { getPageInfo } from "../components/navigation/navigation";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { listStorageTrash, StorageApiError } from "../services/storage";
+import { getStorageCapabilities, listStorageTrash, StorageApiError } from "../services/storage";
 import { useAuth } from "../hooks/useAuth";
 import { cx } from "../utils/cx";
 import { useStorage } from "../hooks/useStorage";
@@ -15,6 +15,9 @@ import StorageFilePreviewDialog from "../components/files/StorageFilePreviewDial
 import { MAX_TEXT_PREVIEW_BYTES } from "../utils/storage-preview";
 import UploadPreferences from "../components/settings/UploadPreferences";
 import AdminMaintenance from "../components/settings/AdminMaintenance";
+import AdminStorageOverview from "../components/storage/AdminStorageOverview";
+import { usePreferences } from "../hooks/usePreferences";
+import { selectDefaultStorage } from "../utils/default-storage";
 
 function PageHeading({ eyebrow, title, description, action }) {
   return <div className={cx("flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between")}>
@@ -295,44 +298,58 @@ function TrashPage({ page }) {
 }
 
 function StoragePage({ page }) {
-  const storage = useStorage();
-  const { status, activeStorage, capabilities, usage, error, refresh } = storage;
-  const statusLabel = status === "ready" ? "Connected" : status === "loading" ? "Checking connection" : status === "empty" ? "No active storage" : "Unavailable";
-  const description = status === "ready"
-    ? "Nexora can reach this storage through its secure server-side connection. File Browser operations use this mount when the required capability is available; upload progress is reported as status only."
-    : status === "empty"
-      ? "No storage assigned. Contact an administrator for access."
-      : status === "unavailable"
-        ? (error || "Storage could not be reached. Try refreshing the connection.")
-        : "Checking the storage mount assigned to this account.";
-  const capabilityLabels = [
-    ["list", "Browse"], ["stat", "Read metadata"], ["upload", "Upload"], ["download", "Download"], ["createFolder", "Create folders"],
-    ["rename", "Rename"], ["move", "Move"], ["copy", "Copy"], ["trash", "Trash"], ["restore", "Restore"],
-    ["permanentDelete", "Permanent delete"], ["preview", "Preview"], ["share", "Share"], ["rangeRead", "Range reads"],
-  ];
+  const { status, storages, activeStorage, capabilities, usage, error, refresh } = useStorage();
+  const { user, expireSession } = useAuth();
+  const { preferences, status: preferencesStatus } = usePreferences();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = storages.find((item) => item.storageId === selectedId);
+  const retryController = useRef(null);
+  const [retryId, setRetryId] = useState(null);
+  const [retryError, setRetryError] = useState('');
+  useEffect(() => () => retryController.current?.abort(), []);
+  const effective = selectDefaultStorage(storages, null, preferences?.defaultStorageId);
+  const preferred = storages.find(item => item.storageId === preferences?.defaultStorageId);
+  const assignmentDefault = storages.find(item => item.isDefault);
+  const visible = storages.filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase()) && (filter === "all" || filter === item.connectionStatus));
+  async function retryStorage(item) {
+    retryController.current?.abort();
+    const controller = new AbortController();
+    retryController.current = controller;
+    setRetryId(item.storageId); setRetryError('');
+    try {
+      await getStorageCapabilities(item.storageId, { signal: controller.signal });
+      if (!controller.signal.aborted) await refresh();
+    } catch (failure) {
+      if (!controller.signal.aborted) {
+        if (failure instanceof StorageApiError && failure.status === 401) expireSession();
+        else setRetryError(failure?.message || 'Connection check failed. Try again.');
+      }
+    } finally { if (!controller.signal.aborted) setRetryId(null); }
+  }
+  const capabilityLabels = [["list", "Browse"], ["stat", "Read metadata"], ["download", "Download"], ["upload", "Upload"], ["createFolder", "Create folders"], ["rename", "Rename"], ["move", "Move"], ["copy", "Copy"], ["trash", "Trash"], ["restore", "Restore"], ["permanentDelete", "Permanent delete"]];
   return <div className={cx("flex flex-col gap-6")}>
-    <PageHeading eyebrow="Connections" title={page.label} description="Review storage connection status for this Nexora workspace." />
-    <section className={cx("glass-surface p-5 sm:p-6")}>
-      <div className={cx("flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between")}>
-        <div className={cx("flex items-start gap-4")}><span className={cx("glass-control flex size-12 shrink-0 items-center justify-center rounded-xl text-muted-foreground")}><HardDrive className={cx("size-5")} /></span><div><div className={cx("flex flex-wrap items-center gap-2")}><h2 className={cx("text-base font-semibold")}>{activeStorage?.name || "Storage provider"}</h2><span className={cx("rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground")} role="status" aria-live="polite">{statusLabel}</span></div><p className={cx("mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground")}>{description}</p></div></div>
-        <Button variant="outline" onClick={() => void refresh()} disabled={status === "loading"} aria-busy={status === "loading"}><RefreshCw data-icon="inline-start" />{status === "loading" ? "Checking…" : "Refresh connection"}</Button>
+    <PageHeading eyebrow="Connections" title={page.label} description="Review the storages assigned to your account." action={<Button variant="outline" onClick={() => void refresh()} disabled={status === "loading"} aria-busy={status === "loading"}><RefreshCw data-icon="inline-start" />{status === "loading" ? "Refreshing…" : "Refresh"}</Button>} />
+    {user?.role === "admin" && <AdminStorageOverview />}
+    {status === "loading" && <div className={cx("glass-surface p-5 text-sm text-muted-foreground")} role="status">Loading storage information…</div>}
+    {status === "unavailable" && <div className={cx("glass-surface p-5 text-sm text-destructive")} role="alert">{error || "Storage information could not be loaded."} <Button variant="outline" onClick={() => void refresh()}>Retry</Button></div>}
+    {status !== "loading" && (status !== "unavailable" || storages.length > 0) && <>
+      <div className={cx("grid gap-3 sm:grid-cols-2 xl:grid-cols-3")}>
+        <StatCard icon={HardDrive} label="Assigned storages" value={storages.length} hint="Active storages visible to your account" />
+        <StatCard icon={ShieldCheck} label="Connection checks" value={storages.filter(item => item.connectionStatus === "connected").length} hint="Capability responses received; not a full health check" />
+        <StatCard icon={HardDrive} label="Total used / quota" value="N/A" hint="Aggregate usage is not reported" />
       </div>
-      <div className={cx("mt-6 grid gap-3 border-t border-border pt-5 sm:grid-cols-3")}>
-        <div><p className={cx("text-xs text-muted-foreground")}>Storage type</p><p className={cx("mt-1 text-sm font-medium")}>{activeStorage?.providerLabel || "Unavailable"}</p></div>
-        <div><p className={cx("text-xs text-muted-foreground")}>Usage</p><p className={cx("mt-1 text-sm font-medium")}>{usage.status === "available" && usage.usedBytes !== null ? `${usage.usedBytes.toLocaleString()} bytes used` : "Not reported"}</p></div>
-        <div><p className={cx("text-xs text-muted-foreground")}>Access</p><p className={cx("mt-1 text-sm font-medium")}>{activeStorage ? (activeStorage.readOnly ? "Read only" : "Read and write") : "Not available"}</p></div>
-      </div>
-      {status === "ready" && capabilities && <div className={cx("mt-5 border-t border-border pt-5")}>
-        <div className={cx("flex flex-wrap items-baseline justify-between gap-2")}><h3 className={cx("text-sm font-semibold")}>Storage capabilities</h3><p className={cx("text-xs text-muted-foreground")}>Reported by the connected storage service</p></div>
-        <ul className={cx("mt-3 flex flex-wrap gap-2")} aria-label="Storage capabilities">
-          {capabilityLabels.map(([key, label]) => <li key={key} className={cx("rounded-full border px-2.5 py-1 text-xs", capabilities[key] ? "border-primary/30 bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
-            {label}: {capabilities[key] ? "Available" : "Unavailable"}
-          </li>)}
-          {capabilities.readOnly && <li className={cx("rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground")}>Read only</li>}
-        </ul>
-      </div>}
-    </section>
-    <div className={cx("glass-surface flex items-start gap-3 p-4")}><ShieldCheck className={cx("mt-0.5 size-4 shrink-0 text-muted-foreground")} /><p className={cx("text-sm text-muted-foreground")}>Provider credentials and file operations belong on a reviewed server-side integration. They are not stored in this frontend.</p></div>
+      <section className={cx("glass-surface p-5 sm:p-6")}><h2 className={cx("font-semibold")}>Storage defaults</h2><div className={cx("mt-3 grid gap-3 text-sm sm:grid-cols-3")}><p>Assignment default: <span className={cx("text-muted-foreground")}>{assignmentDefault?.name || 'None assigned'}</span></p><p>User preferred: <span className={cx("text-muted-foreground")}>{preferencesStatus !== 'ready' ? 'Unknown' : preferred?.name || (preferences?.defaultStorageId ? 'Unavailable' : 'Not set')}</span></p><p>Effective default: <span className={cx("text-muted-foreground")}>{preferencesStatus !== 'ready' ? 'Unknown' : effective?.name || 'None'}</span></p></div><p className={cx("mt-2 text-xs text-muted-foreground")}>An accessible route selection takes precedence while browsing. Change your preference in Settings; no files are moved.</p></section>
+      <section className={cx("glass-surface p-5 sm:p-6")}>
+        <div className={cx("flex flex-wrap items-end justify-between gap-3")}><div><h2 className={cx("font-semibold")}>Assigned storages</h2><p className={cx("mt-1 text-sm text-muted-foreground")}>Connection reflects capability discovery, not a full provider health check.</p></div>{user?.role === "admin" && <Button variant="outline" onClick={() => navigate("/admin/users")}>Manage user access</Button>}</div>
+        <div className={cx("mt-5 grid gap-3 sm:grid-cols-2")}><label className={cx("flex flex-col gap-1 text-sm")}>Search storage<input className={cx("glass-control min-h-11 rounded-lg px-3")} value={query} onChange={(event) => setQuery(event.target.value)} /></label><label className={cx("flex flex-col gap-1 text-sm")}>Connection status<select className={cx("glass-control min-h-11 rounded-lg px-3")} value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All</option><option value="connected">Connected</option><option value="unavailable">Unavailable</option><option value="unknown">Unknown</option></select></label></div>
+        {storages.length === 0 ? <p className={cx("mt-5 text-sm text-muted-foreground")}>No active storage assigned. Contact an administrator for access.</p> : visible.length === 0 ? <p className={cx("mt-5 text-sm text-muted-foreground")}>No storages match your search and filter.</p> : <div className={cx("mt-5 grid gap-3")}>{visible.map((item) => <article key={item.storageId} className={cx("flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border p-4")}><div className={cx("min-w-0")}><h3 className={cx("break-words font-medium")}>{item.name} {item.isDefault && <span className={cx("rounded-full bg-primary/15 px-2 py-1 text-xs text-primary")}>Assigned default</span>}</h3><p className={cx("mt-1 text-sm text-muted-foreground")}>{item.providerLabel} · {item.connectionStatus} · Usage / quota: N/A</p></div><div className={cx("flex flex-wrap gap-2")}>{item.connectionStatus === "unavailable" && <Button variant="outline" disabled={Boolean(retryId)} onClick={() => void retryStorage(item)}>{retryId === item.storageId ? "Checking…" : "Retry connection"}</Button>}<Button variant="outline" onClick={() => setSelectedId(item.storageId)}>Details</Button></div></article>)}</div>}
+        {retryError && <p role="alert" className={cx("mt-3 text-sm text-destructive")}>{retryError}</p>}
+      </section>
+    </>}
+    <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelectedId(null); }}><DialogContent className={cx("max-h-[90dvh] overflow-y-auto")}><DialogHeader><DialogTitle>{selected?.name || "Storage details"}</DialogTitle><DialogDescription>Information reported for this assigned storage.</DialogDescription></DialogHeader>{selected && <div className={cx("grid gap-3 text-sm")}><p>Storage ID: <span className={cx("break-all text-muted-foreground")}>{selected.storageId}</span></p><p>Provider: {selected.providerLabel}</p><p>Connection: {selected.connectionStatus}</p><p>Assigned default: {selected.isDefault ? "Yes" : "No"}</p><p>Usage: {selected.storageId === activeStorage?.storageId && usage.status === "available" && usage.usedBytes !== null ? `${usage.usedBytes.toLocaleString()} bytes` : "N/A"}</p><p>Quota: {selected.storageId === activeStorage?.storageId && usage.status === "available" && usage.quotaBytes !== null ? `${usage.quotaBytes.toLocaleString()} bytes` : "N/A"}</p><p className={cx("text-muted-foreground")}>Description, last successful check and response time are not reported.</p>{selected.storageId === activeStorage?.storageId && capabilities && <div><h3 className={cx("font-medium")}>Effective capabilities</h3><ul className={cx("mt-2 flex flex-wrap gap-2")}>{capabilityLabels.map(([key, label]) => <li key={key} className={cx("rounded-full border border-border px-2 py-1 text-xs")}>{label}: {capabilities[key] ? "Available" : "Unavailable"}</li>)}</ul></div>}</div>}</DialogContent></Dialog>
   </div>;
 }
 

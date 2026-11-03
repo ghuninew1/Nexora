@@ -442,6 +442,28 @@ test('storage list, detail, and actual S2 capabilities never reveal project IDs 
   assert.equal(caps.rangeRead, false);
 });
 
+test('storage discovery isolates provider failures and retries without granting failed permissions', async () => {
+  sqlite.prepare(`INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at)
+    VALUES ('mount_beta', ?, 'Beta', 'garage', 'active', 0, 'private_project_beta', 1, 1)`).run(user.id);
+  sqlite.prepare(`INSERT INTO storage_access (storage_id, user_id, can_read, can_download, created_at, updated_at)
+    VALUES ('mount_beta', ?, 1, 1, 1, 1)`).run(user.id);
+  try {
+    const fetchImpl = async (url, init) => String(url).includes('private_project_beta')
+      ? new Response('unavailable', { status: 503 }) : upstreamResponse(url, init);
+    const response = await request('/api/storage/v1/storages', { fetchImpl });
+    assert.equal(response.status, 200);
+    const rows = (await response.json()).data.storages;
+    const good = rows.find(row => row.storageId === storageId);
+    const bad = rows.find(row => row.storageId === 'mount_beta');
+    assert.equal(good.connectionStatus, 'connected');
+    assert.equal(good.permissions.read, true);
+    assert.equal(bad.connectionStatus, 'unavailable');
+    assert.ok(Object.values(bad.permissions).every(value => value === false));
+    const retried = await request('/api/storage/v1/storages');
+    assert.equal((await retried.json()).data.storages.find(row => row.storageId === 'mount_beta').connectionStatus, 'connected');
+  } finally { sqlite.prepare("DELETE FROM storage_access WHERE storage_id = 'mount_beta'").run(); sqlite.prepare("DELETE FROM storage_mounts WHERE id = 'mount_beta'").run(); }
+});
+
 test('capabilities uses the owner mount project, exact S2 URL and server-only credentials', async () => {
   requests = [];
   const originalUrl = env.STORAGE_API_URL;
@@ -633,13 +655,8 @@ test('capabilities distinguishes parse and schema failures after an upstream 200
     logger,
     fetchImpl: async () => Response.json({ success: true }),
   });
-  assert.equal(schemaFailure.status, 200);
-  assert.deepEqual((await schemaFailure.json()).data.capabilities, {
-    list: false, stat: false, upload: false, download: false, createFolder: false,
-    rename: false, move: false, copy: false, trash: false, restore: false,
-    permanentDelete: false, preview: false, share: false, rangeRead: false,
-    readOnly: false, maxUploadBytes: 26214400,
-  });
+  assert.equal(schemaFailure.status, 502);
+  assert.match(await schemaFailure.text(), /PROVIDER_UNAVAILABLE/u);
   assert.ok(lines.some((line) => line.includes('result=schema-error status=200')));
 });
 

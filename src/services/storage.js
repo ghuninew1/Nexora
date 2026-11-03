@@ -87,6 +87,7 @@ function safeStorage(value) {
     ...(typeof value.isDefault === 'boolean' ? { isDefault: value.isDefault } : {}),
     ...(value.permissions && typeof value.permissions === 'object' ? { permissions: value.permissions } : {}),
     storageId: value.storageId,
+    connectionStatus: ['connected', 'unavailable'].includes(value.connectionStatus) ? value.connectionStatus : 'unknown',
     name: value.name,
     providerLabel: typeof value.providerLabel === 'string' ? value.providerLabel : 'Private storage',
     status: value.status,

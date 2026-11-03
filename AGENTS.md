@@ -252,3 +252,11 @@ Core storage v1 operations now enforce session-scoped storage assignments, inclu
 Admin Users includes storage assignment management using the existing admin catalog and assignment APIs. The UI supports presets, custom permissions, default selection and revoke confirmation; browser QA is pending.
 
 File Browser assignment permission gating is partial and requires further UI and alternative-path verification. Admin assignment UI implementation exists; browser QA is pending.
+
+## Storage Management Phase 1 — partial
+
+Storage shows the current account's assigned active storages, search, details and capability-discovery status. Admins can reach the existing user-centric assignment editor from this page. This is not an admin-wide catalog or a comprehensive health check; usage and quota are unreported. Metadata editing and storage-centric assignment management remain unimplemented. See `PROJECT_HANDOFF.md` for the audit and validation boundary.
+
+## Storage Management Phase 1.1
+
+Assigned storage discovery isolates upstream capability errors with at most four concurrent checks; failed mounts remain visible with all effective permissions false and an unavailable status. The response adds optional `connectionStatus`; connected means a valid capability response, not full health. Malformed capability payloads fail closed with 502. The Storage page supports per-mount retry and shows assignment, user preference and effective defaults without changing selection precedence. Admins see the existing admin-only catalog (maximum 500, truncation indicated); provider type and assignment counts are not reported. Admin catalog status is configuration, not connection health. See `PROJECT_HANDOFF.md` for remaining validation and authorization boundaries.
