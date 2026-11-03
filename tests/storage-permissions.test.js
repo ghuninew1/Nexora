@@ -57,7 +57,7 @@ test('storage access migration enforces ownership references, uniqueness and dep
     db.exec(readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8'));
     db.exec(readFileSync(new URL('../migrations/0008_storage_access.sql', import.meta.url), 'utf8'));
     db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, 'user', 1, 1, 1)").run('u', 'u@example.test', 'User', 'hash');
-    db.prepare("INSERT INTO storage_mounts VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)").run('m', 'u', 'Storage', 'project');
+    db.prepare("INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at) VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)").run('m', 'u', 'Storage', 'project');
     db.prepare('INSERT INTO storage_access (user_id, storage_id, can_read, can_download, created_at, updated_at) VALUES (?, ?, 1, 1, 1, 1)').run('u', 'm');
     assert.throws(() => db.prepare('INSERT INTO storage_access (user_id, storage_id, created_at, updated_at) VALUES (?, ?, 1, 1)').run('u', 'm'));
     assert.throws(() => db.prepare('UPDATE storage_access SET can_read = 0 WHERE user_id = ?').run('u'));
@@ -71,7 +71,7 @@ test('default migration preserves assignments, backfills owners and enforces one
     db.exec(readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8'));
     db.exec(readFileSync(new URL('../migrations/0008_storage_access.sql', import.meta.url), 'utf8'));
     db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, 'user', 1, 1, 1)").run('u', 'u@example.test', 'User', 'hash');
-    const mount = db.prepare("INSERT INTO storage_mounts VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)");
+    const mount = db.prepare("INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at) VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)");
     mount.run('m1', 'u', 'One', 'p1');
     mount.run('m2', 'u', 'Two', 'p2');
     db.prepare('INSERT INTO storage_access (user_id, storage_id, can_read, created_at, updated_at) VALUES (?, ?, 1, 1, 1)').run('u', 'm1');
@@ -86,13 +86,13 @@ test('default migration preserves assignments, backfills owners and enforces one
 test('central access lookup scopes assignments and intersects provider and maintenance policy', async () => {
   const db = new DatabaseSync(':memory:');
   try {
-    for (const migration of ['0001_backend_foundation.sql', '0007_system_settings.sql', '0008_storage_access.sql', '0009_storage_access_defaults.sql']) {
+    for (const migration of ['0001_backend_foundation.sql', '0007_system_settings.sql', '0008_storage_access.sql', '0009_storage_access_defaults.sql', '0010_storage_description.sql']) {
       db.exec(readFileSync(new URL(`../migrations/${migration}`, import.meta.url), 'utf8'));
     }
     const insertUser = db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, 'user', 1, 1, 1)");
     insertUser.run('owner', 'owner@example.test', 'Owner', 'hash');
     insertUser.run('member', 'member@example.test', 'Member', 'hash');
-    db.prepare("INSERT INTO storage_mounts VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)").run('m', 'owner', 'Storage', 'project');
+    db.prepare("INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at) VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)").run('m', 'owner', 'Storage', 'project');
     db.prepare('INSERT INTO storage_access (user_id, storage_id, can_read, can_download, can_upload, created_at, updated_at) VALUES (?, ?, 1, 1, 1, 1, 1)').run('member', 'm');
     const d1 = { prepare: sql => ({ bind: (...args) => ({
       first: async () => db.prepare(sql).get(...args) ?? null,

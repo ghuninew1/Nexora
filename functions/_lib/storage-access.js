@@ -15,13 +15,13 @@ const columns = Object.freeze({
 // Never accept a user id, project id, or grants from the browser.
 export async function getStorageAccessForUser(db, user, storageId) {
   if (!user?.id || !ID.test(storageId || '')) return null;
-  const row = await db.prepare(`SELECT m.id, m.owner_user_id, m.name, m.provider, m.status, m.read_only,
+  const row = await db.prepare(`SELECT m.id, m.owner_user_id, m.name, m.description, m.provider, m.status, m.read_only,
     m.shared_storage_project_id, a.* FROM storage_access a
     JOIN storage_mounts m ON m.id = a.storage_id WHERE a.user_id = ? AND m.id = ?`)
     .bind(user.id, storageId).first();
   if (!row) return null;
   const grants = Object.fromEntries(STORAGE_PERMISSION_NAMES.map(name => [name, Number(row[columns[name]]) === 1]));
-  return { mount: { id: row.id, owner_user_id: row.owner_user_id, name: row.name, provider: row.provider,
+  return { mount: { id: row.id, owner_user_id: row.owner_user_id, name: row.name, description: row.description, provider: row.provider,
     status: row.status, read_only: Number(row.read_only) === 1, shared_storage_project_id: row.shared_storage_project_id },
   grants, isDefault: Number(row.is_default) === 1 };
 }

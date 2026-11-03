@@ -497,3 +497,13 @@ Browser QA used Wrangler Pages Functions, a separate temporary local D1 and a lo
 Phase 1.1 local UI verification is complete for these scenarios; real-provider integration and production validation remain pending separately.
 
 Final checks: `pnpm lint`, `pnpm test` (164 Node tests and 8 UI tests), `pnpm build`, and `git diff --check` passed. Desktop and 390 × 844 browser layouts were inspected. No real-provider integration was exercised.
+
+## Phase 1.2.1 — Storage metadata management (2026-11-04)
+
+Audit: Nexora `storage_mounts.name` is display metadata and is unique per owner; storage access routes use logical `id` and server-only provider mapping, not the name as a bucket/key identifier. Additive migration `0010_storage_description.sql` adds a non-null description defaulting to empty, preserving existing records. `functions/_lib/admin-storages.js` implements admin-only same-origin PATCH on `/api/admin/storages/:id` with trimmed bounded values, control-character rejection, parameterized updates and owner-scoped duplicate handling. Admin catalog and assigned discovery include description; `src/components/storage/AdminStorageOverview.jsx` provides an edit form with loading, validation, errors, cancellation, duplicate-submission guard, abort on unmount and refreshed lists; assigned users can read description in details. No provider, file, assignment or identifier is mutated.
+
+Backend tests cover admin success, forbidden/unauthenticated requests, invalid input, missing mount, duplicate name, unchanged identifier/mapping/assignment and assigned description. UI tests cover open/cancel, validation, conflict, loading and successful save; existing tests cover user/admin visibility. Local browser QA used an isolated Pages instance, mock provider and temporary D1 with migration 0010 applied: admin edited a test mount and saw the updated name, description and unchanged ID. Browser user, mobile, error and stale-request QA and real-provider/production validation remain pending. Wrangler emitted local EMFILE watcher warnings but served the verified flow.
+
+Deployment of this source requires migration 0010 applied to its target D1 first; production migration and deploy were not performed and require explicit authorization and a reviewed rollout.
+
+Final local checks: `pnpm lint`, `pnpm test` (165 Node tests and 11 UI tests), `pnpm build`, and `git diff --check` passed.

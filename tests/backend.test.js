@@ -149,7 +149,7 @@ before(async () => {
   otherUser = await createUser({ db: env.DB, email: 'other@example.test', displayName: 'Other Admin', password: 'another correct horse battery staple', role: 'admin' });
   sqlite.prepare(`INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at)
     VALUES (?, ?, 'Private', 'garage', 'active', 0, ?, 1, 1)`).run(storageId, user.id, projectId);
-  for (const name of ['0008_storage_access.sql', '0009_storage_access_defaults.sql']) sqlite.exec(readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'));
+  for (const name of ['0008_storage_access.sql', '0009_storage_access_defaults.sql', '0010_storage_description.sql']) sqlite.exec(readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'));
   const response = await login();
   assert.equal(response.status, 200);
   cookie = response.headers.get('Set-Cookie').split(';')[0];
@@ -1419,6 +1419,38 @@ test('admin storage catalog is admin-only and omits provider mapping', async () 
   assert.equal(response.status, 200);
   const payload = (await response.json()).data;
   assert.ok(payload.storages.some(row => row.storageId === storageId));
-  for (const row of payload.storages) assert.deepEqual(Object.keys(row).sort(), ['name', 'readOnly', 'status', 'storageId']);
+  for (const row of payload.storages) assert.deepEqual(Object.keys(row).sort(), ['description', 'name', 'readOnly', 'status', 'storageId']);
   assert.equal(JSON.stringify(payload).includes(projectId), false);
+});
+
+test('admin storage metadata update validates and preserves storage and assignment identity', async () => {
+  const admin = await login('other@example.test', 'another correct horse battery staple');
+  const adminCookie = admin.headers.get('set-cookie').split(';')[0];
+  const path = `/api/admin/storages/${storageId}`;
+  const headers = { Origin: origin, 'Content-Type': 'application/json' };
+  const body = value => JSON.stringify(value);
+  const valid = { name: '  Renamed  ', description: '  Notes  ' };
+  assert.equal((await request(path, { method: 'PATCH', headers, body: body(valid) })).status, 403);
+  assert.equal((await request(path, { method: 'PATCH', headers: { ...headers, Cookie: '' }, body: body(valid) })).status, 401);
+  const auth = { ...headers, Cookie: adminCookie };
+  for (const invalid of [{ name: '  ', description: '' }, { name: 'a'.repeat(101), description: '' }, { name: 'a', description: 'b'.repeat(501) }, { name: 'a', description: '', provider: 'x' }]) {
+    assert.equal((await request(path, { method: 'PATCH', headers: auth, body: body(invalid) })).status, 400);
+  }
+  assert.equal((await request('/api/admin/storages/missing', { method: 'PATCH', headers: auth, body: body(valid) })).status, 404);
+  const before = sqlite.prepare('SELECT * FROM storage_access WHERE storage_id = ? ORDER BY user_id').all(storageId);
+  const mountBefore = sqlite.prepare('SELECT id, provider, shared_storage_project_id, owner_user_id FROM storage_mounts WHERE id = ?').get(storageId);
+  try {
+    const result = await request(path, { method: 'PATCH', headers: auth, body: body(valid) });
+    assert.equal(result.status, 200);
+    assert.deepEqual((await result.json()).data.storage, { storageId, name: 'Renamed', description: 'Notes' });
+    assert.deepEqual(sqlite.prepare('SELECT * FROM storage_access WHERE storage_id = ? ORDER BY user_id').all(storageId), before);
+    assert.deepEqual(sqlite.prepare('SELECT id, provider, shared_storage_project_id, owner_user_id FROM storage_mounts WHERE id = ?').get(storageId), mountBefore);
+    const listing = (await (await request('/api/storage/v1/storages')).json()).data.storages;
+    assert.equal(listing.find(row => row.storageId === storageId).description, 'Notes');
+    sqlite.prepare("INSERT INTO storage_mounts (id,owner_user_id,name,provider,status,read_only,shared_storage_project_id,created_at,updated_at) VALUES ('duplicate_test',?, 'Taken', 'garage','active',0,'example',1,1)").run(user.id);
+    assert.equal((await request(path, { method: 'PATCH', headers: auth, body: body({ name: 'Taken', description: '' }) })).status, 409);
+  } finally {
+    sqlite.prepare("DELETE FROM storage_mounts WHERE id = 'duplicate_test'").run();
+    sqlite.prepare("UPDATE storage_mounts SET name = 'Private', description = '' WHERE id = ?").run(storageId);
+  }
 });

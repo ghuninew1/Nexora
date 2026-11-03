@@ -244,7 +244,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
           connectionStatus = 'unavailable';
         }
         const { mount, permissions, isDefault } = access;
-        storages[index] = { storageId: mount.id, name: mount.name, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only, permissions, isDefault, connectionStatus };
+        storages[index] = { storageId: mount.id, name: mount.name, description: mount.description, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only, permissions, isDefault, connectionStatus };
       }
     }));
     return json({ storages: storages.filter(Boolean) });
@@ -265,7 +265,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
   if (mount.provider !== 'garage') throw new ApiError('PROVIDER_UNAVAILABLE', 503);
   if (required.some(key => !grants[key]) || (tail[2] === 'copy' && !grants.read)) throw new ApiError('FORBIDDEN', 403);
   if (method !== 'GET' && mount.read_only) throw new ApiError('FORBIDDEN', 403);
-  if (!tail.length) return json({ storage: { storageId: mount.id, name: mount.name, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only } });
+  if (!tail.length) return json({ storage: { storageId: mount.id, name: mount.name, description: mount.description, providerLabel: 'Private storage', status: mount.status, readOnly: mount.read_only } });
   if (route === 'objects' && method === 'GET' && tail.length <= 2) {
     await requireCapability(client, request, mount, tail.length === 1 ? 'list' : 'stat');
   }

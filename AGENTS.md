@@ -255,7 +255,7 @@ File Browser assignment permission gating is partial and requires further UI and
 
 ## Storage Management Phase 1 — partial
 
-Storage shows the current account's assigned active storages, search, details and capability-discovery status. Admins can reach the existing user-centric assignment editor from this page. This is not an admin-wide catalog or a comprehensive health check; usage and quota are unreported. Metadata editing and storage-centric assignment management remain unimplemented. See `PROJECT_HANDOFF.md` for the audit and validation boundary.
+Storage shows the current account's assigned active storages, search, details and capability-discovery status. Admins can reach the existing user-centric assignment editor from this page. The admin catalog is separate from assigned storage and is not a comprehensive health check; usage and quota are unreported. Storage-centric assignment management remains unimplemented. See `PROJECT_HANDOFF.md` for the audit and validation boundary.
 
 ## Storage Management Phase 1.1
 
@@ -268,3 +268,7 @@ Discovery isolates provider capability failures including upstream 4xx, after re
 ## Storage Management Phase 1.1.2 UI verification
 
 Vitest and Testing Library exercise Storage page retry, role visibility, search/filter, default display, and StorageProvider stale/abort behavior in jsdom. Full-stack local browser QA uses an isolated temporary D1 and mock provider; it does not establish real-provider health or production behavior. See `PROJECT_HANDOFF.md` for the exact checks and limits.
+
+## Storage metadata management
+
+Migration `0010_storage_description.sql` adds an optional Nexora-owned description to `storage_mounts`; existing `name` is display metadata with owner-scoped uniqueness, while `id` and provider mapping remain unchanged. Admin-only `PATCH /api/admin/storages/:id` accepts trimmed `name` (1–100 characters) and `description` (0–500 characters), validates server-side, and preserves storage IDs and assignments. Assigned storage discovery exposes the safe description. Admin catalog details allow editing; users see descriptions only for assigned storage. Source requires migration 0010 before deployment; remote application and deployment require explicit authorization. See `PROJECT_HANDOFF.md`.

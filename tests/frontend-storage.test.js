@@ -54,7 +54,7 @@ test('storage discovery uses the same-origin endpoint and keeps only public moun
 
   assert.equal(call.url, '/api/storage/v1/storages');
   assert.equal(call.options.credentials, 'same-origin');
-  assert.deepEqual(storages, [{ ...mount, connectionStatus: 'unknown' }]);
+  assert.deepEqual(storages, [{ ...mount, connectionStatus: 'unknown', description: '' }]);
   assert.equal(Object.hasOwn(storages[0], 'shared_storage_project_id'), false);
   assert.equal(Object.hasOwn(storages[0], 'provider'), false);
   assert.equal(Object.hasOwn(storages[0], 'provider_reference'), false);

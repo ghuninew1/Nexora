@@ -89,6 +89,7 @@ function safeStorage(value) {
     storageId: value.storageId,
     connectionStatus: ['connected', 'unavailable'].includes(value.connectionStatus) ? value.connectionStatus : 'unknown',
     name: value.name,
+    description: typeof value.description === 'string' ? value.description : '',
     providerLabel: typeof value.providerLabel === 'string' ? value.providerLabel : 'Private storage',
     status: value.status,
     readOnly: value.readOnly === true || value.readOnly === 1,
