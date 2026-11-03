@@ -272,3 +272,17 @@ Vitest and Testing Library exercise Storage page retry, role visibility, search/
 ## Storage metadata management
 
 Migration `0010_storage_description.sql` adds an optional Nexora-owned description to `storage_mounts`; existing `name` is display metadata with owner-scoped uniqueness, while `id` and provider mapping remain unchanged. Admin-only `PATCH /api/admin/storages/:id` accepts trimmed `name` (1–100 characters) and `description` (0–500 characters), validates server-side, and preserves storage IDs and assignments. Assigned storage discovery exposes the safe description. Admin catalog details allow editing; users see descriptions only for assigned storage. Source requires migration 0010 before deployment; remote application and deployment require explicit authorization. See `PROJECT_HANDOFF.md`.
+
+## Usage reporting audit
+
+Phase 1.2.2 remains partial: the existing usage endpoint reports unavailable. Shared Storage metadata could support a project-scoped logical file-byte aggregate after a separately reviewed contract, but it is not per-user or physical capacity; project aliases, Trash, missing sizes, consistency and disclosure need explicit handling. No quota or unlimited semantics were found in the inspected schemas. See `docs/PHASE_1_2_2_USAGE_AUDIT.md` before implementing reporting.
+
+Phase 1.2.2A proposes exact decimal-string logical metadata aggregates and explicit reporting authorization, but implements neither. Assignment alone does not authorize disclosure of project totals. Preserve the unavailable legacy usage fields until a reviewed compatible migration; do not infer quota or physical usage.
+
+Phase 1.2.2A.1 specifies a proposed canonical project reporting owner or explicitly granted admin, each also requiring an active assignment; mount ownership and admin role alone do not establish project authority. No registry, grant or aggregate is implemented. See the usage audit for fail-closed checks and alias handling before implementation.
+
+Phase 1.2.2A.2 found no authenticated service-instance/app identity available to Nexora for binding a reporting registry to its configured client. Do not implement authorization based on project ID, URL or self-asserted namespace alone; trusted provisioning authority also remains unresolved. See the usage audit.
+
+## Phase 1.2.2 — read-only Storage Overview
+
+The Storage page counts the current account’s active assigned mounts and shows capability discovery as Connected, Unavailable or Unknown; these are mount counts, not distinct project counts or a full health check. Usage, active/Trash bytes, file count and measurement time remain unavailable: the existing assigned-mount usage endpoint is a null placeholder and assignment alone does not authorize project aggregates. Do not add project totals, a reporting registry, grants, quotas or enforcement in this phase. No aggregate is calculated, so aliases cannot double-count usage. Migration 0010 was reported applied by the user on 2026-11-04; this is not independently verified and must not be reapplied for this work. Historical 1.2.2A proposals are not current scope.

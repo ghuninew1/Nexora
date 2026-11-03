@@ -72,3 +72,5 @@ Foundation, App Layout และหน้า workspace ใช้ design system �
 
 
 Phase 9.6 public layout uses the Nexora logo, shared surface/Button/Dialog, root-scoped wrapping breadcrumbs, safe long-name wrapping and 44px primary public controls. Public route has no workspace navigation or owner identity. Local mock browser QA covered desktop and 390 × 844; live provider/image/PDF QA remains pending. See `PHASE_9_6.md`.
+
+- Storage Overview ใช้ glass cards แบบ mobile-first สำหรับจำนวน assigned storages และสถานะ Connected / Unavailable / Unknown โดยแยกข้อความ usage unavailable ออกจากสถานะการเชื่อมต่อ; จำนวน storage ไม่ใช่จำนวน project และไม่มีการแสดงยอด aggregate ที่ยังไม่รองรับ

@@ -23,6 +23,14 @@ Nexora เป็นเว็บจัดการไฟล์สำหรับ 
 
 ความสามารถของไฟล์ขึ้นอยู่กับสิทธิ์และ capabilities ของ storage ที่เชื่อมต่อ การค้นหาและเรียงลำดับครอบคลุมเฉพาะรายการที่โหลดแล้ว ขนาดรวมของโฟลเดอร์และ storage usage จะแสดงว่าไม่พร้อมใช้งานเมื่อไม่มีข้อมูลจาก provider
 
+Storage usage และ quota ยังไม่มีแหล่งข้อมูล aggregate ที่ API รายงานได้ จึงไม่ใช่ค่าความจุจริงของ NAS; ดูขอบเขตข้อมูลและแนวทางต่อใน [usage audit](docs/PHASE_1_2_2_USAGE_AUDIT.md)
+
+หน้า Storage Overview แสดงจำนวน storage ที่กำหนดให้บัญชีและสถานะ Connected / Unavailable / Unknown พร้อมระบุว่า usage, active / Trash, file count และเวลาวัดยังไม่มีข้อมูลที่เชื่อถือได้ จำนวนนี้นับ storage assignment ไม่ใช่จำนวน project
+
+นโยบายที่เสนอจำกัดยอดรวมระดับ project ให้เจ้าของที่ backend ยืนยันหรือ admin ที่ได้รับสิทธิ์เฉพาะ โดยทั้งคู่ต้องมี assignment; นโยบายนี้ยังไม่ได้เปิดใช้
+
+การเข้าถึง storage ไม่ได้ให้สิทธิ์ดูยอดรวมของ shared project โดยอัตโนมัติ และไม่มีการรวม usage ข้าม storage ในขณะนี้
+
 ## เริ่มต้นพัฒนา
 
 ต้องมี Node.js 22.22 ขึ้นไป, pnpm และ dependencies ของโปรเจกต์ จากนั้นติดตั้งและเปิด Vite development server:

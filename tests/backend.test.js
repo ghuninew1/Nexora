@@ -1309,6 +1309,29 @@ test('D1 capabilities do not invent provider usage and mount read-only policy re
   sqlite.prepare('UPDATE storage_mounts SET read_only = 0 WHERE id = ?').run(storageId);
 });
 
+test('usage stays unavailable across assignment aliases and never queries or reveals the provider', async () => {
+  const path = id => `/api/storage/v1/storages/${id}/usage`;
+  const forbiddenFetch = () => { throw new Error('usage must not query the provider'); };
+  assert.equal((await handler(new Request(origin + path(storageId)), env)).status, 401);
+  const adminCookie = (await login(otherUser.email, 'another correct horse battery staple')).headers.get('set-cookie').split(';')[0];
+  assert.equal((await request(path(storageId), { headers: { Cookie: adminCookie }, fetchImpl: forbiddenFetch })).status, 404);
+  sqlite.prepare(`INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at)
+    VALUES ('usage_alias', ?, 'Usage alias', 'garage', 'active', 0, ?, 1, 1)`).run(user.id, projectId);
+  sqlite.prepare(`INSERT INTO storage_access (storage_id, user_id, created_at, updated_at) VALUES ('usage_alias', ?, 1, 1)`).run(otherUser.id);
+  try {
+    for (const [id, authCookie] of [[storageId, cookie], ['usage_alias', adminCookie]]) {
+      const response = await request(path(id), { headers: { Cookie: authCookie }, fetchImpl: forbiddenFetch });
+      assert.equal(response.status, 200);
+      const body = await response.text();
+      assert.doesNotMatch(body, new RegExp(projectId, 'u'));
+      assert.deepEqual(JSON.parse(body).data.usage, { status: 'unavailable', usedBytes: null, quotaBytes: null, objectCount: null, measuredAt: null });
+    }
+  } finally {
+    sqlite.prepare("DELETE FROM storage_access WHERE storage_id = 'usage_alias'").run();
+    sqlite.prepare("DELETE FROM storage_mounts WHERE id = 'usage_alias'").run();
+  }
+});
+
 test('copy size errors retain their safe operation-specific meaning', async () => {
   let calls = 0;
   const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/copy`, {

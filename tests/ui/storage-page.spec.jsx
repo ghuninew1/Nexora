@@ -22,6 +22,26 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('Storage page', () => {
+  it('reports assignment and connection counts separately and never invents usage', () => {
+    mocks.storage.storages = [good, bad, { ...good, storageId: 'alias', name: 'Gamma', connectionStatus: 'unknown' }];
+    mount();
+    for (const [label, count] of [['Assigned storages', '3'], ['Connected', '1'], ['Unavailable', '1'], ['Unknown', '1']]) {
+      expect(screen.getByText(label, { selector: "p" }).parentElement.textContent).toContain(count);
+    }
+    expect(screen.getByText(/backend does not report an authorized project usage aggregate/)).toBeTruthy();
+    expect(screen.getByText(/No combined usage is calculated/)).toBeTruthy();
+    expect(screen.getAllByText(/Usage unavailable/)).toHaveLength(3);
+  });
+  it('shows loading and permits a retry after discovery fails', () => {
+    mocks.storage = { ...mocks.storage, status: 'loading', storages: [] };
+    const view = mount();
+    expect(screen.getByRole('status').textContent).toContain('Loading storage');
+    mocks.storage = { ...mocks.storage, status: 'unavailable', error: 'Discovery failed' };
+    view.rerender(<MemoryRouter initialEntries={['/storage']}><WorkspacePage /></MemoryRouter>);
+    expect(screen.getByRole('alert').textContent).toContain('Discovery failed');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
   it('shows separate defaults, filters by search and connection, and hides admin actions for a user', () => {
     mount();
     expect(screen.getByText(/Assignment default:/).textContent).toContain('Alpha');

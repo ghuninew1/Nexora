@@ -1,5 +1,29 @@
 # Nexora — Project Handoff
 
+## Phase 1.2.2A.2 registry and grants — partial, 4 November 2026
+
+- Source audit found that Shared Storage project IDs are scoped to a service database and apps, while Nexora's client has no authenticated stable service-instance/app identity to bind a project registry to the current URL and credential. A URL or self-declared namespace alone cannot verify this binding. Trusted project-reporting provisioning authority is also unresolved.
+- No migration, authorization helper, provisioning endpoint or grant was added because an unverified namespace could authorize a different project after configuration changes. The existing usage response remains unavailable, and no aggregate, Shared Storage, preset or production behavior was changed. See `docs/PHASE_1_2_2_USAGE_AUDIT.md` for the minimum identity and authority work required; requested reporting authorization tests remain outstanding.
+- Validation: `pnpm lint`, `pnpm test` (166 Node tests and 11 UI tests), `pnpm build`, and `git diff --check` passed. Existing tests use in-memory SQLite and mocks; no new registry tests were possible because no registry was implemented.
+
+## Phase 1.2.2A.1 usage authorization policy — design complete, 4 November 2026
+
+- Audited roles, assignment, mount/project ownership, app credentials and IssueDesk consumers. The policy in `docs/PHASE_1_2_2_USAGE_AUDIT.md` requires an active assignment plus a canonical, explicitly provisioned project reporting owner or an active admin with an explicit project grant. Mount ownership and admin role alone are insufficient; no preset changes are proposed.
+- Documented proposed additive registry/grants, no automatic backfill, session and authorization rechecks, legacy unavailable compatibility, alias deduplication, Shared Storage app/project checks, race limitations and security test plan. This is design only: no policy schema, enforcement, aggregate API, UI, shared-service modification, migration or production work was performed. Real reporting remains unavailable.
+- Validation: `git diff --check` passed. No executable changes were made in this phase; lint, tests and build were not rerun. The prior phase's existing test changes remain in the working tree.
+
+## Phase 1.2.2A usage contract — partial, 4 November 2026
+
+- Inspected Nexora assignment/usage paths and the separate Shared Storage service source. Documented proposed exact decimal-string logical recorded bytes, Trash, incomplete data, consistent aggregation, authorization, deduplication, error semantics and existing-client compatibility in `docs/PHASE_1_2_2_USAGE_AUDIT.md`.
+- No explicit project-total reporting permission exists and Shared Storage has no aggregate endpoint. Usage remains unavailable; no Shared Storage changes, API implementation, UI, quota enforcement, migration, deployment or production access. Added a local test of the existing placeholder's auth, aliases and absence of upstream requests; it is not an aggregation test. Aggregate, precision, authorization-policy and consumer compatibility tests remain blocked on implementation.
+- Validation: `pnpm lint`, `pnpm test` (166 Node tests and 11 UI tests), `pnpm build`, and `git diff --check` passed. Tests use in-memory SQLite and mocks; no real-provider or production QA was run.
+
+## Phase 1.2.2 storage usage — partial, 4 November 2026
+
+- Audited Nexora's existing usage endpoint, assignment and catalog paths, and the separate Shared Storage service's schemas, routes and Garage adapter without reading runtime data. Findings and proposed contract are in `docs/PHASE_1_2_2_USAGE_AUDIT.md`.
+- No trustworthy aggregate API, quota definition or per-user accounting is available. Project-scoped logical metadata totals would need a reviewed shared-service change and explicit handling of missing sizes, Trash, shared access, duplicate project mappings and consistency. No reporting API, overview, enforcement, file behavior, migration or deployment was changed. Real-provider, browser and production QA remain outstanding.
+- Validation: `pnpm lint`, `pnpm test` (165 Node tests and 11 UI tests), `pnpm build`, and `git diff --check` passed. No new reporting tests were added because reporting was not implemented; temporary-D1 browser QA was not run.
+
 ## Storage assignment — partial follow-up, 3 November 2026
 
 - The user reports migration 0009 applied; this was not independently verified. Added an isolated assignment lookup and permission gate intersecting grants with provider capabilities, mount read-only, maintenance and sharing policy. It is not wired into runtime routes, discovery or UI; existing owner-only behavior remains in force. Public share lifecycle and all assignment integration remain outstanding.
@@ -507,3 +531,11 @@ Backend tests cover admin success, forbidden/unauthenticated requests, invalid i
 Deployment of this source requires migration 0010 applied to its target D1 first; production migration and deploy were not performed and require explicit authorization and a reviewed rollout.
 
 Final local checks: `pnpm lint`, `pnpm test` (165 Node tests and 11 UI tests), `pnpm build`, and `git diff --check` passed.
+
+## Phase 1.2.2 — read-only Storage Overview (2026-11-04)
+
+The current user's active assigned mounts now have separate Connected, Unavailable and Unknown counts, a searchable/filterable list, discovery retry, and an explicit usage-unavailable explanation. Counts represent mount assignments, not distinct Shared Storage projects; capability success is not a full health check. The details dialog no longer implies an unavailable description. The existing endpoint returns only null usage and assignments do not authorize project totals, so the page calculates no aggregate and displays no invented bytes, counts, timestamps, quota, percentage or capacity. The separate admin catalog and existing access checks are unchanged. Earlier reporting registry/grant proposals in the audit are historical and outside this phase.
+
+The user reported migration 0010 already applied; this has not been independently verified and it was not rerun. No remote migration, deployment, production data change, Storage/Garage change or file-operation change was performed.
+
+Validation: `pnpm lint` passed; `pnpm test` passed (166 Node tests and 13 UI tests); `pnpm build` passed. UI tests cover counts, unknown/unavailable, admin/user visibility and loading/error/retry with mocks; existing backend tests cover assignment/alias usage boundaries. The available-usage path cannot be exercised against the current placeholder. Responsive classes were reviewed, but mobile layout and real browser/provider/production behavior were not verified. Usage reporting is not complete.

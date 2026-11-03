@@ -1,0 +1,128 @@
+# Phase 1.2.2 — Storage usage audit
+
+## Current scope — 2026-11-04
+
+The user narrowed this phase to a read-only overview. Earlier 1.2.2A registry, grant and reporting designs below are historical proposals, not requested implementation. The assigned-storage list and its capability checks provide mount counts and connection states, not distinct project counts or full health. Admin catalog visibility is separate and does not confer aggregate access. The existing usage endpoint requires an active assignment but returns unavailable and nulls, with no upstream aggregate call. Shared project mappings are server-only and can be shared by several mounts; assignment or admin role alone does not authorize project-wide usage. Therefore the overview displays no combined usage, active/Trash bytes, file counts, timestamps, capacity, quota or percentage. There is no project aggregate to double-count. Unknown is never substituted with zero usage.
+
+Migration 0010 was reported applied by the user; this was not independently verified and was not reapplied. No remote resources or files were modified. Usage reporting remains incomplete. See PROJECT_HANDOFF.md for actual validation and remaining QA.
+
+
+Source inspection, 2026-11-04. No runtime database, provider or production state was inspected.
+
+## Findings
+
+- Nexora already has `GET /api/storage/v1/storages/:storageId/usage`. It requires an authenticated session and an active assignment, including for admins, but currently always returns unavailable and null measurements. The route currently requires no additional assignment permission; a real metric needs an explicit disclosure policy before enabling it. StorageProvider requests it for the selected storage only; Dashboard and Storage display unavailable data rather than an aggregate.
+- The admin catalog is a separate bounded Nexora mount inventory, not an aggregate usage source. A mount maps to an internal Shared Storage project. `storage_access` permits multiple users per mount, and the schema does not make the project mapping unique across mounts. Adding per-mount totals can therefore count the same project twice and disclose other assignees' activity.
+- Shared Storage's SQLite `storage_objects` records per-project file `size_bytes`, including rows in Trash; folders have null sizes and file sizes can also be null. `files.size` is a legacy mirror, so summing both tables would double count. A project-scoped sum of known file metadata could report **logical recorded file bytes**, with an explicit Trash policy and unknown-size handling. It is not per-user usage: object metadata does not identify a user's ownership. Copies have distinct metadata and provider objects.
+- This metadata is not an authoritative Garage physical capacity or proof of current object bytes. Object and SQLite mutations are not atomic; interrupted or failed operations can leave discrepancies or orphan objects. Garage's provider has object listing and stat operations but no project-scoped aggregate usage contract; bucket totals can contain multiple projects. No reliable last-reconciled timestamp is exposed.
+- The inspected Shared Storage v3 routes expose capabilities and object operations, not an aggregate usage endpoint. Neither the inspected Nexora mount schema nor Shared Storage project schema supplies a quota, unlimited marker, or zero-quota semantics. Missing data is unknown, not proof of unlimited or of zero used bytes. Upload-size limits and `QUOTA_EXCEEDED` error handling are not a configured storage quota.
+- IssueDesk uses the same service through v2 routes for attachments and other files. An additive project-scoped reporting contract would need compatibility, authorization and performance review for both consumers; no service change was made.
+
+## Proposed next step
+
+Agree on access to shared-project totals, whether Trash is included, project identity/deduplication, null sizes, freshness and quota semantics. Then review an additive authenticated aggregate in the shared service, scoped to projects owned by the calling app, with a bounded/batched query, coverage and calculation time; ensure no second count of the legacy mirror. Return unknown or partial for missing sizes or provider errors. Keep internal project identities server-side and deduplicate there before exposing any combined total. Extend Nexora's existing endpoint rather than introducing a duplicate; separately validate authorization, overflow, zero quota, failures and frontend accessibility. This proposal does not enforce quotas or establish physical disk usage.
+
+Accurate aggregate reporting, percentages and available space remain unavailable. The read-only overview uses only existing assigned-storage and connection data; see the current scope above.
+
+## Phase 1.2.2A — proposed contract, not implemented
+
+### Source and scope
+
+The Nexora mount's logical storage ID maps server-side through `storage_mounts.shared_storage_project_id` to an active Shared Storage project; `storage_access` associates users with mounts. Shared Storage authenticates an app credential and checks the project belongs to that active app. It has no Nexora-user identity or per-user aggregate permission. Admin catalog access is not storage assignment or authorization to see project totals. Existing usage returns nulls after assignment lookup, even for an assignment with no read grant. That behavior is safe only while it returns no metric.
+
+Shared Storage `storage_objects` contains one row per logical object, `project_id`, `type`, nullable SQLite `size_bytes INTEGER`, `deleted_at`, and `trash_root_id`; its project/object and project/provider-reference pairs are unique. Active means a file row with `deleted_at IS NULL`; Trash means a file row with `deleted_at IS NOT NULL`. A Trash operation marks all members of a subtree; restore clears the marks. Permanent deletion removes rows after provider deletions succeed; partial failures may leave metadata even when some objects have been removed. V2 files are also represented in the legacy `files` table: count only `storage_objects`. Copies have new object rows. No version ID or file-version model was found in the inspected service; Garage-side versioning and its physical effects are not established by this source inspection.
+
+### Proposed response
+
+For an authorized successful project calculation, the future Shared Storage v3 project route could add `GET /v3/projects/:projectId/usage`, with existing app authentication and active project/app ownership checks. The browser must continue using Nexora's existing storage-ID endpoint. Proposed data object:
+
+```json
+{
+  "activeBytes": "1024",
+  "trashBytes": "512",
+  "totalRecordedBytes": "1536",
+  "unknownSizeCount": "1",
+  "measuredAt": "2026-11-04T00:00:00.000Z",
+  "completeness": "partial",
+  "source": "shared-storage-file-metadata"
+}
+```
+
+The three byte values are sums of **known, nonnegative integer file sizes**, with total equal to active plus Trash. They are exact known subtotals and, when partial, lower bounds rather than complete usage. `unknownSizeCount` counts file rows whose size is null or is not a valid nonnegative SQLite integer; this prevents SQLite's dynamic typing from silently turning malformed data into a value. The count covers both active and Trash. `complete` means every selected row has a valid size; `partial` means at least one does not. An empty project returns string `"0"` for all counts and byte values and `complete`. Unavailable data returns no numeric subtotal and no measurement time, never a fabricated zero. `measuredAt` is the UTC time of calculation for the SQLite snapshot, not an object reconciliation time. Source labels describe metadata, not Garage or NAS capacity, a quota, or user usage.
+
+All counts and bytes are canonical unsigned base-10 decimal strings (`0` or a nonzero digit followed by digits). JSON numbers and direct BigInt serialization are unsafe; use arbitrary-precision integer arithmetic, explicitly serialize BigInt to strings, and validate incoming strings and bounds before parsing. SQLite integers are signed 64-bit and `SUM` can overflow even when every row fits; floating-point `total()`, JavaScript Number and unchecked driver conversions are prohibited. Implementation must use an exact database-side aggregate capable of sums beyond signed 64-bit, or fail closed on overflow as unavailable until such an aggregate is supported; never return a rounded or truncated result. Grouping or batching must use a single consistent read snapshot.
+
+On success, Nexora may add a separately named `logicalRecorded` object to the existing `usage` envelope after explicit authorization. Preserve existing fields and semantics for current consumers: until they are deliberately adapted, keep `status: "unavailable"`, `usedBytes: null`, `quotaBytes: null`, `objectCount: null`, and `measuredAt: null`; do not put strings or partial values into their existing numeric fields. A future versioned client migration may define a compatible transition. No quota, available capacity, percentage or unlimited assertion is implied.
+
+### Aggregation and disclosure requirements
+
+At a consistent snapshot, filter by the authorized project ID and `type = 'file'`, conditionally aggregate active and Trash known sizes and count invalid/missing sizes. Do not scan a Garage bucket or fetch individual files. Verify query plans and resource bounds against real scale before release. Metadata rows already purged are excluded; remaining rows after partial deletion remain recorded, with the consistency limitation above. Do not sum the legacy mirror. For future multi-storage totals, authorize every mount first, map them privately to project identities, deduplicate project IDs server-side, then aggregate each distinct authorized project once using a bounded batched project query; return coverage/partial status if any authorized project fails. Never expose project IDs or a project through an unauthorized alias. No aggregate across storages exists today.
+
+Current assignment permissions include no explicit project-usage grant, and mapping aliases may have different owners or grants. A reviewed explicit policy and server-side enforcement at project scope are required before any real metric can be released; assignment alone, the admin role, or an app credential does not satisfy this condition. Recheck authorization immediately before disclosure, especially across multiple aliases and long-running queries. The policy and its provisioning are not implemented in this phase.
+
+### Error and compatibility semantics
+
+Unauthenticated Nexora requests return 401; a missing, inactive, unassigned or otherwise undisclosable storage returns a generic 404 without revealing project existence. Shared Storage preserves its existing 401 for invalid app credentials and generic 404 for missing, inactive or foreign projects. Provider/DB errors, invalid responses, loss of precision and overflow fail closed with a safe unavailable/502 or 503 response according to the existing error mapper; do not expose upstream identifiers, SQL or raw error messages. A valid calculation with unknown file sizes is partial, not a provider error. Do not mark unqueried/failed projects as zero or complete.
+
+The separate IssueDesk functions use Shared Storage v2 for files and attachments; an additive v3 route must preserve v2 behavior, app/project isolation, existing envelopes and error behavior. Shared-service implementation, compatibility tests and deployment require separate authorization; none were performed. Existing Nexora browser normalization only recognizes safe integer legacy fields and would discard an added object until adapted.
+
+### Status and required tests
+
+**PARTIAL:** contract proposed; aggregation, explicit reporting grants, deduplication, compatibility integration and real values are not implemented. Before release test empty, active, Trash, unknown/malformed sizes, large values including beyond signed 64-bit sum, overflow failure, snapshot behavior, copies, partial deletion, alias deduplication, shared-project disclosure, admin without assignment/grant, invalid app/project, provider failure, partial coverage and unchanged v2/Nexora clients. The new local Nexora test only verifies that the current placeholder does not expose values or contact the provider across assignments and aliases; it does not validate the proposed aggregator.
+
+## Phase 1.2.2A.1 — authorization policy and enforcement design
+
+This is a design for a later implementation, not active authorization or evidence of live configuration. Nexora has `admin` and `user` roles, per-mount assignments, and a mount `owner_user_id`. The provisioning helper avoids duplicate projects for the same owner, but the database has no global project-identity uniqueness constraint: different owners' mounts can reference the same project. Consequently a mount owner is **not proven to be the owner of the entire Shared Storage project**. An ownership-only rule based on that field, even with an alias check, cannot establish the intended authority or who may see other users' totals. The Shared Storage project's `app_id` proves ownership by a service application, not by a Nexora person. The admin catalog and admin role also prove no user-level authority over a project.
+
+### Recommended policy
+
+Use ownership first only when the backend has a separately verified, canonical project-to-Nexora-owner record. A signed-in active user may receive the aggregate only when all of the following hold: the requested active mount has an active assignment for that user; its server-resolved project identity matches a single enabled canonical policy record; that record explicitly designates the user as project usage owner **or** the user is an active Nexora admin with an explicit, enabled grant for that same policy record; and the Shared Storage service independently verifies that the project is active and belongs to the authenticated app. An admin role alone never grants project access. A mount assignment, mount ownership, read, Full Access, other presets, a catalog entry, and a Shared Storage app credential do not independently grant project-total visibility. Missing, conflicting, disabled, unverified or otherwise uncertain authority fails closed. A revoked assignment blocks both owners and admins even if a separate policy grant remains.
+
+No `viewProjectUsage` assignment permission is needed for this owner-and-explicit-admin scope. If ordinary assignees must later receive project totals, propose a separately reviewed **project-scoped** grant, not a silent change to Viewer, Contributor, Editor, Full Access or Custom. Project policy grants do not modify the existing permission preset validator or its APIs.
+
+### Required schema and provisioning, proposed only
+
+An additive Nexora-owned D1 policy registry is required because existing ownership cannot establish project ownership:
+
+- `usage_project_policies(id PRIMARY KEY, provider NOT NULL, shared_storage_project_id NOT NULL, owner_user_id NOT NULL REFERENCES users(id), status NOT NULL CHECK(status IN ('active','disabled')), created_at NOT NULL, updated_at NOT NULL, UNIQUE(provider, shared_storage_project_id))`. Identity must include a stable service/credential namespace as well if multiple Shared Storage installations or app identities become possible; the current single-client assumption must be enforced. No client may read the provider project identity.
+- `usage_project_admin_grants(policy_id REFERENCES usage_project_policies(id), user_id REFERENCES users(id), status NOT NULL CHECK(status IN ('active','revoked')), created_at NOT NULL, updated_at NOT NULL, PRIMARY KEY(policy_id,user_id))`. Recheck current active user and admin role rather than trusting a historic role at grant creation. Define foreign-key deletion behavior deliberately during migration review; loss of an owner/policy must fail closed, never confer authority on another user.
+
+This registry is an explicit **Nexora reporting authority**, not proof that a human legally owns provider data. A trusted, separately authorized provisioning process must verify the app/project mapping and the intended authority for all aliases, create the owner record and any admin grants deliberately, and handle ownership transfer, revocation and auditing. Never backfill policy ownership from mount ownership or give existing admins/assignments grants automatically. Existing aliases resolve to the same unique project policy; conflicting evidence or an absent registry row blocks disclosure. Initial rollout requires operator-reviewed inventory without exposing project IDs to browsers, and migration/provisioning requires separate approval. No schema, provisioning or grant-management API is implemented here.
+
+### Trust boundaries and request sequence
+
+1. Nexora's API entry authenticates the cookie and active user. On `GET /api/storage/v1/storages/:storageId/usage`, treat the supplied storage ID only as a lookup key. Resolve the active mount and current assignment against the session user; an invalid session gets 401, an absent/inactive/unassigned storage gets generic 404. Never accept a project ID, owner ID or role from the client.
+2. Server-side, resolve the canonical policy by the mount's provider and internal project mapping. Check the enabled record and the user is its explicit owner, or has both current admin role and explicit active project admin grant. Reject unknown or ambiguous namespace and mapping. Do not call upstream for a denied caller.
+3. Only after this decision may Nexora's server-side client call the future Shared Storage aggregate route, using its existing protected app credential and internally resolved project ID. Shared Storage's `appAuth` verifies the active credential and app; its route must independently match the active project to that app before querying, and return generic 404 for missing/foreign/inactive projects. It does not make a Nexora-user authorization decision. Credentials, internal mappings and aggregate query details stay server-side.
+4. Immediately before responding, re-read the active session/user, requested active assignment and unchanged mount mapping, policy status and ownership or current admin role/grant; discard the result if anything changed or cannot be checked. Shared Storage must check its app/project access at query time. These checks reduce revocation races but D1 and Shared Storage do not share a transaction: revocation or project changes after the final check, or bytes already delivered, cannot be recalled. Do not claim atomic cross-service revocation.
+
+Alias checks and deduplication use the canonical project identity server-side. A future multi-storage aggregate must authorize each requested storage independently, deduplicate only after authorization, never make an unauthorized alias eligible by association, and provide partial coverage for failed authorized projects. Cross-project requests never derive project access from a different authorized mount. No multi-storage endpoint is part of this phase.
+
+### Wire behavior and failure policy
+
+Keep the existing endpoint and its legacy five-field unavailable payload exactly intact. For an assigned storage without a confirmed usage policy grant, return that same 200 unavailable payload and never call the aggregate provider; this preserves existing clients and does not reveal whether a project or grant exists. Invalid sessions and absent/inactive/unassigned storages retain the existing 401/404 behavior. For an authorized caller, a future successful response may add `logicalRecorded` alongside the unchanged legacy fields, using the decimal-string contract and partial-data semantics above. The extra object itself therefore discloses authorization only to its authorized recipient. Provider errors, malformed responses, policy-store failure, or failed post-fetch revalidation return the same unavailable payload for an assigned caller, with only safe value-free diagnostics; never leak project IDs, upstream errors or detailed denial reasons. Internal monitoring may distinguish safe failure categories but must not include identifiers or usage values. This subsection specifies the endpoint behavior for this policy and supersedes the earlier suggested generic 404/502/503 for an *assigned* caller's reporting denial or provider failure.
+
+Existing consumers discard the additional field and keep seeing unavailable until deliberately updated. IssueDesk consumes the separate service's v2 routes with app credentials; an additive v3 aggregate and Nexora-only policy must preserve v2 behavior and existing app/project checks. Test both consumers before any separately authorized Shared Storage change or release.
+
+### Security test plan and implementation order
+
+Use isolated D1 and mock Shared Storage, then Shared Storage's own disposable SQLite and mock provider. Assert response body, status, absence of upstream calls on denial, and no project IDs/data in errors:
+
+1. Explicit project owner with assignment succeeds; an owner whose mount is revoked, inactive or remapped does not. A mount owner without a canonical policy is denied. Unknown, disabled, missing and conflicting policy records fail closed.
+2. Admin with an explicit grant, current admin role and assignment succeeds; admin without any one of them fails. A revoked admin grant or role change during the upstream call discards the response.
+3. Assigned user without project reporting authority receives only the existing unavailable envelope, including Full Access and custom presets; unauthorized users and invalid sessions cannot enumerate projects. Existing role/preset behavior remains unchanged.
+4. Cross-project IDs, guessed storage IDs and duplicate aliases with different owners/assignments cannot confer access. Independently authorized aliases resolve to one canonical project for future deduplication; never count an unauthorized alias. Revocation, remapping, session expiry and policy changes during a delayed provider response discard data.
+5. Shared Storage rejects inactive, missing or foreign-app projects and invalid credentials; failures, timeout, malformed data and precision errors release no data. Existing IssueDesk v2 and legacy Nexora usage consumers remain compatible.
+6. On a separately approved implementation, add and verify schema plus trusted provisioning; implement the Nexora policy gate and revalidation with no new disclosure; implement and test the additive Shared Storage aggregate; integrate only after both gates and compatibility tests pass. Exercise empty, partial, overflow and snapshot semantics from 1.2.2A. Never run remote migrations or deploy as validation.
+
+**Policy/design status: COMPLETE.** Implementation and real usage reporting remain blocked until canonical authority is provisioned and the shared-service aggregate is separately authorized, implemented and tested.
+
+## Phase 1.2.2A.2 — namespace and provisioning blocker
+
+Source review: Shared Storage's `projects.id` is a primary key within one service database, and each project has an `app_id`; app credentials resolve to an app server-side. The project ID is not globally scoped across independent databases. Nexora stores only the project ID per mount, and its one service client obtains the service URL and app credential from bindings. The inspected app-authenticated v2/v3 routes do not expose an authenticated stable service-instance identity and app identity to Nexora. A URL alone may be repointed and an unverified configured namespace string does not prove which app a credential resolves to; credential rotation may preserve or change that app. The current source therefore cannot verify that a registry record still refers to the same service instance and app as the live client. No credentials or runtime database values were inspected.
+
+The requested authority to assign project reporting owners or grants is also not present: Nexora admin authorizes its own management operations, but does not prove authority over a Shared Storage project or over every alias of that project. No safe public or admin provisioning route, automatic ownership inference, schema, or authorization helper was added. In particular, a helper that approves a registry row using an unverified namespace would create false assurance; the existing usage route remains unchanged and always returns unavailable for an assigned mount, without upstream aggregation. Existing backend tests cover the current placeholder and its assignment/alias boundary only; they do not test the requested future authorization model.
+
+Before implementing, establish a stable, authenticated service-instance and app identity bound to the actual request credential, with a documented lifecycle for URL changes and credential rotation; independently establish a trusted provisioning authority, mapping verification, audit and revocation procedure. This could require a separately reviewed Shared Storage identity contract or another verifiable operator-controlled binding. Once established, define a registry whose unique identity includes that verified namespace and project ID; add default-deny owner/grant helpers with session and mapping rechecks, then run the complete security matrix from 1.2.2A.1. Do not use a global project ID, mount owner, admin role, URL or self-asserted namespace alone as proof.
+
+**Phase 1.2.2A.2: PARTIAL.** Registry schema, internal helper, provisioning and the requested positive/negative authorization tests remain unimplemented. This is a namespace identity blocker in addition to the previously identified provisioning-authority blocker; no Shared Storage mutation was made.
