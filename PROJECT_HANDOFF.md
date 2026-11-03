@@ -447,3 +447,7 @@ File Browser capability checks intersect discovery permissions for mutations and
 ## Public share text wrapping
 
 - Removed conflicting overflow-wrap utilities from two public share headings, retaining `break-words`, which won in the previously generated CSS. `pnpm lint` passed; browser verification was not performed.
+
+## File Browser selection hover
+
+- Improved the selection checkbox border and hover indication across list and grid views, including the list Select all checkbox and grid Select all button. `pnpm lint` and `git diff --check` passed; browser verification remains pending.

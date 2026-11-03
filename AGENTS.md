@@ -225,6 +225,8 @@ File preview supports MP4, WebM and Ogg video up to 20 MiB through the existing 
 
 File Browser row action and New menus highlight enabled items on hover or keyboard focus, with a distinct destructive highlight for Move to Trash.
 
+File Browser selection controls use a visible border and primary-colored hover indication in list and grid views; the grid Select all button uses contrasting primary colors on hover.
+
 ## Settings Phase 1
 
 Migration `0006_user_preferences.sql` and authenticated preference GET/PATCH, change-password and logout-other-sessions endpoints support Phase 1. Settings applies account theme, default storage, sort, normal-delete confirmation, upload concurrency/auto-clear and share expiry. Explicit accessible route storage takes precedence over default storage; inaccessible defaults fall back to the first active mount. Password change uses existing hashing and an atomic D1 batch to preserve current session and revoke others. Duplicate uploads report conflicts; rename/replace are disabled and rejected because safe provider semantics are not established. See `PROJECT_HANDOFF.md` for validation and pending browser/production QA. Production migration and deployment require explicit authorization.

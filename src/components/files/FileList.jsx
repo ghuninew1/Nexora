@@ -74,13 +74,13 @@ function FileList({
                             aria-label={allSelected ? "Deselect all files" : "Select all files"}
                             aria-pressed={allSelected}
                             className={cx(
-                                "flex size-8 shrink-0 items-center justify-center rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                "group/select flex size-8 shrink-0 items-center justify-center rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             )}
                         >
                             <span
                                 className={cx(
-                                    "flex size-4 items-center justify-center rounded border text-[10px]",
-                                    allSelected ? "border-primary bg-primary text-primary-foreground" : "border-border",
+                                    "flex size-4 items-center justify-center rounded border text-[10px] transition-colors group-hover/select:ring-2 group-hover/select:ring-primary/40",
+                                    allSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground group-hover/select:border-primary group-hover/select:bg-primary/15",
                                 )}
                             >
                                 {allSelected && "✓"}
@@ -132,7 +132,7 @@ function FileList({
                         onClick={onSelectAll}
                         aria-pressed={allSelected}
                         className={cx(
-                            "min-h-10 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                            "min-h-10 rounded-lg px-3 text-xs font-medium text-foreground transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         )}
                     >
                         {allSelected ? "Deselect all" : "Select all"}

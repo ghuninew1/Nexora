@@ -119,16 +119,16 @@ function FileListItem({
                     aria-label={`${selected ? "Deselect" : "Select"} ${file.name}`}
                     aria-pressed={selected}
                     className={cx(
-                        "flex size-8 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "group/select flex size-8 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         view === "grid" && "absolute left-2 top-2",
                     )}
                 >
                     <span
                         className={cx(
-                            "flex size-4 items-center justify-center rounded border text-[10px] transition-colors",
+                            "flex size-4 items-center justify-center rounded border text-[10px] transition-colors group-hover/select:ring-2 group-hover/select:ring-primary/40",
                             selected
                                 ? "border-primary bg-primary text-primary-foreground"
-                                : "border-border hover:border-primary",
+                                : "border-muted-foreground group-hover/select:border-primary group-hover/select:bg-primary/15",
                         )}
                     >
                         {selected && "✓"}
