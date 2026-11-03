@@ -1,6 +1,6 @@
 import { LogOut, Menu } from "lucide-react";
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import ThemeToggle from "../../theme/ThemeToggle";
 import { useAuth } from "../../hooks/useAuth";
 import { Button } from "../ui/button";

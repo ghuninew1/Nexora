@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getStorageCapabilities, getStorageUsage, listStorages, StorageApiError } from '../services/storage';
 import { StorageContext } from './storage-context';
 import { usePreferences } from '../hooks/usePreferences';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 import { selectDefaultStorage } from '../utils/default-storage';
 
 const EMPTY_USAGE = { status: 'unavailable', usedBytes: null, quotaBytes: null, objectCount: null, measuredAt: null };

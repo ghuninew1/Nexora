@@ -4,7 +4,7 @@ import { usePreferences } from '../../hooks/usePreferences';
 import { useEffect, useRef, useState } from "react";
 import { useFilesData } from "../../context/FilesProvider";
 import { emptyFileClipboard, invalidCutDestination, isEditableShortcutTarget, remainingCutClipboard } from "../../utils/file-clipboard";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { AlertCircle, FolderOpen, Info, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { cx } from "../../utils/cx";

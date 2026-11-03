@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useFilesData } from "../context/FilesProvider";
 import { RemoteFilesContext } from "../context/files-context";
 import { usePreferences } from './usePreferences';

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router";
 import AppShell from "./components/layout/AppShell";
 import Files from "./pages/Files/Files";
 import WorkspacePage from "./pages/WorkspacePage";

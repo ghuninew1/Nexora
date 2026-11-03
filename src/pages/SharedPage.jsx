@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { File, FileQuestion, Folder } from 'lucide-react';
 import { nextShareExpiryDelay } from '../utils/share-expiry';
 import { shareFilesDestination } from '../services/shares';

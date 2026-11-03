@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { Download, Eye, Folder } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import StorageFilePreviewDialog from '../components/files/StorageFilePreviewDialog';

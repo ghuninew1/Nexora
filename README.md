@@ -24,7 +24,7 @@ Nexora เป็นเว็บจัดการไฟล์สำหรับ 
 
 ## เริ่มต้นพัฒนา
 
-ต้องมี Node.js, pnpm และ dependencies ของโปรเจกต์ จากนั้นติดตั้งและเปิด Vite development server:
+ต้องมี Node.js 22.22 ขึ้นไป, pnpm และ dependencies ของโปรเจกต์ จากนั้นติดตั้งและเปิด Vite development server:
 
 ```bash
 pnpm install

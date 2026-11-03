@@ -438,3 +438,8 @@ Users page now includes assigned storage listing and assignment/edit/revoke dial
 ## User permission gating checkpoint
 
 File Browser capability checks intersect discovery permissions for mutations and download, Preview checks its own permission, Favorite and Share controls use the active assignment, and queued upload starts and retries are guarded. UI gating remains partial: action visibility, all alternate paths, refresh behavior and browser flow need further verification. Admin UI implementation exists but browser QA is not run. Lint, 161 tests, build and diff check were run locally; no production work was performed.
+
+## React Router v8 migration
+
+- Replaced `react-router-dom` 7.18.5 with `react-router` 8.5.1 and updated imports; the declarative route hierarchy, paths, and auth/navigation code were retained. React Router v8 requires Node.js 22.22+ and React/React DOM 19.2.7+; local validation used Node 26.13.0 and React/React DOM 19.3.1.
+- Validation: `pnpm lint`, `pnpm test` (161 passed), and `pnpm build` passed. Browser QA was not completed: the Browser plugin is unavailable and Playwright is not installed. Login/logout, protected and public routes, history, query parameters, direct access, refresh, and deployment remain unverified in a browser.

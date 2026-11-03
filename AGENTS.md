@@ -4,7 +4,7 @@
 
 These instructions apply to the whole Nexora repository. Treat source and configuration as authoritative; docs and sample data do not prove remote credentials, deployed bindings, storage availability, or production behavior.
 
-- React 19, Vite 8, Tailwind CSS v4, React Router 7, pnpm.
+- React 19, Vite 8, Tailwind CSS v4, React Router 8, pnpm.
 - `src/App.jsx` defines routes and keeps a shared `AppShell` around the route outlet.
 - `src/components/layout/` contains responsive navigation, header, and app shell. `src/components/files/` contains file browser UI. `src/hooks/` owns reusable state. `src/services/` is the intended location for domain API clients as integrations are added.
 - `src/index.css` owns design tokens and Liquid Glass primitives. Base UI/shadcn wrappers live in `src/components/ui/`.
