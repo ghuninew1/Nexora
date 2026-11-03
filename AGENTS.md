@@ -235,6 +235,8 @@ Phase 1.5 membership groundwork (`0008_storage_access.sql`, `0009_storage_access
 
 ## Settings Phase 2 — partial maintenance controls
 
+The workspace maintenance message appears at the top with a yellow background and centered text.
+
 Migration `0007_system_settings.sql` backs maintenance, public-share policy and session lifetime/limit settings. Authenticated admins use `GET/PATCH /api/admin/settings`; `GET /api/config` exposes only explicitly selected public values and excludes session policy. New logins apply configured lifetime and atomically retain the new session while removing older excess sessions; existing sessions keep their expiry when settings change. Expiration rules apply to newly created/replaced links; existing links are not altered. Disabling creation preserves existing links; disabling downloads blocks the public download endpoint but preserves allowed previews. Maintenance blocks normal users' storage, Favorites and owner share mutations server-side; admins remain subject to normal mount authorization. Settings are read from D1 on relevant requests, with no cross-isolate cache. Bytes already delivered cannot be recalled. Migration 0007 must exist before deploying this source, including login. Other requested Phase 2 policies and Phase 3 remain incomplete; see `PROJECT_HANDOFF.md`.
 
 Admin-configurable password minimum (8/10/12/14/16 UTF-8 bytes) and optional lowercase/uppercase/number requirement are enforced for application user creation and password changes. Existing out-of-band admin provisioning scripts retain their own 12-byte baseline and do not read configured D1 policy; do not claim the policy covers those scripts. The user reported migration 0007 ready; this was not independently verified.

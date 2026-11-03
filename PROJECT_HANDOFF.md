@@ -451,3 +451,7 @@ File Browser capability checks intersect discovery permissions for mutations and
 ## File Browser selection hover
 
 - Improved the selection checkbox border and hover indication across list and grid views, including the list Select all checkbox and grid Select all button. `pnpm lint` and `git diff --check` passed; browser verification remains pending.
+
+## Maintenance message appearance
+
+- The workspace maintenance message retains its top position and now uses a yellow background with centered, dark text. `pnpm lint` and `git diff --check` passed; browser verification remains pending.

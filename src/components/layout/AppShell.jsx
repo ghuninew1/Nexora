@@ -79,7 +79,7 @@ function AppShell({ children }) {
                         "mx-auto flex min-h-[calc(100dvh-4rem)] w-full min-w-0 max-w-[1600px] flex-col p-4 outline-none sm:p-5 lg:p-6",
                     )}
                 >
-                    {maintenance?.maintenanceMode && <p className={cx('mb-4 rounded-lg border border-border bg-card p-3 text-sm')} role="status">{maintenance.maintenanceMessage}</p>}
+                    {maintenance?.maintenanceMode && <p className={cx('mb-4 rounded-lg border border-yellow-400 bg-yellow-200 p-3 text-center text-sm text-yellow-950')} role="status">{maintenance.maintenanceMessage}</p>}
                     {children}
                 </main>
             </div>
