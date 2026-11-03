@@ -39,6 +39,8 @@ pnpm db:migrate:local
 pnpm preview
 ```
 
+สำหรับการทดสอบแบบแยกข้อมูล สามารถใช้ Wrangler `--local --persist-to <temporary-directory>` กับ migrations และ Pages dev โดยใช้ไฟล์ตัวแปรและ provider จำลองสำหรับ local เท่านั้น; อย่าใช้ bindings ของ production ในการทดสอบ
+
 `pnpm preview` จะ build ก่อนเปิด Wrangler Pages ในเครื่อง การเข้าสู่ระบบต้องมีบัญชีที่ผู้ดูแลสร้างไว้ คำสั่ง `pnpm admin:create:local` ใช้สร้าง admin ใน local D1; ดูข้อกำหนดตัวแปรและขั้นตอนใน [คู่มือ backend](docs/PHASE_8.md) การเชื่อมต่อ storage ต้องตั้งค่า server-only bindings ตาม [.dev.vars.example](.dev.vars.example) และมี mount ที่ตั้งค่าไว้ การเปิด frontend เพียงอย่างเดียวไม่ได้สร้างบัญชีหรือเชื่อม storage ให้อัตโนมัติ
 
 ## คำสั่งที่ใช้บ่อย
@@ -47,7 +49,8 @@ pnpm preview
 | --- | --- |
 | `pnpm dev` | เปิด Vite สำหรับพัฒนา frontend |
 | `pnpm lint` | ตรวจโค้ดด้วย ESLint |
-| `pnpm test` | รัน Node tests โดยใช้ in-memory database และ mocked services |
+| `pnpm test` | รัน Node tests และ Vitest UI tests โดยใช้ in-memory database และ mocked services |
+| `pnpm test:ui` | รัน Vitest UI tests ใน jsdom |
 | `pnpm build` | สร้าง production frontend ใน `dist/` |
 | `pnpm preview` | Build และเปิด Cloudflare Pages ในเครื่อง |
 | `pnpm db:migrate:local` | Apply migrations กับ local D1 |

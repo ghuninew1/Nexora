@@ -237,7 +237,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
         try {
           access = await requireStorageAccess({ request, env, user, storageId: id, fetchImpl });
         } catch (error) {
-          if (!(error instanceof ApiError) || (error.status < 500 && error.status !== 429)) throw error;
+          if (!(error instanceof ApiError)) throw error;
           access = await getStorageAccessForUser(env.DB, user, id);
           if (!access || access.mount.status !== 'active') continue;
           access.permissions = Object.fromEntries(STORAGE_PERMISSION_NAMES.map(name => [name, false]));

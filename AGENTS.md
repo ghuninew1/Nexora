@@ -133,7 +133,7 @@ pnpm deploy
 pnpm cf-typegen
 ```
 
-`pnpm test` uses Node's test runner with in-memory SQLite, mocked upstream calls, auth-client logic, and pure provisioning logic; it never writes remote D1. `pnpm db:migrate:local` always uses Wrangler `--local`; never remove that flag for routine validation. `pnpm admin:create:local` remains local-only. The explicit `*:remote` provisioning commands target `nexora-db` with `--remote`; never run them during validation or without a reviewed operator request. `pnpm preview` builds and starts Wrangler Pages locally. `pnpm deploy` deploys; it is not a validation command and requires explicit authorization.
+`pnpm test` runs Node tests with in-memory SQLite and mocked services, then Vitest/Testing Library UI tests in jsdom; it never writes remote D1. `pnpm test:ui` runs the UI tests alone. `pnpm db:migrate:local` always uses Wrangler `--local`; never remove that flag for routine validation. `pnpm admin:create:local` remains local-only. The explicit `*:remote` provisioning commands target `nexora-db` with `--remote`; never run them during validation or without a reviewed operator request. `pnpm preview` builds and starts Wrangler Pages locally. `pnpm deploy` deploys; it is not a validation command and requires explicit authorization.
 
 When dependencies appear incomplete, inspect the package manager/store and preserve `package.json` and `pnpm-lock.yaml`. Do not change dependency versions merely to work around a local `node_modules` hydration problem.
 
@@ -260,3 +260,11 @@ Storage shows the current account's assigned active storages, search, details an
 ## Storage Management Phase 1.1
 
 Assigned storage discovery isolates upstream capability errors with at most four concurrent checks; failed mounts remain visible with all effective permissions false and an unavailable status. The response adds optional `connectionStatus`; connected means a valid capability response, not full health. Malformed capability payloads fail closed with 502. The Storage page supports per-mount retry and shows assignment, user preference and effective defaults without changing selection precedence. Admins see the existing admin-only catalog (maximum 500, truncation indicated); provider type and assignment counts are not reported. Admin catalog status is configuration, not connection health. See `PROJECT_HANDOFF.md` for remaining validation and authorization boundaries.
+
+## Storage Management Phase 1.1.1 verification
+
+Discovery isolates provider capability failures including upstream 4xx, after rechecking the session user's assignment; failed mounts have all effective permissions false. User authentication/authorization is checked before discovery and remains distinct. Invalid upstream capabilities and provider failures are both exposed as unavailable rather than revealing upstream details; unknown means no recognized check result. Local browser verification and remaining gaps are recorded in `PROJECT_HANDOFF.md`.
+
+## Storage Management Phase 1.1.2 UI verification
+
+Vitest and Testing Library exercise Storage page retry, role visibility, search/filter, default display, and StorageProvider stale/abort behavior in jsdom. Full-stack local browser QA uses an isolated temporary D1 and mock provider; it does not establish real-provider health or production behavior. See `PROJECT_HANDOFF.md` for the exact checks and limits.

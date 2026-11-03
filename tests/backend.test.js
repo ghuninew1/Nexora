@@ -448,20 +448,49 @@ test('storage discovery isolates provider failures and retries without granting 
   sqlite.prepare(`INSERT INTO storage_access (storage_id, user_id, can_read, can_download, created_at, updated_at)
     VALUES ('mount_beta', ?, 1, 1, 1, 1)`).run(user.id);
   try {
-    const fetchImpl = async (url, init) => String(url).includes('private_project_beta')
-      ? new Response('unavailable', { status: 503 }) : upstreamResponse(url, init);
-    const response = await request('/api/storage/v1/storages', { fetchImpl });
-    assert.equal(response.status, 200);
-    const rows = (await response.json()).data.storages;
-    const good = rows.find(row => row.storageId === storageId);
-    const bad = rows.find(row => row.storageId === 'mount_beta');
-    assert.equal(good.connectionStatus, 'connected');
-    assert.equal(good.permissions.read, true);
-    assert.equal(bad.connectionStatus, 'unavailable');
-    assert.ok(Object.values(bad.permissions).every(value => value === false));
+    for (const failure of [503, 404, 403, 'invalid']) {
+      const fetchImpl = async (url, init) => String(url).includes('private_project_beta')
+        ? (failure === 'invalid' ? Response.json({ success: true }) : new Response('unavailable', { status: failure }))
+        : upstreamResponse(url, init);
+      const response = await request('/api/storage/v1/storages', { fetchImpl });
+      assert.equal(response.status, 200);
+      const rows = (await response.json()).data.storages;
+      const good = rows.find(row => row.storageId === storageId);
+      const bad = rows.find(row => row.storageId === 'mount_beta');
+      assert.equal(good.connectionStatus, 'connected');
+      assert.equal(good.permissions.read, true);
+      assert.equal(bad.connectionStatus, 'unavailable');
+      assert.ok(Object.values(bad.permissions).every(value => value === false));
+    }
     const retried = await request('/api/storage/v1/storages');
     assert.equal((await retried.json()).data.storages.find(row => row.storageId === 'mount_beta').connectionStatus, 'connected');
   } finally { sqlite.prepare("DELETE FROM storage_access WHERE storage_id = 'mount_beta'").run(); sqlite.prepare("DELETE FROM storage_mounts WHERE id = 'mount_beta'").run(); }
+});
+
+test('storage discovery bounds concurrent provider capability requests', async () => {
+  for (let i = 0; i < 6; i++) {
+    sqlite.prepare(`INSERT INTO storage_mounts (id, owner_user_id, name, provider, status, read_only, shared_storage_project_id, created_at, updated_at)
+      VALUES (?, ?, ?, 'garage', 'active', 0, ?, 1, 1)`).run(`batch_${i}`, user.id, `Batch ${i}`, `batch_${i}`);
+    sqlite.prepare(`INSERT INTO storage_access (storage_id, user_id, created_at, updated_at) VALUES (?, ?, 1, 1)`).run(`batch_${i}`, user.id);
+  }
+  let active = 0;
+  let peak = 0;
+  try {
+    const response = await request('/api/storage/v1/storages', { fetchImpl: async (url, init) => {
+      active++; peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      active--;
+      return upstreamResponse(url, init);
+    } });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).data.storages.length, 7);
+    assert.ok(peak > 1 && peak <= 4);
+  } finally {
+    for (let i = 0; i < 6; i++) {
+      sqlite.prepare('DELETE FROM storage_access WHERE storage_id = ?').run(`batch_${i}`);
+      sqlite.prepare('DELETE FROM storage_mounts WHERE id = ?').run(`batch_${i}`);
+    }
+  }
 });
 
 test('capabilities uses the owner mount project, exact S2 URL and server-only credentials', async () => {
