@@ -33,6 +33,12 @@ export function requiredStoragePermissions(method, tail) {
     if (tail.length === 3 && verb === 'POST' && action === 'move') return ['move'];
     if (tail.length === 3 && verb === 'POST' && action === 'copy') return ['copy'];
   }
+  if (route === 'uploads') {
+    if (tail.length === 1 && ['POST','GET'].includes(verb)) return ['upload'];
+    if (id && tail.length === 2 && ['GET','DELETE'].includes(verb)) return ['upload'];
+    if (id && tail.length === 3 && verb === 'POST' && ['complete','pause','resume'].includes(action)) return ['upload'];
+    if (id && tail.length === 4 && verb === 'PUT' && action === 'parts') return ['upload'];
+  }
   if (route === 'folders' && tail.length === 1 && verb === 'POST') return ['createFolder'];
   if (route === 'files' && tail.length === 1 && verb === 'POST') return ['upload'];
   if (route === 'files' && tail.length === 3 && verb === 'GET' && action === 'download') return ['read', 'download'];

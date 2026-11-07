@@ -1,4 +1,8 @@
 const messages = {
+  UPLOAD_CONFLICT: 'The upload changed or is busy. Refresh its status before retrying.',
+  UPLOAD_EXPIRED: 'This upload session has expired.',
+  UPLOAD_BUSY: 'Too many upload sessions are active.',
+  UPLOAD_CHECKSUM_MISMATCH: 'The uploaded part checksum does not match.',
   USER_HAS_STORAGE: 'Remove or transfer this user’s storage mounts before deleting the account.',
   MAINTENANCE: 'Nexora is currently undergoing maintenance. Changes are temporarily unavailable.',
   SHARE_UNAVAILABLE: 'This shared item is unavailable.',
@@ -43,7 +47,7 @@ export function fail(code, status) {
 }
 
 export function statusFor(code) {
-  return ({ UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, INVALID_INPUT: 400, NAME_CONFLICT: 409,
+  return ({ UPLOAD_CONFLICT: 409, UPLOAD_EXPIRED: 410, UPLOAD_BUSY: 429, UPLOAD_CHECKSUM_MISMATCH: 422, UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, INVALID_INPUT: 400, NAME_CONFLICT: 409,
     CAPABILITY_UNAVAILABLE: 422, QUOTA_EXCEEDED: 429, UPLOAD_TOO_LARGE: 413, OPERATION_TOO_LARGE: 413, PROVIDER_UNAVAILABLE: 503,
     TRANSFER_INCOMPLETE: 502, RATE_LIMITED: 429, INTERNAL_ERROR: 500 })[code] || 500;
 }
@@ -100,7 +104,7 @@ export function decodePath(pathname) {
 }
 
 export function normalizeUpstreamError(payload, status) {
-  const allowed = new Set(['NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT', 'CAPABILITY_UNAVAILABLE', 'UPLOAD_TOO_LARGE', 'OPERATION_TOO_LARGE', 'QUOTA_EXCEEDED', 'TRANSFER_INCOMPLETE']);
+  const allowed = new Set(['UPLOAD_CONFLICT', 'UPLOAD_EXPIRED', 'UPLOAD_BUSY', 'UPLOAD_CHECKSUM_MISMATCH', 'NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT', 'CAPABILITY_UNAVAILABLE', 'UPLOAD_TOO_LARGE', 'OPERATION_TOO_LARGE', 'QUOTA_EXCEEDED', 'TRANSFER_INCOMPLETE']);
   const code = payload?.error?.code;
   if (allowed.has(code)) return code;
   if (status === 404) return 'NOT_FOUND';

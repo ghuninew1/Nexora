@@ -45,12 +45,12 @@ function logWriteFailure(logger, action, stage) {
   try { logger?.warn?.(`[activity] result=write-failed action=${action} stage=${stage}`); } catch { /* logging is best effort too */ }
 }
 
-export async function recordActivity(db, user, event, { logger = console, now = Date.now } = {}) {
+export async function recordActivity(db, user, event, { logger = console, now = Date.now, eventId } = {}) {
   if (!user?.id || !ACTIVITY_ACTIONS.has(event?.action)) return false;
-  const id = crypto.randomUUID();
+  const id = eventId || crypto.randomUUID();
   const timestamp = now();
   try {
-    await db.prepare(`INSERT INTO activity_events
+    await db.prepare(`INSERT ${eventId ? 'OR IGNORE ' : ''}INTO activity_events
       (id,user_id,storage_mount_id,storage_name,action,object_id,object_name,object_type,parent_id,destination_parent_id,metadata_json,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
       id,

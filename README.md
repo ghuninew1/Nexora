@@ -96,6 +96,8 @@ tests/               automated tests
 - [Project handoff](PROJECT_HANDOFF.md) — ประวัติการทำงาน ผลตรวจ และงานที่ยังค้าง
 - [Design system](docs/DESIGN_SYSTEM.md) — tokens และแนวทาง UI
 - [Storage architecture](docs/STORAGE_ARCHITECTURE.md) และ [Storage API contract](docs/STORAGE_API_V1_PROPOSAL.md)
+- [Multipart backend](docs/LARGE_FILE_TRANSFER_BACKEND.md) — server implementation แบบ opt-in; ต้องผ่าน migration และ infrastructure QA ก่อนเปิดใช้ ยังไม่มี frontend resumable queue
+- [Large file transfer plan](docs/LARGE_FILE_TRANSFER_PLAN.md) — architecture audit และ roadmap; สถานะ backend ปัจจุบันอยู่ในเอกสาร Multipart backend ยังไม่ยืนยันการรองรับ 10 GiB
 - [Backup and recovery](docs/BACKUP_RECOVERY.md) และ [production security gates](docs/PHASE_10_1_1.md)
 - [AGENTS.md](AGENTS.md) — แนวทางทำงานใน repository
 

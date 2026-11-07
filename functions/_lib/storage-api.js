@@ -1,3 +1,4 @@
+import { handleUploadSessions, publicTransferCapabilities } from './upload-sessions.js';
 import { requiredStoragePermissions, intersectStoragePermissions, STORAGE_PERMISSION_NAMES } from './storage-permissions.js';
 import { getSystemSettings } from './system-settings.js';
 import { getStorageAccessForUser, requireStorageAccess } from './storage-access.js';
@@ -256,6 +257,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
   const [mountId, ...tail] = rest;
   if (!mountId) throw new ApiError('NOT_FOUND', 404);
   const route = tail[0];
+  if (route === 'uploads') return handleUploadSessions({ request, env, user, storageId: mountId, tail, fetchImpl, logger });
   const required = requiredStoragePermissions(method, tail);
   const access = await getStorageAccessForUser(env.DB, user, mountId);
   if (!access || (access.mount.status !== 'active' && tail.length)) throw new ApiError('NOT_FOUND', 404);
@@ -286,6 +288,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const policy = await getSystemSettings(env.DB);
     const permissions = intersectStoragePermissions(grants, payload?.capabilities, { readOnly: mount.read_only, maintenance: user.role !== 'admin' && policy.maintenanceMode });
     if (!policy.publicSharingEnabled) { permissions.share = false; permissions.manageShare = false; }
+    caps.transfers = publicTransferCapabilities(payload?.capabilities, env.STORAGE_RESUMABLE_UPLOADS_ENABLED === 'true' && permissions.upload);
     caps.copy = caps.copy && permissions.read;
     for (const [flag, permission] of Object.entries({ list: 'read', stat: 'read', download: 'download', upload: 'upload', createFolder: 'createFolder', rename: 'rename', move: 'move', copy: 'copy', trash: 'delete', restore: 'delete', permanentDelete: 'permanentDelete' })) caps[flag] = caps[flag] && permissions[permission];
     return json({ capabilities: caps, permissions });

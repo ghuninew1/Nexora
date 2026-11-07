@@ -1,3 +1,4 @@
+import { isUploadCancellation } from './upload-sessions.js';
 import { handleAdminStorages } from './admin-storages.js';
 import { handleSharesApi, handlePublicSharesApi } from './shares-api.js';
 import { authenticate, login, sessionCookie, serializeUser, logout, normalizeDisplayName } from './auth.js';
@@ -70,7 +71,7 @@ export function createApiHandler({ fetchImpl = fetch, logger = console } = {}) {
         response = await handleActivityApi({ request, env, user, parts });
       } else if (parts[1] === 'storage' && parts[2] === 'v1') {
         const user = await requireUser(request, env);
-        if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) { requireSameOrigin(request); await requireWritableSystem(env, user); }
+        if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method.toUpperCase())) { requireSameOrigin(request); if (!isUploadCancellation(request.method, parts)) await requireWritableSystem(env, user); }
         response = await handleStorageApi({ request, env, user, parts, fetchImpl, logger });
       } else if (parts[1] === 'favorites') {
         const user = await requireUser(request, env);

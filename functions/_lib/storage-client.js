@@ -52,7 +52,7 @@ function safeProject(projectId) {
 }
 
 export function createStorageClient({ env, fetchImpl = fetch, logger = console }) {
-  async function request({ request: incomingRequest, projectId, path, method = 'GET', body, contentType, accept = 'application/json', operation }) {
+  async function request({ request: incomingRequest, projectId, path, method = 'GET', body, contentType, accept = 'application/json', operation, requestHeaders = {} }) {
     if (operation === 'capabilities' || operation === 'copy') {
       diagnostic(logger, operation, `stage=bindings ${bindingPresence(env)}`);
     }
@@ -80,6 +80,10 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
         'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
       });
       if (contentType) headers.set('Content-Type', contentType);
+      // Only transfer protocol headers may supplement server-owned authentication.
+      for (const name of ['Idempotency-Key', 'X-Part-SHA256']) {
+        if (requestHeaders[name]) headers.set(name, requestHeaders[name]);
+      }
     } catch (error) {
       diagnostic(logger, operation, `stage=request-build result=header-error type=${safeErrorType(error)}`);
       throw error;
@@ -89,7 +93,7 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
     const cancel = () => controller.abort(incomingRequest.signal.reason);
     if (incomingRequest.signal.aborted) cancel();
     else incomingRequest.signal.addEventListener('abort', cancel, { once: true });
-    const timer = setTimeout(() => { timedOut = true; controller.abort(new Error('timeout')); }, timeoutMs(env));
+    const timer = setTimeout(() => { timedOut = true; controller.abort(new Error('timeout')); }, operation === 'upload-session' ? 270_000 : timeoutMs(env));
     let response;
     let redirectBlocked = false;
     let currentUrl = url;
@@ -182,7 +186,8 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
       }
       try {
         if (result.operation === 'copy') diagnostic(logger, result.operation, `stage=response-parse status=${result.response.status}`);
-        const payload = await result.response.json();
+        const payload = args.maxResponseBytes ? await readBoundedJson(result.response, args.maxResponseBytes) : await result.response.json();
+        if (!payload) throw new Error('invalid response');
         if (result.operation === 'copy') diagnostic(logger, result.operation, 'result=response-parsed');
         else diagnostic(logger, result.operation, `result=http-ok status=${result.response.status}`);
         return payload;
