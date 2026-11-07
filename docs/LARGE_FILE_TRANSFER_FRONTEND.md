@@ -1,6 +1,6 @@
 # Large file transfer — frontend client
 
-Phase **4.1–4.4 COMPLETE locally** (2026-11-08). Multipart uploads retain metadata in native IndexedDB, coordinate same-origin tabs using Web Locks, and recover bounded network interruptions through the original session. Full Transfer Manager and real-provider acceptance remain pending. See PROJECT_HANDOFF.md for executed checks and the Phase4.4 completion result. Server flags stay disabled by default; local tests and mocked browser checks do not imply production activation or10GiB acceptance.
+Phase **4.1–4.5 COMPLETE locally** (2026-11-08). Multipart uploads retain metadata in native IndexedDB, coordinate same-origin tabs using Web Locks, and recover bounded network interruptions through the original session. Phase4.5 supplies the global upload Transfer Manager; real-provider acceptance remains pending. See PROJECT_HANDOFF.md for executed checks and the Phase4.4 completion result. Server flags stay disabled by default; local tests and mocked browser checks do not imply production activation or10GiB acceptance.
 
 ## Durable recovery and original-file selection (Phase4.3)
 
@@ -168,12 +168,23 @@ Stable `.code` values include `NETWORK_INTERRUPTION`, `REQUEST_TIMEOUT`, `AUTHEN
 
 Only transient reads retry directly. Uncertain part/transition writes (including malformed success responses) reconcile first; create can only replay the exact retained key/body because no transfer ID may be known yet. Authentication, permission, checksum and validation errors never retry automatically. A409 triggers a fresh version/status, not blind reuse. Completion uncertainty must retain the transfer ID; do not start another upload. Cancellation after revoked status may require an explicit cleanup retry by the user.
 
-## Remaining work after Phase4.4
+## Remaining work after Phase4.5
 
-1. Review a broader Transfer Manager separately. Same-origin Web Locks coordination and durable metadata/reselection are implemented; optional file-handle reuse and global multi-storage transfer UI remain deferred. Keep small-file fallback and explicit capabilities.
+1. Global upload Transfer Manager presentation is implemented. Same-origin Web Locks coordination and durable metadata/reselection are implemented; optional file-handle reuse and global multi-storage transfer UI remain deferred. Keep small-file fallback and explicit capabilities.
 2. Expand browser lifecycle/mobile/offline/permission/late-provider-effect testing and isolated real Garage acceptance, including10GiB, memory and proxy budgets. Current mocked browser checks are not provider acceptance.
 3. Keep default flags off until infrastructure gates pass and an operator authorizes activation; Range Download remains a separate phase.
 
 ## Validation boundary
 
 Focused unit tests mock same-origin transport, covering create idempotency, SHA-256/headers/boundaries, pagination>100, verified resume, missing/conflicting receipts, stale versions, lost part/complete/cancel responses, terminal states/auth, invalid snapshots, timeout/abort/locking, retry budgets and bounded sequential source reads. These are not real Garage or10GiB verification. See PROJECT_HANDOFF.md for executed suite totals and [backend contract](LARGE_FILE_TRANSFER_BACKEND.md) / [acceptance report](LARGE_FILE_TRANSFER_ACCEPTANCE.md) for outstanding infrastructure gates. Phase4.2 adds queue/UI/lifecycle tests and mocked Chrome checks for26MiB multipart, Pause/Resume/Cancel,3-byte legacy routing and disabled capabilities. Phase4.3 adds native IndexedDB CRUD/schema/retention/failure tests, durable recovery/reselection hook tests (including real SHA-256 with mocked transport), and real IndexedDB/refresh/reopen browser assertions. No Range download or Shared Storage changes were made. Exact executed totals, browser environment, skips and limitations are recorded in PROJECT_HANDOFF.md.
+
+
+## Unified Transfer Manager (Phase4.5)
+
+Header → Transfers opens a responsive Base UI dialog on every authenticated route. It consumes the existing RemoteFilesContext upload queue: exactly one hook/owner remains in FilesProvider. File Browser no longer renders UploadQueue inline. Closing/unmounting dialog content does not touch the engine; route changes preserve the owner. Existing signingOut/auth/public-ID/mount epoch teardown and IndexedDB/Web Locks recovery remain authoritative. Storage switching still aborts and discards in-memory scope without cancelling server sessions; select the original mount to restore its durable records. This phase does not introduce simultaneous multi-mount uploads.
+
+Uploads render filename/size, all existing states, verified bytes/parts, capped percentage and supported actions. Pause all/Resume all dispatch existing per-item methods to supported multipart states only. Clear finished retains the existing behavior (including forgetting inactive failed recovery metadata); Clear local history never cancels server sessions. The Header count is nonterminal work, including waiting and paused, with an attention label/dot for recovery errors/reselection/ownership issues.
+
+The queue samples positive acknowledgement deltas over at least1 second within uninterrupted uploading, excluding status/recovery jumps. Speed/ETA reset when leaving uploading; absent measurements render no estimate. ETA covers remaining acknowledged bytes, excludes server finalization and is approximate, not instantaneous wire throughput. Legacy small uploads remain indeterminate. Only confirmed success displays100%. No protocol, Web Locks, IndexedDB schema or Shared Storage API rewrite.
+
+The uploads container is an explicit composition boundary for a future real Downloads section. No Download tab, dummy queue or fake progress exists; Phase5/Range remain separate. Keyboard opening/Escape/focus return, multiple rows, supported bulk dispatch, recovery, completion cap and workspace teardown have automated coverage alongside existing lifecycle suites. Desktop/mobile mocked browser results and exact validation are recorded in PROJECT_HANDOFF.md. Production flags remain unchanged.

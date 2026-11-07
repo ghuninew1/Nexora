@@ -18,7 +18,7 @@ const STATUS = {
   verifying: { label: 'Verifying parts', icon: Loader2 },
   finalizing: { label: 'Finalizing', icon: Loader2 },
   pausing: { label: 'Pausing', icon: Loader2 },
-  paused: { label: 'Resume available', icon: Pause },
+  paused: { label: 'Paused · Resume available', icon: Pause },
   resuming: { label: 'Resuming', icon: Loader2 },
   cancelling: { label: 'Confirming cancellation', icon: Loader2 },
   retry_wait: { label: 'Waiting to retry', icon: Loader2 },
@@ -52,6 +52,8 @@ function OriginalFileButton({ id, name, onSelect }) {
 function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume, onClearFinished, onSelectOriginal, onRetryReconciliation, onClearLocalHistory, restoring = false, persistenceWarning, canRetry = true }) {
   if (items.length === 0 && !restoring && !persistenceWarning) return null;
   const activeCount = items.filter((item) => ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'cancelling', 'retry_wait', 'reconciling', 'recovering_connection'].includes(item.status)).length;
+  const pausable = items.filter(item => item.strategy === 'multipart' && ['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling', 'waiting_network', 'recovering_connection', 'other_tab'].includes(item.status));
+  const resumable = items.filter(item => item.strategy === 'multipart' && item.status === 'paused' && !item.needsFile);
   const queuedCount = items.filter((item) => item.status === 'queued').length;
   const finishedCount = items.filter((item) => ['success', 'error', 'expired', 'cancelled'].includes(item.status)).length;
 
@@ -64,6 +66,8 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
         </p>
       </div>
       <div className={cx('flex flex-wrap gap-2')}>
+        {pausable.length > 0 && <Button type="button" variant="outline" size="sm" className={cx('min-h-11')} onClick={() => pausable.forEach(item => onPause(item.id))}>Pause all</Button>}
+        {canRetry && resumable.length > 0 && <Button type="button" variant="outline" size="sm" className={cx('min-h-11')} onClick={() => resumable.forEach(item => onResume(item.id))}>Resume all</Button>}
         {items.some(item => item.strategy === 'multipart') && <Button type="button" variant="ghost" size="sm" onClick={onClearLocalHistory} title="Forget inactive entries on this device only; server sessions are not cancelled.">Clear local history</Button>}
         {finishedCount > 0 && <Button type="button" variant="ghost" size="sm" onClick={onClearFinished}>Clear finished</Button>}
       </div>
@@ -79,7 +83,7 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
           ? !['success', 'expired', 'cancelled', 'cancelling', 'restoring', 'checking_server'].includes(item.status)
           : ['queued', 'uploading'].includes(item.status);
         const canPause = multipart && ['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling', 'waiting_network', 'recovering_connection', 'other_tab'].includes(item.status);
-        const percent = item.status === 'success' ? 100 : Math.min(99, Math.floor(100 * (item.acknowledgedBytes || 0) / item.sizeBytes));
+        const percent = item.status === 'success' ? 100 : Math.max(0, Math.min(99, Math.floor(100 * (item.acknowledgedBytes || 0) / (item.sizeBytes || 1))));
         return <li key={item.id} className={cx('flex min-w-0 flex-wrap items-start gap-3 px-4 py-3')}>
           <Icon className={cx('mt-0.5 size-5 shrink-0 text-muted-foreground', ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'reconciling', 'cancelling'].includes(item.status) && 'motion-safe:animate-spin', item.status === 'success' && 'text-primary', item.status === 'error' && 'text-destructive')} aria-hidden="true" />
           <div className={cx('min-w-0 flex-1 basis-36')}>
@@ -98,6 +102,7 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
                 {item.acknowledgedBytes === item.sizeBytes && item.status !== 'success' && ' · awaiting finalization'}
               </p>
             </div>}
+            {multipart && item.status === 'uploading' && item.bytesPerSecond > 0 && Number.isFinite(item.etaSeconds) && <p className={cx('mt-1 text-xs text-muted-foreground')}>{formatBytes(item.bytesPerSecond)}/s · ETA about {Math.ceil(item.etaSeconds)}s (server acknowledgements)</p>}
             {!multipart && item.status === 'uploading' && <div role="progressbar" aria-label={`Uploading ${item.name}`} aria-valuetext="Upload in progress" className={cx('mt-2 h-1.5 overflow-hidden rounded-full bg-muted')}>
               <div className={cx('h-full w-1/3 rounded-full bg-primary motion-safe:animate-pulse motion-reduce:animate-none')} />
             </div>}

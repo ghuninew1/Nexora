@@ -112,6 +112,23 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   }, []);
   const update = useCallback((task, changes) => {
     if (!alive(task)) return;
+    // Measure only newly acknowledged bytes during an uninterrupted upload run.
+    // Reconciliation/recovery counters are not network throughput samples.
+    const now = performance.now();
+    const nextStatus = changes.status ?? task.status;
+    if (nextStatus !== 'uploading' || task.status !== 'uploading') {
+      task.speedSample = nextStatus === 'uploading' ? { bytes: changes.acknowledgedBytes ?? task.acknowledgedBytes ?? 0, time: now } : null;
+      changes.bytesPerSecond = null;
+      changes.etaSeconds = null;
+    } else if (changes.acknowledgedBytes !== undefined && task.speedSample) {
+      const elapsed = (now - task.speedSample.time) / 1000;
+      const delta = changes.acknowledgedBytes - task.speedSample.bytes;
+      if (elapsed >= 1 && delta > 0) {
+        changes.bytesPerSecond = delta / elapsed;
+        changes.etaSeconds = Math.max(0, task.sizeBytes - changes.acknowledgedBytes) / changes.bytesPerSecond;
+        task.speedSample = { bytes: changes.acknowledgedBytes, time: now };
+      }
+    }
     Object.assign(task, changes);
     if (!['other_tab', 'waiting_ownership'].includes(task.status)) void persist(task);
     // Only public display metadata enters React state, never File/controller/client/key.

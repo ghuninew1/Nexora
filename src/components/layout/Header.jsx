@@ -6,6 +6,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { Button } from "../ui/button";
 import { getPageInfo } from "../navigation/navigation";
 import { cx } from "../../utils/cx";
+import TransferManager from "../files/TransferManager";
 import logo from "../../assets/logo.avif";
 
 function Header({ onMenuClick, menuButtonRef, isMobileOpen }) {
@@ -39,7 +40,7 @@ function Header({ onMenuClick, menuButtonRef, isMobileOpen }) {
     return (
         <header
             className={cx(
-                "glass-header sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-5 lg:px-6",
+                "glass-header sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-1 border-b px-2 sm:px-5 lg:px-6",
             )}
         >
             <div className={cx("flex min-w-0 items-center gap-3")}>
@@ -72,7 +73,8 @@ function Header({ onMenuClick, menuButtonRef, isMobileOpen }) {
                     </p>
                 </div>
             </div>
-            <div className={cx("flex shrink-0 items-center gap-3")}>
+            <div className={cx("flex shrink-0 items-center gap-1 sm:gap-3")}>
+                <TransferManager />
                 <Button type="button" variant="ghost" className={cx("min-h-11 min-w-11 gap-2")} onClick={() => navigate('/account')} aria-label="Account settings">
                     <span
                         aria-hidden="true"

@@ -514,3 +514,23 @@ it('work queued while already offline needs explicit Resume and cannot create a 
   await waitFor(() => expect(h.status()).toBe('success'));
   expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
 });
+
+it('measures only acknowledged byte deltas and clears speed on pause', async () => {
+  let clock = 0;
+  const time = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  const h = setup(); const gate = deferred();
+  try {
+    h.api.hooks.part = async (id, source, number, signal) => {
+      if (number === 1) clock = 2000;
+      else await untilAbort(signal);
+    };
+    h.add([file('measured.bin', limits.partSizeBytes + 10)]);
+    await waitFor(() => expect(h.result.current.items[0]?.completedParts).toBe(1));
+    expect(h.result.current.items[0].bytesPerSecond).toBe(limits.partSizeBytes / 2);
+    expect(h.result.current.items[0].etaSeconds).toBeCloseTo(10 / (limits.partSizeBytes / 2));
+    act(() => h.result.current.pauseUpload(h.result.current.items[0].id));
+    await waitFor(() => expect(h.status()).toBe('paused'));
+    expect(h.result.current.items[0].bytesPerSecond).toBeNull();
+    expect(h.result.current.items[0].etaSeconds).toBeNull();
+  } finally { gate.resolve(); h.unmount(); time.mockRestore(); }
+});

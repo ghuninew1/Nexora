@@ -113,3 +113,8 @@ tests/               automated tests
 Admin สามารถจัดการ storage assignment ของผู้ใช้ได้ใน Administration > Users
 
 Core storage v1 operations now enforce session-scoped storage assignments, including object reads, transfers, mutations, Trash lifecycle and operation status. See docs/PHASE_STORAGE_ASSIGNMENT.md for the route matrix. Favorites, Recent, Public Share and UI integration remain separate.
+
+
+## Transfer Manager
+
+Open **Transfers** in the authenticated Header to manage the existing upload queue from any workspace page. Closing the panel or navigating routes keeps uploads running. Multipart uploads expose server-verified progress, recovery/reselection and supported Pause/Resume/Cancel/Retry controls, including Pause all and Resume all. Speed and ETA appear only after measured server acknowledgements; legacy uploads remain indeterminate. Clear finished forgets finished local entries, including failed recovery metadata, without cancelling server sessions. Downloads still use the existing streamed path; no download queue or Range engine is implemented. Mount changes retain the existing queue teardown/recovery policy.

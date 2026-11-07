@@ -83,3 +83,8 @@ Phase 9.6 public layout uses the Nexora logo, shared surface/Button/Dialog, root
 ### Upload Queue coordination states
 
 Phase4.4 retains the existing responsive Upload Queue. Multipart rows distinguish Waiting for network, Recovering connection, Active in another tab and Waiting for ownership, with Resume available and Retry connection actions. Use the existing shared Buttons, theme tokens, 44px controls, wrapping row layout and server-acknowledged progress semantics. An unavailable locking authority must be visible and block active multipart work. Ownership waiting is not represented as transmitted bytes.
+
+
+## Global Transfer Manager
+
+The Header Transfers control opens one responsive, scrollable Base UI dialog with focus trapping, Escape dismissal and focus return. Reuse UploadQueue, shared Buttons, glass surfaces, cx and theme tokens; retain44px row actions and mobile wrapping. Header compacts gaps on narrow screens. The count includes nonterminal entries (including paused/waiting), with an amber attention dot and accessible state label. The Uploads section is the future composition boundary for real Downloads; no fake tab/progress. Server-verified counters cap99% until confirmation; legacy remains indeterminate. Speed/ETA are acknowledgement-based estimates only during uploading. The single workspace queue exists independently of the dialog lifetime.
