@@ -1,11 +1,13 @@
+import { memoryWebLocks } from '../helpers/web-locks';
 import { StrictMode } from 'react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import useUploadQueue from '../../src/hooks/useUploadQueue';
 import UploadQueue from '../../src/components/files/UploadQueue';
 import { selectUploadStrategy } from '../../src/utils/upload-strategy';
 
-afterEach(cleanup);
+beforeEach(() => Object.defineProperty(navigator, 'locks', { configurable: true, value: memoryWebLocks() }));
+afterEach(() => { cleanup(); Object.defineProperty(navigator, 'onLine', { configurable: true, value: true }); });
 const limits = { resumableUpload: true, partSizeBytes: 8 * 1024 ** 2, maxFileBytes: 10 * 1024 ** 3,
   maxParts: 1280, maxParallelParts: 1, sessionTtlSeconds: 604800 };
 const file = (name = 'test.bin', size = 10) => new File([new Uint8Array(size)], name, { type: 'application/octet-stream' });
@@ -68,7 +70,7 @@ function setup(extra = {}) {
   const api = backend();
   const options = { scopeKey: 'owner_a:storage_a', uploadFile: vi.fn().mockResolvedValue({ file: { objectId: 'small' } }),
     createClient: api.createClient, autoClear: false, onComplete: vi.fn(), onUnauthorized: vi.fn(), ...extra };
-  const hook = renderHook(props => useUploadQueue(props), { initialProps: options });
+  const hook = renderHook(props => useUploadQueue({ recoveryScope: 'test_owner', ...props }), { initialProps: options });
   const add = (files = [file()], params = {}) => {
     let ids;
     act(() => { ids = hook.result.current.addFiles(files, { storageId: 'storage_a', maxUploadBytes: 4, transfers: limits, ...params }); });
@@ -163,7 +165,7 @@ it('network retry retains identity, waits, then reconciles; no legacy fallback',
   const gate = deferred(); const wait = vi.fn(() => gate.promise);
   const h = setup({ waitForRetry: wait }); let first = true;
   h.api.hooks.part = () => { if (first) { first = false; throw err('NETWORK_INTERRUPTION'); } };
-  h.add(); await waitFor(() => expect(h.status()).toBe('retry_wait'));
+  h.add(); await waitFor(() => expect(h.status()).toBe('recovering_connection'));
   expect(h.api.sessions.size).toBe(1);
   await act(async () => gate.resolve()); await waitFor(() => expect(h.status()).toBe('success'));
   expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
@@ -255,7 +257,7 @@ it('UI invokes multipart pause/resume and retry cancellation, including revoked 
 
 it('StrictMode lifecycle replay does not duplicate uploads', async () => {
   const api = backend(), complete = vi.fn();
-  const h = renderHook(() => useUploadQueue({ scopeKey: 'strict', createClient: api.createClient, onComplete: complete, autoClear: false }),
+  const h = renderHook(() => useUploadQueue({ recoveryScope: 'test_owner', scopeKey: 'strict', createClient: api.createClient, onComplete: complete, autoClear: false }),
     { wrapper: StrictMode });
   await act(async () => {});
   act(() => h.result.current.addFiles([file()], { storageId: 'storage_a', maxUploadBytes: 4, transfers: limits }));
@@ -281,7 +283,7 @@ it('serializes several parts per logical session and uses server-reconciled prog
 it('explicit pause during retry_wait prevents scheduled automatic retry', async () => {
   const h = setup({ waitForRetry: (attempt, signal) => untilAbort(signal) });
   h.api.hooks.part = () => { throw err('NETWORK_INTERRUPTION'); };
-  const [id] = h.add(); await waitFor(() => expect(h.status()).toBe('retry_wait'));
+  const [id] = h.add(); await waitFor(() => expect(h.status()).toBe('recovering_connection'));
   act(() => h.result.current.pauseUpload(id)); await waitFor(() => expect(h.status()).toBe('paused'));
   expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(1);
 });
@@ -340,4 +342,175 @@ it('a known permission change aborts local requests immediately while retaining 
   expect(h.api.signals[0].aborted).toBe(true);
   expect(h.result.current.items[0].errorCode).toBe('PERMISSION_REVOKED');
   act(() => h.result.current.cancelUpload(id)); await waitFor(() => expect(h.status()).toBe('cancelled'));
+});
+
+it('fails closed without Web Locks while preserving the small-file path', async () => {
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+  const h = setup(); h.add();
+  await waitFor(() => expect(h.status()).toBe('waiting_ownership'));
+  expect(h.api.calls).toEqual([]);
+  h.add([file('small', 2)]);
+  await waitFor(() => expect(h.result.current.items[1].status).toBe('success'));
+});
+
+it('requires public user identity to prove multipart ownership', async () => {
+  const h = setup({ recoveryScope: null }); h.add();
+  await waitFor(() => expect(h.status()).toBe('waiting_ownership'));
+  expect(h.api.calls).toEqual([]);
+});
+
+it('offline part interruption preserves session; online reconciles and completes once', async () => {
+  let online = true;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  let interrupted = false;
+  h.api.hooks.part = async (id, source, number, signal) => {
+    if (interrupted) return;
+    interrupted = true; online = false; window.dispatchEvent(new Event('offline')); await untilAbort(signal);
+  };
+  h.add();
+  await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  const creates = h.api.calls.filter(c => c.name === 'create'); expect(creates).toHaveLength(1);
+  online = true; act(() => window.dispatchEvent(new Event('online')));
+  await waitFor(() => expect(h.status()).toBe('success'));
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.options.onComplete).toHaveBeenCalledTimes(1);
+  expect(h.options.waitForRetry).toHaveBeenCalledTimes(1);
+});
+
+it('explicit Pause while offline cannot automatically resume on online; Cancel remains explicit', async () => {
+  let online = false;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const h = setup({ waitForRetry: vi.fn(async () => {}) }); const [id] = h.add();
+  await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  act(() => h.result.current.pauseUpload(id));
+  await waitFor(() => expect(h.status()).toBe('paused'));
+  online = true; act(() => window.dispatchEvent(new Event('online')));
+  await act(async () => {}); expect(h.status()).toBe('paused'); expect(h.api.calls).toEqual([]);
+  act(() => h.result.current.cancelUpload(id)); expect(h.status()).toBe('cancelled');
+});
+
+it('unstable online events share a bounded budget and exponential attempts instead of restarting retries', async () => {
+  let online = true;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const wait = vi.fn(async () => {}), h = setup({ waitForRetry: wait });
+  h.api.hooks.part = async (id, source, number, signal) => {
+    online = false; window.dispatchEvent(new Event('offline')); await untilAbort(signal);
+  };
+  h.add();
+  for (let i = 0; i < 2; i++) {
+    await waitFor(() => expect(h.status()).toBe('waiting_network'));
+    online = true; act(() => window.dispatchEvent(new Event('online')));
+    await waitFor(() => expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(i + 2));
+  }
+  await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  online = true; act(() => window.dispatchEvent(new Event('online')));
+  await waitFor(() => expect(h.status()).toBe('error'));
+  expect(h.result.current.items[0].retryable).toBe(true);
+  expect(wait.mock.calls.map(call => call[0])).toEqual([0, 1]);
+  act(() => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('online')); });
+  await act(async () => {}); expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(3);
+});
+
+it('Cancel interrupts connection backoff and confirms the same server session without sending more parts', async () => {
+  let online = true;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const h = setup({ waitForRetry: (attempt, signal) => untilAbort(signal) });
+  h.api.hooks.part = async (id, source, number, signal) => {
+    online = false; window.dispatchEvent(new Event('offline')); await untilAbort(signal);
+  };
+  const [id] = h.add(); await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  online = true; act(() => window.dispatchEvent(new Event('online')));
+  await waitFor(() => expect(h.status()).toBe('recovering_connection'));
+  act(() => h.result.current.cancelUpload(id));
+  await waitFor(() => expect(h.status()).toBe('cancelled'));
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'cancel')).toHaveLength(1);
+});
+
+it('permission revocation during offline wait blocks automatic network resume', async () => {
+  let online = true, permitted = true;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const h = setup({ canUpload: () => permitted, waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = async (id, source, number, signal) => {
+    online = false; window.dispatchEvent(new Event('offline')); await untilAbort(signal);
+  };
+  h.add(); await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  permitted = false; online = true; act(() => window.dispatchEvent(new Event('online')));
+  await waitFor(() => expect(h.status()).toBe('error'));
+  expect(h.result.current.items[0].retryable).toBe(false);
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(1);
+});
+
+it('Pause during an interrupted active part confirms pause on online without uploading another part', async () => {
+  let online = true;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = async (id, source, number, signal) => {
+    online = false; window.dispatchEvent(new Event('offline')); await untilAbort(signal);
+  };
+  const [id] = h.add(); await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  act(() => h.result.current.pauseUpload(id));
+  await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  online = true; act(() => window.dispatchEvent(new Event('online')));
+  await waitFor(() => expect(h.status()).toBe('paused'));
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'pause')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'resume')).toHaveLength(0);
+});
+
+it.each(['SESSION_EXPIRED', 'AUTHENTICATION_FAILURE'])('network reconciliation stops on %s without new parts', async code => {
+  let online = true;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = async (id, source, number, signal) => {
+    online = false; window.dispatchEvent(new Event('offline')); await untilAbort(signal);
+  };
+  h.add(); await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  h.api.hooks.reconcile = () => { throw err(code); };
+  online = true; act(() => window.dispatchEvent(new Event('online')));
+  await waitFor(() => expect(h.status()).toBe(code === 'SESSION_EXPIRED' ? 'expired' : 'error'));
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.options.onUnauthorized).toHaveBeenCalledTimes(code === 'AUTHENTICATION_FAILURE' ? 1 : 0);
+});
+
+it('a quick online event during abort settlement still reconciles instead of stranding the task', async () => {
+  let first = true;
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = async (id, source, number, signal) => {
+    if (!first) return;
+    first = false;
+    window.dispatchEvent(new Event('offline'));
+    window.dispatchEvent(new Event('online'));
+    await untilAbort(signal);
+  };
+  h.add(); await waitFor(() => expect(h.status()).toBe('success'));
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.options.onComplete).toHaveBeenCalledTimes(1);
+});
+
+it('manual Retry cannot bypass a long server Retry-After by constructing a new client', async () => {
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = () => { throw Object.assign(err('RATE_LIMITED'), { retryAfterMs: 600000 }); };
+  const [id] = h.add(); await waitFor(() => expect(h.status()).toBe('error'));
+  const calls = h.api.calls.length;
+  act(() => h.result.current.retryUpload(id));
+  await waitFor(() => expect(h.status()).toBe('error'));
+  expect(h.api.calls.length).toBe(calls);
+  expect(h.options.waitForRetry).not.toHaveBeenCalled();
+});
+
+it('work queued while already offline needs explicit Resume and cannot create a session on online', async () => {
+  let online = false;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  const [id] = h.add(); await waitFor(() => expect(h.status()).toBe('waiting_network'));
+  online = true; act(() => window.dispatchEvent(new Event('online')));
+  await waitFor(() => expect(h.status()).toBe('paused'));
+  expect(h.api.calls).toEqual([]);
+  act(() => h.result.current.resumeUpload(id));
+  await waitFor(() => expect(h.status()).toBe('success'));
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
 });

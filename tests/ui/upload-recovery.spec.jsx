@@ -1,5 +1,6 @@
+import { memoryWebLocks } from '../helpers/web-locks';
 import { StrictMode } from 'react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor, render, screen, fireEvent } from '@testing-library/react';
 import { Blob as NodeBlob, File as NodeFile } from 'node:buffer';
 import { createHash, webcrypto } from 'node:crypto';
@@ -9,6 +10,7 @@ import { createMultipartUploadClient } from '../../src/services/multipart-upload
 import { createUploadRecoveryStore } from '../../src/services/upload-recovery';
 import { memoryIndexedDB } from '../helpers/memory-indexeddb';
 
+beforeEach(() => Object.defineProperty(navigator, 'locks', { configurable: true, value: memoryWebLocks() }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const record = (patch = {}) => ({schemaVersion:1,id:'record_a',userScope:'owner_a',transferId:'transfer_a',idempotencyKey:'stable_key',
   storageId:'storage_a',parentId:null,name:'original.bin',sizeBytes:10,mimeType:'application/octet-stream',lastModified:123,
@@ -271,4 +273,31 @@ it('stale reconciliation actions cannot reinsert completed history or replay com
   act(()=>h.result.current.retryReconciliation('record_a'));
   expect(state(h)).toBe('success');expect(f.client.getCompletedParts).toHaveBeenCalledTimes(1);
   expect(f.options.onComplete).toHaveBeenCalledTimes(1);
+});
+
+it('two tabs serialize the same session and reconcile takeover after owner unmount without cancellation', async () => {
+  const f = fixture({ state: 'active' }); await f.store.save(record({ intent: null, lastState: 'uploading' }));
+  const first = renderHook(() => useUploadQueue(f.options));
+  await waitFor(() => expect(state(first)).toBe('waiting_file'));
+  act(() => first.result.current.selectOriginalFile('record_a', source()));
+  await waitFor(() => expect(state(first)).toBe('paused'));
+  let started;
+  const entered = new Promise(resolve => { started = resolve; });
+  f.client.uploadPart.mockImplementation(() => { started(); return new Promise(() => {}); });
+  // A real HTTP client settles when aborted. Keep the old result pending here to
+  // prove no takeover until the operation has actually settled.
+  let settle;
+  f.client.uploadPart.mockImplementation(() => { started(); return new Promise(resolve => { settle = resolve; }); });
+  act(() => first.result.current.resumeUpload('record_a')); await entered;
+  const second = renderHook(() => useUploadQueue(f.options));
+  await waitFor(() => expect(state(second)).toBe('other_tab'));
+  const reads = f.client.getCompletedParts.mock.calls.length;
+  first.unmount();
+  await act(async () => {}); expect(state(second)).toBe('other_tab');
+  await act(async () => settle({ partNumber: 1 }));
+  await waitFor(() => expect(state(second)).toBe('waiting_file'));
+  expect(f.client.getCompletedParts.mock.calls.length).toBeGreaterThan(reads);
+  expect(f.client.cancelSession).not.toHaveBeenCalled();
+  expect(f.client.uploadPart).toHaveBeenCalledTimes(1);
+  expect(f.options.onComplete).not.toHaveBeenCalled();
 });

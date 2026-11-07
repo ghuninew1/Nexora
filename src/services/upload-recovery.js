@@ -4,7 +4,7 @@ export const UPLOAD_RECOVERY_VERSION = 1;
 export const MAX_RECOVERY_RECORDS = 50;
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const STATES = new Set(['queued','uploading','verifying','finalizing','pausing','paused','resuming','cancelling',
-  'retry_wait','reconciling','error','restoring','checking_server','waiting_file','file_mismatch','recovery_error']);
+  'waiting_network','recovering_connection','other_tab','waiting_ownership','retry_wait','reconciling','error','restoring','checking_server','waiting_file','file_mismatch','recovery_error']);
 const integer = value => Number.isSafeInteger(value) && value >= 0;
 const validId = value => typeof value === 'string' && ID.test(value);
 

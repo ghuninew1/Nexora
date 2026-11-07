@@ -109,8 +109,8 @@ function FileListItem({
         >
             <div
                 className={cx(
-                    "flex min-w-0 items-center gap-3",
-                    view === "grid" && "min-h-0 flex-1 flex-col justify-center gap-2 pt-8",
+                    "flex min-w-0 items-center",
+                    view === "grid" ? "min-h-0 flex-1 flex-col justify-center gap-2 pt-8" : "gap-1 sm:gap-3",
                 )}
             >
                 <button
@@ -125,7 +125,8 @@ function FileListItem({
                 >
                     <span
                         className={cx(
-                            "flex size-4 items-center justify-center rounded border text-[10px] transition-colors group-hover/select:ring-2 group-hover/select:ring-primary/40",
+                            "flex items-center justify-center rounded border text-[10px] transition-colors group-hover/select:ring-2 group-hover/select:ring-primary/40",
+                            view === "grid" ? "size-4" : "size-3.5 sm:size-4",
                             selected
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-muted-foreground group-hover/select:border-primary group-hover/select:bg-primary/15",
@@ -149,7 +150,7 @@ function FileListItem({
                         aria-pressed={favorite}
                         title={favorite ? "Remove from favorites" : "Add to favorites"}
                     >
-                        <Star className={cx(favorite && "fill-amber-400 text-amber-500")} aria-hidden="true" />
+                        <Star className={cx(view === "list" && "size-3.5 sm:size-4", favorite && "fill-amber-400 text-amber-500")} aria-hidden="true" />
                     </Button>
                 )}
                 <button

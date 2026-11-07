@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createMultipartUploadClient, MultipartUploadError } from '../services/multipart-upload';
+import { withUploadOwnership, withUploadBudget } from '../services/upload-coordination';
 import { selectUploadStrategy } from '../utils/upload-strategy';
 import { uploadRecoveryStore, normalizeRecoveryRecord, matchesOriginalFile } from '../services/upload-recovery';
 
@@ -40,6 +41,7 @@ function errorMessage(error) {
     FILE_MISMATCH: 'This file does not match the upload session.',
     RECEIPT_CONFLICT: 'Server receipts are inconsistent. Upload stopped safely.',
     INVALID_RESPONSE: 'Storage returned an invalid response. Upload stopped safely.',
+    PROVIDER_UNAVAILABLE: 'Storage is temporarily unavailable. Retry connection shortly.',
     RATE_LIMITED: 'Storage is temporarily busy. Retry shortly.',
     QUOTA_EXCEEDED: 'The storage limit has been reached.',
     UNAUTHENTICATED: 'Your session has expired. Sign in again to continue.',
@@ -52,10 +54,10 @@ function errorMessage(error) {
   return messages[error?.code] || 'Upload failed. Retry when storage is available.';
 }
 
-function retryDelay(attempt, signal) {
+function retryDelay(attempt, signal, retryAfterMs = 0) {
   return new Promise((resolve, reject) => {
     const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(new MultipartUploadError('ABORTED')); };
-    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, 500 * 2 ** attempt * (0.5 + Math.random() * 0.5));
+    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, Math.max(retryAfterMs, Math.min(30000, 1000 * 2 ** attempt) * (0.5 + Math.random())));
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
   });
@@ -77,6 +79,8 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const writeBlockedRef = useRef(false);
   const optionsRef = useRef(null);
   const processRef = useRef(null);
+  const recoverNetworkRef = useRef(null);
+  const offlineRef = useRef(globalThis.navigator?.onLine === false);
   const concurrency = [1, 2, 3, 5].includes(maxConcurrency) ? maxConcurrency : 3;
   useLayoutEffect(() => {
     optionsRef.current = { uploadFile, onComplete, onUnauthorized, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry, recoveryScope, recoveryStore };
@@ -94,8 +98,9 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     if (task.strategy !== 'multipart' || !task.userScope || task.localOnly || (task.persistenceFailed && !remove && !['success','cancelled','expired'].includes(task.status))) return;
     const removing = remove || ['success','cancelled','expired'].includes(task.status);
     try {
-      if (removing) await task.recoveryStore.remove(task.userScope, task.id);
-      else await task.recoveryStore.save(taskRecord(task));
+      const writing = removing ? task.recoveryStore.remove(task.userScope, task.id) : task.recoveryStore.save(taskRecord(task));
+      task.persistenceTail = Promise.allSettled([task.persistenceTail, writing]);
+      await writing;
     } catch {
       task.persistenceFailed = true;
       if (mountedRef.current && task.epoch === epochRef.current && task.scopeKey === optionsRef.current.scopeKey) {
@@ -108,14 +113,14 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const update = useCallback((task, changes) => {
     if (!alive(task)) return;
     Object.assign(task, changes);
-    void persist(task);
+    if (!['other_tab', 'waiting_ownership'].includes(task.status)) void persist(task);
     // Only public display metadata enters React state, never File/controller/client/key.
     setItems(current => current.map(item => item.id === task.id ? { ...item, ...changes } : item));
   }, [alive, persist]);
 
   const dispose = useCallback(() => {
     epochRef.current++;
-    for (const task of tasksRef.current.values()) { task.controller?.abort(); task.file = null; task.candidateFile = null; task.client = null; }
+    for (const task of tasksRef.current.values()) { task.ownerController?.abort(); task.controller?.abort(); task.file = null; task.candidateFile = null; task.client = null; }
     tasksRef.current.clear(); activeRef.current.clear(); pendingRef.current = [];
     for (const timer of timersRef.current.values()) clearTimeout(timer);
     timersRef.current.clear();
@@ -160,10 +165,11 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   }, [alive, update]);
 
   const run = useCallback(async task => {
-    let retries = 0;
-    const check = () => { if (!alive(task) || task.controller.signal.aborted) throw new MultipartUploadError('ABORTED'); };
+    let retries = task.retryAttempts || 0;
+    const check = () => { if (!alive(task) || task.ownerController?.signal.aborted || task.controller.signal.aborted) throw new MultipartUploadError('ABORTED'); };
     const allowed = () => {
       check();
+      if (task.strategy === 'multipart' && (offlineRef.current || globalThis.navigator?.onLine === false)) throw new MultipartUploadError('OFFLINE');
       if (writeBlockedRef.current || !optionsRef.current.canUpload(task.storageId)) throw new MultipartUploadError('PERMISSION_REVOKED');
     };
     const snapshot = (session, firstPage = false) => {
@@ -181,6 +187,11 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
       const handling = task.intent;
       const operationMode = task.mode;
       try {
+        if (task.reconnect) { task.reconnect = false; await optionsRef.current.waitForRetry(Math.max(0, retries - 1), task.controller.signal); check(); }
+        if (task.strategy === 'multipart' && (offlineRef.current || globalThis.navigator?.onLine === false)) throw new MultipartUploadError('OFFLINE');
+        const cooldown = (task.retryAfterUntil || 0) - Date.now();
+        if (cooldown > 300000) throw new MultipartUploadError('RATE_LIMITED', 429, cooldown);
+        if (cooldown > 0) { await optionsRef.current.waitForRetry(0, task.controller.signal, cooldown); check(); }
         const client = task.strategy === 'multipart' ? optionsRef.current.createClient({ storageId: task.storageId,
           signal: task.controller.signal, maxRetries: 0 }) : null;
         task.client = client;
@@ -226,6 +237,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           check(); task.transferId = session.transferId;
           snapshot(session, true);
           await persist(task); check();
+          await task.acquireTransfer?.(task.transferId); check();
         }
         if (handling) {
           await persist(task); check();
@@ -287,6 +299,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         if (!alive(task)) return;
         const error = task.permissionRevoked ? new MultipartUploadError('PERMISSION_REVOKED') : caughtError;
         task.permissionRevoked = false;
+        if (error?.retryAfterMs > 0) task.retryAfterUntil = Date.now() + error.retryAfterMs;
         // An explicit intent takes precedence over retries; a changed intent restarts only control handling.
         if (task.strategy === 'multipart' && task.intent && task.intent !== handling) continue;
         if (AUTH.has(error?.code)) {
@@ -300,6 +313,12 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           optionsRef.current.onUnauthorized?.(); return;
         }
         if (blockedRef.current) return;
+        if (task.strategy === 'multipart' && (error?.code === 'OFFLINE' || (task.networkInterrupted && error?.code === 'ABORTED'))) {
+          task.networkInterrupted = false;
+          task.networkResume = !task.intent && !task.mode && Boolean(task.file) && Boolean(task.started || task.transferId);
+          update(task, { status: 'waiting_network', error: null });
+          return;
+        }
         if (operationMode === 'check' || operationMode === 'select') {
           task.mode = null; task.candidateFile = null;
           const terminal = error?.code === 'SESSION_EXPIRED' ? 'expired' : error?.code === 'SESSION_CANCELLED' ? 'cancelled' : null;
@@ -315,11 +334,17 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           return;
         }
         if (['FORBIDDEN', 'PERMISSION_REVOKED', 'CAPABILITY_UNAVAILABLE'].includes(error?.code)) writeBlockedRef.current = true;
-        if (task.strategy === 'multipart' && !handling && TRANSIENT.has(error?.code) && retries < MAX_RETRIES) {
-          update(task, { status: 'retry_wait', error: errorMessage(error) });
-          try { await optionsRef.current.waitForRetry(retries++, task.controller.signal); }
+        if (task.strategy === 'multipart' && !handling && TRANSIENT.has(error?.code) && retries < MAX_RETRIES && !(error.retryAfterMs > 300000)) {
+          update(task, { status: 'recovering_connection', error: errorMessage(error) });
+          try { task.retryAttempts = ++retries; await optionsRef.current.waitForRetry(retries - 1, task.controller.signal, error.retryAfterMs); }
           catch {
             if (!alive(task)) return;
+            if (task.permissionRevoked) {
+              task.permissionRevoked = false; writeBlockedRef.current = true;
+              update(task, { status: 'error', retryable: false, error: errorMessage({ code: 'PERMISSION_REVOKED' }), errorCode: 'PERMISSION_REVOKED' });
+              return;
+            }
+            if (task.networkInterrupted) { task.networkInterrupted = false; task.networkResume = !task.intent && Boolean(task.file) && Boolean(task.started || task.transferId); update(task, { status: 'waiting_network', error: null }); return; }
             if (!task.intent) { update(task, { status: 'error', error: errorMessage(error), retryable: true }); return; }
           }
           continue;
@@ -344,13 +369,46 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
       const task = pendingRef.current.shift();
       if (!alive(task) || activeRef.current.has(task.id)) continue;
       activeRef.current.set(task.id, task);
-      void run(task).finally(() => {
+      task.ownerController = new AbortController();
+      const ownedRun = async () => {
+        if (task.strategy !== 'multipart') return run(task);
+        const releases = [];
+        const held = [];
+        task.acquireTransfer = async transferId => {
+          let ready, failed;
+          const acquired = new Promise((resolve, reject) => { ready = resolve; failed = reject; });
+          const heldLock = withUploadOwnership({ userScope: task.userScope, identity: `transfer:${transferId}`,
+            signal: task.ownerController.signal, onWaiting: () => update(task, { status: 'other_tab' }) },
+          () => new Promise(resolve => { releases.push(resolve); ready(); }));
+          heldLock.catch(failed);
+          held.push(heldLock);
+          await acquired;
+        };
+        try {
+          return await withUploadOwnership({ userScope: task.userScope, identity: `create:${task.key}`,
+            signal: task.ownerController.signal, onWaiting: () => update(task, { status: 'other_tab' }) }, async () => {
+            if (task.transferId) await task.acquireTransfer(task.transferId);
+            if (!alive(task)) return;
+            try { await withUploadBudget(task.ownerController.signal, () => run(task)); }
+            finally { await task.persistenceTail; }
+          });
+        } catch (error) {
+          if (alive(task) && error.code !== 'ABORTED' && error.name !== 'AbortError') update(task, {
+            status: 'waiting_ownership', retryable: false,
+            error: 'Exclusive ownership cannot be proven. Use a browser with Web Locks support to continue.' });
+        } finally {
+          for (const release of releases) release();
+          await Promise.allSettled(held);
+          task.acquireTransfer = null;
+        }
+      };
+      void ownedRun().finally(() => {
         if (!alive(task)) return;
         activeRef.current.delete(task.id); task.controller = null;
-        queueMicrotask(() => processRef.current?.());
+        queueMicrotask(() => { processRef.current?.(); if (!offlineRef.current) recoverNetworkRef.current?.(); });
       });
     }
-  }, [alive, run]);
+  }, [alive, run, update]);
   useLayoutEffect(() => { processRef.current = processQueue; queueMicrotask(processQueue); }, [processQueue, concurrency]);
 
   const enqueue = useCallback(task => {
@@ -358,6 +416,49 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     pendingRef.current.push(task);
     queueMicrotask(() => processRef.current?.());
   }, [alive]);
+
+  useEffect(() => {
+    const offline = () => {
+      offlineRef.current = true;
+      for (const task of activeRef.current.values()) {
+        if (task.strategy !== 'multipart') continue;
+        task.networkInterrupted = true;
+        task.controller?.abort();
+      }
+    };
+    const online = () => {
+      if (globalThis.navigator?.onLine === false) return;
+      offlineRef.current = false;
+      for (const task of tasksRef.current.values()) {
+        if (task.status !== 'waiting_network' || activeRef.current.has(task.id)) continue;
+        // Controls reconcile their original intent; a user pause never becomes Resume.
+        if (!task.networkResume && !task.intent && !task.mode) {
+          // Work queued while already offline was never an active transfer.
+          // Offer explicit Resume rather than creating a session automatically.
+          task.intent = 'pause';
+          update(task, { status: task.file ? 'paused' : 'waiting_file', needsFile: !task.file, error: null });
+          continue;
+        }
+        if (blockedRef.current) continue;
+        if (task.intent !== 'cancel' && (writeBlockedRef.current || !optionsRef.current.canUpload(task.storageId))) {
+          update(task, { status: 'error', retryable: false, error: errorMessage({ code: 'PERMISSION_REVOKED' }) });
+          continue;
+        }
+        if ((task.retryAttempts || 0) >= MAX_RETRIES) {
+          update(task, { status: 'error', retryable: true, error: 'Connection recovery exhausted. Retry connection to reconcile this session.' });
+          continue;
+        }
+        task.retryAttempts = (task.retryAttempts || 0) + 1;
+        task.networkResume = false;
+        task.reconnect = true;
+        update(task, { status: 'recovering_connection' }); enqueue(task);
+      }
+    };
+    recoverNetworkRef.current = online;
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    return () => { recoverNetworkRef.current = null; window.removeEventListener('offline', offline); window.removeEventListener('online', online); };
+  }, [enqueue, update]);
 
   useEffect(() => {
     if (!recoveryScope || !recoveryStorageId) return undefined;
@@ -406,7 +507,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
 
   const retryReconciliation = useCallback(id => {
     const task = tasksRef.current.get(id);
-    if (!task || !alive(task) || !['recovery_error','waiting_file','file_mismatch'].includes(task.status)
+    if (!task || !alive(task) || !['recovery_error','waiting_file','file_mismatch','waiting_ownership'].includes(task.status)
       || activeRef.current.has(id) || pendingRef.current.includes(task) || blockedRef.current) return;
     task.mode = 'check'; update(task, { status: 'checking_server', error: null }); enqueue(task);
   }, [alive, update, enqueue]);
@@ -468,23 +569,23 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
       if (activeRef.current.has(id)) task.controller?.abort(); else enqueue(task);
     } else {
       pendingRef.current = pendingRef.current.filter(pending => pending !== task);
-      task.controller?.abort(); task.file = null;
+      task.ownerController?.abort(); task.controller?.abort(); task.file = null;
       update(task, { status: 'cancelled', error: null });
     }
   }, [alive, update, enqueue]);
 
   const pauseUpload = useCallback(id => {
     const task = tasksRef.current.get(id);
-    if (!task || task.strategy !== 'multipart' || !['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling'].includes(task.status)) return;
+    if (!task || task.strategy !== 'multipart' || !['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling', 'waiting_network', 'recovering_connection', 'other_tab'].includes(task.status)) return;
     task.intent = 'pause';
-    if (!task.started) { pendingRef.current = pendingRef.current.filter(pending => pending !== task); update(task, { status: 'paused' }); }
+    if (!task.started) { task.ownerController?.abort(); pendingRef.current = pendingRef.current.filter(pending => pending !== task); update(task, { status: 'paused' }); }
     else { update(task, { status: 'pausing' }); if (activeRef.current.has(id)) task.controller?.abort(); else enqueue(task); }
   }, [update, enqueue]);
 
   const resumeUpload = useCallback(id => {
     const task = tasksRef.current.get(id);
     if (!task || !task.file || task.status !== 'paused' || blockedRef.current || writeBlockedRef.current || !optionsRef.current.canUpload(task.storageId)) return;
-    task.intent = null; task.resumeRequested = true;
+    task.intent = null; task.resumeRequested = true; task.retryAttempts = 0;
     update(task, { status: 'resuming', error: null }); enqueue(task);
   }, [update, enqueue]);
 
@@ -492,6 +593,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     const task = tasksRef.current.get(id);
     if (!task || task.status !== 'error' || !task.retryable || blockedRef.current
       || (task.intent !== 'cancel' && (writeBlockedRef.current || !optionsRef.current.canUpload(task.storageId)))) return;
+    task.retryAttempts = 0;
     update(task, { status: task.intent === 'cancel' ? 'cancelling' : task.intent === 'pause' ? 'pausing' : 'reconciling', error: null });
     enqueue(task);
   }, [update, enqueue]);

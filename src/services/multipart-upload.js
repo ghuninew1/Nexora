@@ -1,3 +1,4 @@
+import { retryAfterMilliseconds } from './upload-coordination.js';
 import { normalizeStorageObject, validateStorageObjectName } from './storage.js';
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
@@ -6,11 +7,12 @@ const STATES = ['creating', 'active', 'paused', 'completing', 'completed', 'canc
 const TRANSIENT = new Set(['NETWORK_INTERRUPTION', 'REQUEST_TIMEOUT', 'PROVIDER_UNAVAILABLE', 'RATE_LIMITED', 'VERSION_CONFLICT']);
 
 export class MultipartUploadError extends Error {
-  constructor(code, status = 0) {
+  constructor(code, status = 0, retryAfterMs = 0) {
     super(`Multipart upload: ${code}`);
     this.name = 'MultipartUploadError';
     this.code = code;
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 const fail = (code = 'INVALID_RESPONSE') => { throw new MultipartUploadError(code); };
@@ -82,6 +84,7 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
   const base = `/api/storage/v1/storages/${id(storageId)}/uploads`;
   if (!integer(maxRetries) || maxRetries > 5 || !integer(timeoutMs) || !timeoutMs) fail('INVALID_INPUT');
   const busy = new Set();
+  let cooldown = null;
   const fileHashes = new WeakMap();
   async function fileDigest(file, start, length) {
     // Browser Blob/File bytes are immutable. Metadata-only cache avoids quadratic rehashing
@@ -103,9 +106,11 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
     busy.add(key);
     try { return await operation(); } finally { busy.delete(key); }
   };
-  const wait = attempt => sleep(Math.min(10000, 500 * 2 ** attempt) * (0.5 + random() * 0.5), signal);
+  const wait = (attempt, retryAfterMs = 0) => sleep(Math.max(retryAfterMs, Math.min(10000, 500 * 2 ** attempt) * (0.5 + random() * 0.5)), signal);
   async function request(path, method = 'GET', body, extraHeaders = {}) {
     if (signal?.aborted) fail('ABORTED');
+    if (globalThis.navigator?.onLine === false) fail('OFFLINE');
+    if (cooldown?.until > Date.now()) throw new MultipartUploadError(cooldown.code, cooldown.status, cooldown.until - Date.now());
     const controller = new AbortController();
     let timedOut = false;
     const abort = () => controller.abort();
@@ -115,12 +120,18 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
       const response = await fetchImpl(base + path, { method, credentials: 'same-origin', signal: controller.signal,
         headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': body instanceof Blob ? 'application/octet-stream' : 'application/json' }), ...extraHeaders },
         ...(body === undefined ? {} : { body: body instanceof Blob ? body : JSON.stringify(body) }) });
+      const responseError = code => {
+        const error = new MultipartUploadError(classifyMultipartError(response.status, code), response.status,
+          retryAfterMilliseconds(response.headers.get('Retry-After')));
+        if (error.retryAfterMs && TRANSIENT.has(error.code)) cooldown = { until: Date.now() + error.retryAfterMs, code: error.code, status: error.status };
+        return error;
+      };
       let payload;
       try { payload = await response.json(); } catch {
-        if (!response.ok) throw new MultipartUploadError(classifyMultipartError(response.status), response.status);
+        if (!response.ok) throw responseError();
         fail();
       }
-      if (!response.ok) throw new MultipartUploadError(classifyMultipartError(response.status, payload?.error?.code), response.status);
+      if (!response.ok) throw responseError(payload?.error?.code);
       if (!payload?.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) fail();
       return payload.data;
     } catch (error) {
@@ -135,8 +146,8 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
     for (let attempt = 0; ; attempt++) {
       try { return normalizeSession(await request(`/${transferId}?partsCursor=${cursor}&limit=100`), transferId); }
       catch (error) {
-        if (!TRANSIENT.has(error.code) || error.code === 'VERSION_CONFLICT' || attempt >= maxRetries) throw error;
-        await wait(attempt);
+        if (!TRANSIENT.has(error.code) || error.code === 'VERSION_CONFLICT' || (attempt >= maxRetries || error.retryAfterMs > 300000)) throw error;
+        await wait(attempt, error.retryAfterMs);
       }
     }
   }
@@ -191,15 +202,15 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
       } catch (error) {
         if (!TRANSIENT.has(error.code) && error.code !== 'INVALID_RESPONSE') throw error;
         try { current = await read(transferId); } catch (readError) {
-          if (action === 'complete' && TRANSIENT.has(readError.code)) fail('AMBIGUOUS_COMPLETION');
+          if (action === 'complete' && TRANSIENT.has(readError.code)) throw new MultipartUploadError('AMBIGUOUS_COMPLETION', readError.status, readError.retryAfterMs);
           throw readError;
         }
         if (current.state === target) return current;
-        if (attempt >= maxRetries) {
+        if (attempt >= maxRetries || error.retryAfterMs > 300000) {
           if (action === 'complete') fail('AMBIGUOUS_COMPLETION');
           throw error;
         }
-        await wait(attempt);
+        await wait(attempt, error.retryAfterMs);
       }
     }
   }
@@ -229,8 +240,8 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
         if (session.state !== 'active') fail('SESSION_NOT_ACTIVE');
         const verified = session.parts.find(part => part.partNumber === number);
         if (verified) return verified;
-        if (attempt >= maxRetries) throw error;
-        await wait(attempt);
+        if (attempt >= maxRetries || error.retryAfterMs > 300000) throw error;
+        await wait(attempt, error.retryAfterMs);
       }
     }
   }
@@ -251,8 +262,8 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
           } catch (error) {
             // No transfer ID exists yet: replay only the SAME immutable key/body.
             if ((!TRANSIENT.has(error.code) || error.code === 'VERSION_CONFLICT') && error.code !== 'INVALID_RESPONSE') throw error;
-            if (attempt >= maxRetries) throw error;
-            await wait(attempt);
+            if (attempt >= maxRetries || error.retryAfterMs > 300000) throw error;
+            await wait(attempt, error.retryAfterMs);
           }
         }
       });
@@ -277,8 +288,8 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
           // In that case stop rather than blindly repeating an uncertain write.
           const current = await read(transferId);
           if (current.state === 'cancelled') return { transferId, state: 'cancelled' };
-          if (attempt >= maxRetries) throw error;
-          await wait(attempt);
+          if (attempt >= maxRetries || error.retryAfterMs > 300000) throw error;
+          await wait(attempt, error.retryAfterMs);
         }
       }
     }),

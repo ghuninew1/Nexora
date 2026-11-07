@@ -218,3 +218,21 @@ test('lost cancellation acknowledgement reads status before returning success', 
   assert.equal((await f.client.cancelSession('transfer_test')).state, 'cancelled');
   assert.deepEqual(f.calls.map(c => c.method), ['DELETE', 'GET']);
 });
+
+test('rate limit Retry-After suppresses immediate uncertain-write reconciliation and retains delay', async () => {
+  const f = fixture({ maxRetries: 0 });
+  f.hook((url, init) => init.method === 'PUT' ? Response.json({ error: { code: 'RATE_LIMITED' } },
+    { status: 429, headers: { 'Retry-After': '3' } }) : null);
+  await assert.rejects(f.client.uploadPart('transfer_test', file, 1), error => error.code === 'RATE_LIMITED' && error.retryAfterMs > 2000);
+  assert.equal(f.calls.length, 2); // one reconciliation GET and PUT; no immediate follow-up GET
+  await assert.rejects(f.client.getSession('transfer_test'), { code: 'RATE_LIMITED' });
+  assert.equal(f.calls.length, 2);
+});
+
+test('completion uncertainty preserves provider Retry-After and does not issue an early status request', async () => {
+  const f = fixture({ maxRetries: 0 });
+  f.hook(url => url.endsWith('/complete') ? Response.json({ error: { code: 'UNAVAILABLE' } },
+    { status: 503, headers: { 'Retry-After': '600' } }) : null);
+  await assert.rejects(f.client.completeSession('transfer_test'), error => error.code === 'AMBIGUOUS_COMPLETION' && error.retryAfterMs > 599000);
+  assert.equal(f.calls.length, 2);
+});

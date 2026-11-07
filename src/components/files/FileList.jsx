@@ -67,7 +67,7 @@ function FileList({
                         "grid grid-cols-[minmax(0,1fr)] items-center border-b border-border bg-muted/30 px-4 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid-cols-[minmax(0,1fr)_210px_100px_56px]",
                     )}
                 >
-                    <div className={cx("flex min-w-0 items-center gap-3")}>
+                    <div className={cx("flex min-w-0 items-center gap-1 sm:gap-3")}>
                         <button
                             type="button"
                             onClick={onSelectAll}
@@ -79,7 +79,7 @@ function FileList({
                         >
                             <span
                                 className={cx(
-                                    "flex size-4 items-center justify-center rounded border text-[10px] transition-colors group-hover/select:ring-2 group-hover/select:ring-primary/40",
+                                    "flex size-3.5 items-center justify-center rounded border text-[10px] transition-colors group-hover/select:ring-2 group-hover/select:ring-primary/40 sm:size-4",
                                     allSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground group-hover/select:border-primary group-hover/select:bg-primary/15",
                                 )}
                             >
@@ -91,7 +91,7 @@ function FileList({
                                 className={cx("flex size-11 shrink-0 items-center justify-center")}
                                 aria-label="Favorites"
                             >
-                                <Star className={cx("size-4")} aria-hidden="true" />
+                                <Star className={cx("size-3.5 sm:size-4")} aria-hidden="true" />
                             </span>
                         )}
                         <span className={cx("size-10 shrink-0")} aria-hidden="true" />

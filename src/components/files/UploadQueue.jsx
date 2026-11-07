@@ -4,6 +4,10 @@ import { cx } from '../../utils/cx';
 import { Button } from '../ui/button';
 
 const STATUS = {
+  waiting_network: { label: 'Waiting for network', icon: Pause },
+  recovering_connection: { label: 'Recovering connection', icon: Loader2 },
+  other_tab: { label: 'Active in another tab', icon: Pause },
+  waiting_ownership: { label: 'Waiting for ownership', icon: Pause },
   restoring: { label: 'Restoring', icon: Loader2 },
   checking_server: { label: 'Checking server', icon: Loader2 },
   waiting_file: { label: 'Waiting for original file', icon: File },
@@ -14,7 +18,7 @@ const STATUS = {
   verifying: { label: 'Verifying parts', icon: Loader2 },
   finalizing: { label: 'Finalizing', icon: Loader2 },
   pausing: { label: 'Pausing', icon: Loader2 },
-  paused: { label: 'Paused', icon: Pause },
+  paused: { label: 'Resume available', icon: Pause },
   resuming: { label: 'Resuming', icon: Loader2 },
   cancelling: { label: 'Confirming cancellation', icon: Loader2 },
   retry_wait: { label: 'Waiting to retry', icon: Loader2 },
@@ -47,7 +51,7 @@ function OriginalFileButton({ id, name, onSelect }) {
 
 function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume, onClearFinished, onSelectOriginal, onRetryReconciliation, onClearLocalHistory, restoring = false, persistenceWarning, canRetry = true }) {
   if (items.length === 0 && !restoring && !persistenceWarning) return null;
-  const activeCount = items.filter((item) => ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'cancelling', 'retry_wait', 'reconciling'].includes(item.status)).length;
+  const activeCount = items.filter((item) => ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'cancelling', 'retry_wait', 'reconciling', 'recovering_connection'].includes(item.status)).length;
   const queuedCount = items.filter((item) => item.status === 'queued').length;
   const finishedCount = items.filter((item) => ['success', 'error', 'expired', 'cancelled'].includes(item.status)).length;
 
@@ -74,7 +78,7 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
         const canCancel = multipart
           ? !['success', 'expired', 'cancelled', 'cancelling', 'restoring', 'checking_server'].includes(item.status)
           : ['queued', 'uploading'].includes(item.status);
-        const canPause = multipart && ['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling'].includes(item.status);
+        const canPause = multipart && ['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling', 'waiting_network', 'recovering_connection', 'other_tab'].includes(item.status);
         const percent = item.status === 'success' ? 100 : Math.min(99, Math.floor(100 * (item.acknowledgedBytes || 0) / item.sizeBytes));
         return <li key={item.id} className={cx('flex min-w-0 flex-wrap items-start gap-3 px-4 py-3')}>
           <Icon className={cx('mt-0.5 size-5 shrink-0 text-muted-foreground', ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'reconciling', 'cancelling'].includes(item.status) && 'motion-safe:animate-spin', item.status === 'success' && 'text-primary', item.status === 'error' && 'text-destructive')} aria-hidden="true" />
@@ -105,7 +109,7 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
             {canPause && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-11 min-w-11')} onClick={() => onPause(item.id)} aria-label={`Pause upload ${item.name}`}><Pause aria-hidden="true" /></Button>}
             {multipart && item.status === 'paused' && canRetry && <Button type="button" variant="outline" size="sm" className={cx('min-h-11')} onClick={() => onResume(item.id)} aria-label={`Resume upload ${item.name}`}><Play aria-hidden="true" />Resume</Button>}
             {canCancel && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-11 min-w-11 shrink-0')} onClick={() => onCancel(item.id)} aria-label={`Cancel upload ${item.name}`}><XCircle aria-hidden="true" /></Button>}
-            {item.status === 'error' && item.retryable && (canRetry || item.pendingAction === 'cancel') && <Button type="button" variant="outline" size="sm" className={cx('min-h-11 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />{item.pendingAction ? `Retry ${item.pendingAction}` : 'Retry'}</Button>}
+            {item.status === 'error' && item.retryable && (canRetry || item.pendingAction === 'cancel') && <Button type="button" variant="outline" size="sm" className={cx('min-h-11 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />{item.pendingAction ? `Retry ${item.pendingAction}` : multipart ? 'Retry connection' : 'Retry'}</Button>}
           </div>
         </li>;
       })}
