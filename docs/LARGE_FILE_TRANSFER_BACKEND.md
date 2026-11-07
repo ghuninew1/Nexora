@@ -77,3 +77,8 @@ Local Shared dependency linksไม่ครบ จึงhydrate declared depend
 ผลcommandสุดท้ายดู `PROJECT_HANDOFF.md` แยก Node/UI/Shared/bridge ชัดเจน Testsใช้in-memorySQLite+mockS3/controllednetwork ไม่ใช่หลักฐานrealGarageหรือ10 GiB Browser/mobile/refresh/restartและproductionไม่ได้ตรวจ
 
 ลำดับถัดไปที่จำเป็น: **isolated real-provider/limits/recovery acceptance** ของPhase2 gateที่ยังค้าง ก่อนfeatureenable จากนั้นPhase4 frontenduploader/TransferManagerที่ใช้APIนี้ พร้อมboundedretry/progress/cleanup UX ส่วนRange downloadเป็นPhase5 แยก
+
+
+## Phase 3A acceptance follow-up
+
+ดู [LARGE_FILE_TRANSFER_ACCEPTANCE.md](LARGE_FILE_TRANSFER_ACCEPTANCE.md) สำหรับ runnable isolated-provider suite, resource/failure report และ production checklist ปัจจุบัน real Garage/100 MiB/1 GiB/10 GiB/proxy verification เป็น BLOCKED ไม่มี production flags หรือ backend runtime changes ใน Phase3A

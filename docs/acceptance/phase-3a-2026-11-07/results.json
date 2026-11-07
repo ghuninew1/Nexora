@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "evidence": "not-run",
+  "productionFlagsChanged": false,
+  "generatedAt": "2026-11-07T16:24:11.248Z",
+  "scenarios": [
+    {
+      "id": "isolated-provider-preflight",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "upload-100MiB",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "upload-1GiB",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "upload-10GiB",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "interruption-same-session",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "shared-process-restart-resume",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "lost-create-ack",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "lost-part-ack-retry",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "lost-complete-ack-duplicate-completion",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "cancel-abort",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "expiration-cleanup-clock-advanced",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "concurrent-files",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "no-partial-publication",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "final-provider-cleanup",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "resource-budgets",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "proxy-request-path",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "proxy-slow-part-timeout",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    },
+    {
+      "id": "production-resource-retention-gates",
+      "status": "BLOCKED",
+      "reason": "NO_ISOLATED_PROVIDER_CONFIG"
+    }
+  ],
+  "measurements": null
+}
