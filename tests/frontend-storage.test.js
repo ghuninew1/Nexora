@@ -110,6 +110,16 @@ test('capabilities reject malformed data and normalize unknown/unsafe flags to f
   });
 });
 
+test('resumable upload capabilities require explicit support and valid public limits', () => {
+  const limits = { maxFileBytes: 1024, partSizeBytes: 256, maxParts: 4, maxParallelParts: 1, sessionTtlSeconds: 60 };
+  const normalize = (transfers) => normalizeStorageCapabilities({ upload: true, transfers }).transfers;
+  assert.deepEqual(normalize({ resumableUpload: true, ...limits, providerId: 'private' }), { resumableUpload: true, ...limits });
+  assert.deepEqual(normalize({ ...limits }), { resumableUpload: false });
+  assert.deepEqual(normalize({ resumableUpload: true, ...limits, maxParts: 3 }), { resumableUpload: false });
+  assert.deepEqual(normalize({ resumableUpload: true, ...limits, partSizeBytes: 0 }), { resumableUpload: false });
+  assert.equal(normalizeStorageCapabilities({ upload: true }).transfers, undefined);
+});
+
 test('file operation capability gating also respects mount and capability read-only state', () => {
   const capabilities = { upload: true, download: true, rename: true, move: true, copy: true, readOnly: false };
   assert.equal(canUseStorageCapability(capabilities, mount, 'upload'), true);

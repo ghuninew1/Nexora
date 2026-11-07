@@ -109,6 +109,16 @@ export function normalizeStorageCapabilities(value) {
   if (Number.isSafeInteger(value.maxUploadBytes) && value.maxUploadBytes >= 0) {
     capabilities.maxUploadBytes = value.maxUploadBytes;
   }
+  if (value.transfers && typeof value.transfers === 'object' && !Array.isArray(value.transfers)) {
+    const transfer = value.transfers;
+    const limits = ['maxFileBytes', 'partSizeBytes', 'maxParts', 'maxParallelParts', 'sessionTtlSeconds'];
+    const valid = transfer.resumableUpload === true
+      && limits.every((key) => Number.isSafeInteger(transfer[key]) && transfer[key] > 0)
+      && Math.ceil(transfer.maxFileBytes / transfer.partSizeBytes) <= transfer.maxParts;
+    capabilities.transfers = valid
+      ? { resumableUpload: true, ...Object.fromEntries(limits.map((key) => [key, transfer[key]])) }
+      : { resumableUpload: false };
+  }
   return capabilities;
 }
 

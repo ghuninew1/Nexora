@@ -295,3 +295,7 @@ The Storage page counts the current account’s active assigned mounts and shows
 ## Large File Transfer — isolated acceptance
 
 `scripts/acceptance/run.mjs` is opt-in and defaults to BLOCKED report generation without network access. See `docs/LARGE_FILE_TRANSFER_ACCEPTANCE.md`. Real runs require explicit test config, dedicated test-only credential environment names and a confirmed empty `nexora-acceptance-*` bucket. Never reuse production resources/credentials. The runner creates private disposable SQLite databases and uses actual Nexora/Shared routes; only fixture factories enable multipart. Cleanup is journal-bound and refuses unknown resources. Preserve private journals outside Git and distinguish local harness/mock tests from real-provider results. Proxy/Tunnel and production limits require separate evidence; do not change deployment flags or infrastructure to pass a test.
+
+## Large File Transfer — frontend groundwork
+
+The capability normalizer retains validated public resumable-upload limits when explicitly advertised, but no frontend multipart uploader or Transfer Manager is implemented. See `docs/LARGE_FILE_TRANSFER_FRONTEND.md`; keep the existing small-file queue and default-disabled feature boundary until the remaining recovery, coordination, UI and verification work is complete.

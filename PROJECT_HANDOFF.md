@@ -577,3 +577,9 @@ Validation: `pnpm lint` passed; `pnpm test` passed (166 Node tests and 13 UI tes
 - Next: operator prepares isolated Garage/bucket/key, confirms capacity/RSS budgets and optional isolated proxy routes, then runs the documented suite and resolves FAIL/BLOCKED gates with real evidence. Keep feature flags off. Frontend Transfer Manager and Range download remain subsequent phases, not implemented here.
 
 Final audit hardening: the acceptance worker also reports nonterminal and orphaned session metadata, and final no-partial-publication assertions require both counts to be zero; empty physical inventory alone does not prove session cleanup. The focused10-test harness suite and explicit script lint were rerun after this change. All remain local evidence; real-provider18-scenario matrix remains BLOCKED.
+
+## Large File Transfer — Phase 4 groundwork (2026-11-07)
+
+- Phase 4 is incomplete. The frontend storage capability normalizer now retains explicitly advertised resumable-upload limits when their types and geometry are valid, discards unknown fields, and fails closed for invalid transfer data. A focused Node test covers enabled, absent, malformed and inconsistent capabilities. The queue still uses the existing small-file endpoint; no multipart client or Transfer Manager has been connected.
+- Added `docs/LARGE_FILE_TRANSFER_FRONTEND.md` with the remaining recovery, cross-tab, account-isolation and UI work. README and AGENTS reviewed and updated. Existing queue is scoped to File Browser and aborts/clears on unmount, so a workspace-level lifecycle is needed for route-independent transfers.
+- Validation: `pnpm lint` PASS; `pnpm test` PASS (180 Node passed, 2 optional Shared integration tests skipped; 13 UI passed); `pnpm build` PASS. Browser and real-provider acceptance NOT RUN; production flags, infrastructure and data were not changed.
