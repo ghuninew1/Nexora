@@ -22,7 +22,7 @@ test('session bootstrap returns only public identity fields and distinguishes se
     salt: 'private test value', sessionToken: 'private test value', session_token: 'private test value',
     authorization: 'private test value', cookie: 'private test value',
   } } }) });
-  assert.deepEqual(Object.keys(user).sort(), ['displayName', 'email', 'role']);
+  assert.deepEqual(Object.keys(user).sort(), ['displayName', 'email', 'id', 'role']);
   assert.ok(user.email === 'owner@example.test' && user.displayName === 'Workspace Owner' && user.role === 'admin', 'Session bootstrap should expose only safe identity fields.');
 
   await assert.rejects(getCurrentUser({ fetchImpl: async () => Response.json({ error: { message: 'private server detail' } }, { status: 503 }) }), {
@@ -50,7 +50,7 @@ test('login sends the Phase 8 request shape and keeps invalid credentials generi
   assert.deepEqual(Object.keys(submittedBody).sort(), ['email', 'password']);
   assert.ok(submittedBody.email === 'Owner@Example.Test', 'Login should submit the entered email.');
   assert.ok(submittedBody.password === 'private password', 'Login should submit the password without asserting or printing its value.');
-  assert.deepEqual(Object.keys(user).sort(), ['displayName', 'email', 'role']);
+  assert.deepEqual(Object.keys(user).sort(), ['displayName', 'email', 'id', 'role']);
   assert.ok(user.email === 'owner@example.test' && user.displayName === 'Owner' && user.role === 'user', 'Login should return only safe identity fields.');
 
   const submittedPassword = 'unique-qa-login-secret';

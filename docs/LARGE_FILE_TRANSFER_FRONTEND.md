@@ -1,17 +1,61 @@
 # Large file transfer — frontend client
 
-Phase **4.1 and 4.2 COMPLETE locally** (2026-11-08). The multipart client is integrated into the existing workspace Upload Queue. Phase4 overall remains incomplete: persistent recovery, full cross-tab ownership, Transfer Manager and real-provider acceptance remain pending. Server flags stay disabled by default; source implementation and mocked browser checks do not imply production activation or10GiB acceptance.
+Phase **4.1, 4.2 and 4.3 COMPLETE locally** (2026-11-08). Multipart uploads now retain metadata in native IndexedDB and recover through server reconciliation and original-file reselection. Full Transfer Manager, full cross-tab coordination and real-provider acceptance remain pending. Server flags stay disabled by default; local tests and mocked browser checks do not imply production activation or10GiB acceptance.
+
+## Durable recovery and original-file selection (Phase4.3)
+
+### Storage contract
+
+`src/services/upload-recovery.js` exports `createUploadRecoveryStore`, `uploadRecoveryStore`, `normalizeRecoveryRecord`, `matchesOriginalFile` and `UploadRecoveryError`. The default database is `nexora-upload-recovery`, version1, with only the `uploads` store, compound primary key `[userScope,id]` and owner index `userScope`. Public operations:
+
+| API | Behavior |
+| --- | --- |
+| `save(record)` | Validate/copy the v1 allowlist, commit an ordered transaction and prune known owner records to50 |
+| `list(userScope,storageId)` | Query the authenticated owner index, validate records, filter the active mount; invalid known-v1 rows are discarded |
+| `remove(userScope,id)` | Delete that exact local owner record; never calls a server API |
+| `close()` | Drain pending operations and close the connection; permits a later open attempt |
+
+Records contain schema version, local queue ID, stable authenticated **public user ID**, logical transferId (nullable for uncertain creation), create idempotency key, logical storage/parent IDs, original filename/size/MIME/lastModified, negotiated part size/count, created/expiry/update timestamps, last UI state and explicit pause/cancel intent. Unknown properties are stripped. No File, Blob, file contents, auth tokens/cookies, credentials, provider IDs, ETags or physical paths are stored. This implementation always uses original-file reselection; optional FileSystemFileHandle persistence/reuse is not implemented and no permission prompts are requested automatically.
+
+The existing backend already returns a public user ID. `src/services/auth.js` now retains that allowlisted ID instead of discarding it; no server auth contract changed. Durable recovery never falls back to email, preventing a replacement account with the same email from inheriting old metadata. If a legacy auth response lacks a valid public ID, uploads retain memory-only behavior.
+
+### Commit and retention policy
+
+The queue attempts to commit the original key/metadata **before the first create request**, then commits the recovered logical transfer ID before scheduling parts. Session/progress/control states update metadata in order. Explicit cancellation intent is saved before its server control. A terminal deletion is serialized after earlier writes, so old writes in the same store instance cannot reinsert a completed/cancelled record.
+
+Confirmed completed history is retained for **zero durable records**; the existing in-memory success display/auto-clear preference remains. Confirmed cancelled/expired records are removed. Inaccessible/unavailable records are retained for explicit reconciliation or local forgetting, not treated as successful or automatically expired. Provisional creation expiry is replaced by authoritative server expiry; persisted timestamps never substitute for server status. Each owner retains at most50 known valid v1 records across mounts, newest-update first; exceeding the bound forgets only local metadata, not server sessions. Other owners are not loaded or pruned by the current owner, future record/database versions are preserved, and no unknown app database/store is cleared.
+
+Native transactions have bounded timeouts. Blocked/open/corrupt/unavailable APIs and quota failures show a safe queue notice and permit memory-only uploads. Open failure is latched until close/reload to avoid repeated blocked opens; a task stops repeated saves after persistence failure, while terminal cleanup is still attempted. Failed deletion is reported even after its UI row is removed, since metadata may reappear on reload. Recovery cannot be guaranteed when browser storage is disabled, full, evicted or cleared; no large payload fallback is attempted.
+
+### Startup, checks and reselection
+
+Recovery starts only after authenticated public identity and a confirmed active mount are available. Other assigned mounts load when selected; this phase does not add a global multi-storage Transfer Manager. Owner/mount/epoch guards ignore stale IDB and server responses, and duplicate local IDs, logical transfer IDs and pending create keys are suppressed. Restored checks use the existing bounded worker scheduler, with no source File and no automatic part upload.
+
+For known transfer IDs, startup calls authoritative status/all verified receipt pages; it never POSTs create. Completed objects are recovered without completion/create replay; cancelled/expired sessions become terminal and local metadata is cleaned. Authentication failures expire auth; denied/missing/unavailable/disabled sessions remain actionable recovery errors with **Retry reconciliation**. No false success is inferred from a persisted UI state.
+
+Unknown creation (`transferId:null`) is shown waiting for the original file without a startup POST. Only an explicit Resume/Cancel can replay the same immutable create key/body to resolve its identity; if the original request never reached the server this can create that intended session, while an existing session remains idempotent. Lost creation plus revoked permissions/disabled access may still prevent ID recovery; preserve uncertainty and existing backend cleanup boundaries.
+
+**Select original file** checks exact name, size and lastModified when available, then validates authoritative geometry and SHA-256 of every server-acknowledged part through the Phase4.1 client. Metadata alone is not cryptographic proof. A mismatch does not change or cancel the server session and another file can be selected. Successful selection leaves the row locally paused; the user must explicitly press **Resume**. Resume refreshes status/receipts again and uploads only verified missing parts. Unuploaded bytes cannot be proven by metadata alone; no whole-file hash or payload persistence is introduced.
+
+A persisted cancel intent never offers file selection or Resume: it checks server state and offers explicit cancellation retry if still pending. Pause/Cancel/retry retain the same key/session and the Phase4.2 semantics. No HTTP abort is treated as provider rollback.
+
+### Hook/UI integration
+
+`useUploadQueue` adds `recoveryScope`, `recoveryStorageId`, optional injectable `recoveryStore`, and returns `restoring`, `persistenceWarning`, `selectOriginalFile(id,file)`, `retryReconciliation(id)` and `clearLocalHistory()`. `useRemoteFilesState` passes authenticated public identity and its confirmed upload mount. `UploadQueue` exposes Restoring/Checking server, Waiting for original file, File mismatch, Retry reconciliation, Select original file and Clear local history with existing Buttons/cx/themes/accessibility.
+
+Clear local history forgets inactive UI/IDB entries without cancelling server sessions. Active/pending workers are retained. Logout/account switch/workspace teardown abort local work and release File/controller references but preserve durable metadata for its original owner. The next login restores only that ID's records. Full multi-tab ownership, automatic handle reuse, persistent file bytes, Download Manager and HTTP Range are outside this phase.
+
 
 ## Upload Queue integration (Phase4.2)
 
 - `src/utils/upload-strategy.js` selects legacy upload for files at/below the effective small-file limit (advertised limit clamped to the existing25MiB maximum;25MiB fallback). Larger files use multipart only with explicit compatible capability:8MiB parts,1 parallel part/session, safe positive limits, <=10GiB, <=1280 parts and consistent geometry. Missing/disabled/malformed capability or excessive file size fails locally. Multipart failure never falls back to `/files`.
 - `src/hooks/useUploadQueue.js` retains File, AbortController, immutable create key/metadata, transfer ID and client in refs/tasks, not React state. Display state contains safe queue metadata only. Existing preferences1/2/3/5 (fallback3) cap active file workers, including hashing, requests, backoff and controls. Each worker awaits each operation; multipart sessions can run concurrently, with one local operation/session. Lowering concurrency lets existing workers settle before starting more.
 - `useRemoteFilesState` supplies authenticated owner/mount scope, current upload policy, negotiated capability and existing completion/cache-refresh callbacks. Transient storage discovery retains the last confirmed mount for existing work so ordinary navigation does not erase the queue; a resolved mount change, unavailable assignment, auth change or workspace destruction aborts and discards that scope. Current backend authorization remains authoritative on every request. Known permission/readOnly/maintenance denial stops new upload writes; creator cancellation stays available.
-- `AuthProvider.signingOut` stops queue requests at logout initiation, before a slow logout request returns. A failed logout leaves the account UI available for retry but does not restore discarded transfer metadata. Epoch/mount/owner/task guards discard stale results and callbacks, including transports that ignore AbortSignal. Logout/unmount/assignment changes never issue automatic server cancellation.
+- `AuthProvider.signingOut` stops queue requests at logout initiation, before a slow logout request returns. A failed logout leaves the account UI available for retry; Phase4.3 restores retained metadata but requires original-file reselection. Epoch/mount/owner/task guards discard stale results and callbacks, including transports that ignore AbortSignal. Logout/unmount/assignment changes never issue automatic server cancellation.
 
 ### Queue hook contract
 
-`useUploadQueue({uploadFile,onComplete,onUnauthorized,canUpload,scopeKey,maxConcurrency,autoClear})` extends the existing hook. `scopeKey` identifies the authenticated owner and resolved mount; `canUpload(storageId)` supplies the current write policy. `createClient` and `waitForRetry` are injectable for focused tests. Consumers enqueue with `addFiles(files,{storageId,parentId,maxUploadBytes,transfers})`, which returns queue IDs. Items expose `strategy`, `status`, `acknowledgedBytes`, `completedParts`, `partCount`, safe `error`, `errorCode`, `retryable` and `pendingAction`, without source/session secrets.
+`useUploadQueue({uploadFile,onComplete,onUnauthorized,canUpload,scopeKey,maxConcurrency,autoClear,recoveryScope,recoveryStorageId})` extends the existing hook. `scopeKey` identifies the authenticated owner and resolved mount; `canUpload(storageId)` supplies the current write policy. `createClient` and `waitForRetry` are injectable for focused tests. Consumers enqueue with `addFiles(files,{storageId,parentId,maxUploadBytes,transfers})`, which returns queue IDs. Items expose `strategy`, `status`, `acknowledgedBytes`, `completedParts`, `partCount`, safe `error`, `errorCode`, `retryable` and `pendingAction`, without source/session secrets.
 
 Use `pauseUpload(id)`, `resumeUpload(id)`, `cancelUpload(id)`, `retryUpload(id)` and `clearFinished()` from the same instance. `cancelAll()` means explicit per-task cancellation; `reset()` means local lifecycle disposal only. Never use cancelAll on logout. `onComplete(task,{file})` is called once with the confirmed logical file and existing destination metadata, suitable for targeted listing invalidation. Failed cache refresh must not change confirmed success.
 
@@ -38,7 +82,7 @@ Multipart progress uses all server-verified receipt pages and acknowledged bytes
 
 ### Lifecycle and remaining limitations
 
-No IndexedDB, reload/reselect UI, background worker or cross-tab recovery is implemented. Reload/logout/assignment change/workspace teardown lose local keys/IDs/File references; server sessions remain for their existing TTL/operator cleanup. Clear finished explicitly discards failed-task recovery metadata without cancelling the server. Cancel first if cleanup is required. If create outcome is unknown and permission/feature access is revoked before its logical transfer ID can be recovered, cancellation cannot be confirmed from this client; show uncertainty and rely on authorized recovery or existing backend TTL cleanup. No new backend contract was introduced to bypass that boundary.
+Phase4.3 adds metadata-only IndexedDB recovery and original-file reselection. Background workers/full cross-tab ownership remain absent. Reload/logout/assignment change/workspace teardown release in-memory File references; durable keys/IDs stay owner-scoped and server sessions retain their existing TTL/operator cleanup. Clear finished explicitly discards failed-task recovery metadata without cancelling the server. Cancel first if cleanup is required. If create outcome is unknown and permission/feature access is revoked before its logical transfer ID can be recovered, cancellation cannot be confirmed from this client; show uncertainty and rely on authorized recovery or existing backend TTL cleanup. No new backend contract was introduced to bypass that boundary.
 
 HTTP abort is local only: provider work may still finish or hold a lease. An immediate control can therefore return conflict/busy and require explicit retry. Backend completion/cleanup restrictions still apply. Paused/failed workers release queue slots; control requests re-enter the same bounded scheduler. Multiple tabs/clients remain uncoordinated and rely on server fencing/conflicts. File bytes, server flags, credentials and remote data are never persisted or changed by this integration.
 
@@ -94,12 +138,12 @@ Stable `.code` values include `NETWORK_INTERRUPTION`, `REQUEST_TIMEOUT`, `AUTHEN
 
 Only transient reads retry directly. Uncertain part/transition writes (including malformed success responses) reconcile first; create can only replay the exact retained key/body because no transfer ID may be known yet. Authentication, permission, checksum and validation errors never retry automatically. A409 triggers a fresh version/status, not blind reuse. Completion uncertainty must retain the transfer ID; do not start another upload. Cancellation after revoked status may require an explicit cleanup retry by the user.
 
-## Remaining work after Phase4.2
+## Remaining work after Phase4.3
 
-1. Review account-scoped durable metadata/file reselection and cross-tab ownership before implementing persistence or a full Transfer Manager. Keep small-file fallback and explicit capabilities.
+1. Review full cross-tab ownership and a broader Transfer Manager separately. Durable metadata/reselection are implemented; optional file-handle reuse and global multi-storage transfer UI remain deferred. Keep small-file fallback and explicit capabilities.
 2. Expand browser lifecycle/mobile/offline/permission/late-provider-effect testing and isolated real Garage acceptance, including10GiB, memory and proxy budgets. Current mocked browser checks are not provider acceptance.
 3. Keep default flags off until infrastructure gates pass and an operator authorizes activation; Range Download remains a separate phase.
 
 ## Validation boundary
 
-Focused unit tests mock same-origin transport, covering create idempotency, SHA-256/headers/boundaries, pagination>100, verified resume, missing/conflicting receipts, stale versions, lost part/complete/cancel responses, terminal states/auth, invalid snapshots, timeout/abort/locking, retry budgets and bounded sequential source reads. These are not real Garage or10GiB verification. See PROJECT_HANDOFF.md for executed suite totals and [backend contract](LARGE_FILE_TRANSFER_BACKEND.md) / [acceptance report](LARGE_FILE_TRANSFER_ACCEPTANCE.md) for outstanding infrastructure gates. Phase4.2 adds queue/UI/lifecycle tests and mocked Chrome checks for26MiB multipart, Pause/Resume/Cancel,3-byte legacy routing and disabled capabilities. No IndexedDB, Range download or Shared Storage changes were made. Exact executed totals, browser environment, skips and limitations are recorded in PROJECT_HANDOFF.md.
+Focused unit tests mock same-origin transport, covering create idempotency, SHA-256/headers/boundaries, pagination>100, verified resume, missing/conflicting receipts, stale versions, lost part/complete/cancel responses, terminal states/auth, invalid snapshots, timeout/abort/locking, retry budgets and bounded sequential source reads. These are not real Garage or10GiB verification. See PROJECT_HANDOFF.md for executed suite totals and [backend contract](LARGE_FILE_TRANSFER_BACKEND.md) / [acceptance report](LARGE_FILE_TRANSFER_ACCEPTANCE.md) for outstanding infrastructure gates. Phase4.2 adds queue/UI/lifecycle tests and mocked Chrome checks for26MiB multipart, Pause/Resume/Cancel,3-byte legacy routing and disabled capabilities. Phase4.3 adds native IndexedDB CRUD/schema/retention/failure tests, durable recovery/reselection hook tests (including real SHA-256 with mocked transport), and real IndexedDB/refresh/reopen browser assertions. No Range download or Shared Storage changes were made. Exact executed totals, browser environment, skips and limitations are recorded in PROJECT_HANDOFF.md.

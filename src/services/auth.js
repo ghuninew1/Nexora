@@ -12,7 +12,8 @@ function safeUser(value) {
     || typeof value.email !== 'string' || !value.email.trim()
     || typeof value.displayName !== 'string' || !value.displayName.trim()
     || !['admin', 'user'].includes(value.role)) return null;
-  return { email: value.email, displayName: value.displayName, role: value.role };
+  return { ...(typeof value.id === 'string' && /^[A-Za-z0-9_-]{1,128}$/u.test(value.id) ? { id: value.id } : {}),
+    email: value.email, displayName: value.displayName, role: value.role };
 }
 
 async function responseBody(response) {

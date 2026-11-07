@@ -529,6 +529,8 @@ export default function useRemoteFilesState() {
     },
     onComplete: refreshAfterUpload,
     onUnauthorized: expireSession,
+    recoveryScope: authStatus === 'authenticated' && !signingOut ? user?.id ?? null : null,
+    recoveryStorageId: uploadScopeRef.current.storageId,
     scopeKey: JSON.stringify([authStatus, Boolean(signingOut), user?.id ?? user?.email ?? null, uploadScopeRef.current.storageId]),
     canUpload: (targetStorageId) => uploadAllowedRef.current && targetStorageId === uploadScopeRef.current.storageId,
     maxConcurrency: preferences?.uploadConcurrency ?? 3,

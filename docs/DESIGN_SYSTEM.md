@@ -76,3 +76,5 @@ Phase 9.6 public layout uses the Nexora logo, shared surface/Button/Dialog, root
 - Storage Overview ใช้ glass cards แบบ mobile-first สำหรับจำนวน assigned storages และสถานะ Connected / Unavailable / Unknown โดยแยกข้อความ usage unavailable ออกจากสถานะการเชื่อมต่อ; จำนวน storage ไม่ใช่จำนวน project และไม่มีการแสดงยอด aggregate ที่ยังไม่รองรับ
 
 - Multipart Upload Queue ใช้ shared Button และ action targets อย่างน้อย44px; แสดง Verifying/Finalizing/Pause/Resume/Cancel แยกสถานะ โดยไม่แสดง100% ก่อน server ยืนยัน completion ไฟล์ legacy ไม่มี Pause/Resume และยังใช้ indeterminate progress.
+
+- Durable multipart recovery เพิ่มสถานะ Checking server/Waiting for original file/File mismatch และปุ่ม Select original file/Retry reconciliation/Clear local history ภายใน Upload Queue เดิม ปุ่มใช้ shared Button และ44px targets พร้อม wrap บนมือถือ; เลือกไฟล์แล้วต้องกด Resume เอง และการล้าง history ไม่ cancel server session.

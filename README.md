@@ -14,7 +14,7 @@ Nexora เป็นเว็บจัดการไฟล์สำหรับ 
 - **Shared:** สร้างลิงก์สาธารณะสำหรับดูและดาวน์โหลดไฟล์หรือโฟลเดอร์ กำหนดวันหมดอายุ เปลี่ยนลิงก์ หรือเพิกถอนได้ และเจ้าของคัดลอกลิงก์ที่ยังใช้ได้จากอุปกรณ์อื่นได้เมื่อเปิดใช้การกู้คืนลิงก์ ผู้รับลิงก์ไม่สามารถแก้ไขไฟล์ผ่านลิงก์นั้น
 - **Dashboard และ Activity:** ดูสถานะ storage, รายการล่าสุด และประวัติการเปลี่ยนแปลงที่สำเร็จของบัญชี
 - **Account:** กดชื่อหรือไอคอนผู้ใช้ใน Header เพื่อดูข้อมูลบัญชี เปลี่ยนชื่อที่แสดง และออกจากระบบ session อื่น
-- **Upload Queue:** ไฟล์เล็กใช้ upload เดิม; ไฟล์ที่เกิน small-file limit ใช้ multipart เฉพาะเมื่อ server เปิด capability ที่รองรับ พร้อม Pause/Resume/Cancel และ progress จาก server acknowledgements คิวอยู่ในหน่วยความจำและไม่กู้คืนหลัง reload/logout; ดู [ข้อจำกัดและ recovery](docs/LARGE_FILE_TRANSFER_FRONTEND.md)
+- **Upload Queue:** ไฟล์เล็กใช้ upload เดิม; ไฟล์ที่เกิน small-file limit ใช้ multipart เฉพาะเมื่อ server เปิด capability ที่รองรับ พร้อม Pause/Resume/Cancel และ progress จาก server acknowledgements multipart เก็บเฉพาะ metadata ตามบัญชีใน IndexedDB เพื่อกู้คิวหลัง reload/เปิดใหม่ ผู้ใช้ต้องเลือกไฟล์เดิมและกด Resume; ไม่เก็บ bytes ของไฟล์ และ recovery ขึ้นอยู่กับ browser storage; ดู [ข้อจำกัดและ recovery](docs/LARGE_FILE_TRANSFER_FRONTEND.md)
 - **Upload preferences:** ตั้งจำนวน upload พร้อมกันและเลือกให้ล้างรายการที่สำเร็จอัตโนมัติได้ใน Settings
 - **File preferences:** ตั้งค่าเริ่มต้นการเรียงไฟล์ การยืนยันย้ายรายการเดี่ยวไป Trash และอายุ public link ที่สร้างใหม่ได้ใน Settings
 - **Account settings:** ตั้งธีมและ storage เริ่มต้นตามบัญชี เปลี่ยนรหัสผ่าน และออกจาก session อื่นได้; การอัปโหลดชื่อซ้ำจะแจ้ง conflict โดยยังไม่รองรับ rename หรือ replace อัตโนมัติ
@@ -98,7 +98,7 @@ tests/               automated tests
 - [Design system](docs/DESIGN_SYSTEM.md) — tokens และแนวทาง UI
 - [Storage architecture](docs/STORAGE_ARCHITECTURE.md) และ [Storage API contract](docs/STORAGE_API_V1_PROPOSAL.md)
 - [Isolated acceptance](docs/LARGE_FILE_TRANSFER_ACCEPTANCE.md) — test-only suite, resource report และ production readiness checklist; real-provider checks ยัง BLOCKED
-- [Frontend transfer status](docs/LARGE_FILE_TRANSFER_FRONTEND.md) — multipart Upload Queue, lifecycle และ reconciliation; ยังไม่มี persistence หรือ Transfer Manager
+- [Frontend transfer status](docs/LARGE_FILE_TRANSFER_FRONTEND.md) — multipart Upload Queue, IndexedDB recovery และ original-file reselection; ยังไม่มี full Transfer Manager
 - [Multipart backend](docs/LARGE_FILE_TRANSFER_BACKEND.md) — server implementation แบบ opt-in; ต้องผ่าน migration และ infrastructure QA ก่อนเปิดใช้; frontend queue ใช้ได้เมื่อ server โฆษณา capability
 - [Large file transfer plan](docs/LARGE_FILE_TRANSFER_PLAN.md) — architecture audit และ roadmap; สถานะ backend ปัจจุบันอยู่ในเอกสาร Multipart backend ยังไม่ยืนยันการรองรับ 10 GiB
 - [Backup and recovery](docs/BACKUP_RECOVERY.md) และ [production security gates](docs/PHASE_10_1_1.md)

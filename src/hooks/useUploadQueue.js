@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createMultipartUploadClient, MultipartUploadError } from '../services/multipart-upload';
 import { selectUploadStrategy } from '../utils/upload-strategy';
+import { uploadRecoveryStore, normalizeRecoveryRecord, matchesOriginalFile } from '../services/upload-recovery';
 
 const TRANSIENT = new Set(['NETWORK_INTERRUPTION', 'REQUEST_TIMEOUT', 'PROVIDER_UNAVAILABLE', 'RATE_LIMITED', 'VERSION_CONFLICT', 'AMBIGUOUS_COMPLETION']);
 const AUTH = new Set(['UNAUTHENTICATED', 'AUTHENTICATION_FAILURE']);
 const FINISHED = new Set(['success', 'error', 'expired', 'cancelled']);
 const MAX_RETRIES = 2;
+
+function taskRecord(task) {
+  return { schemaVersion: 1, id: task.id, userScope: task.userScope, transferId: task.transferId ?? null,
+    idempotencyKey: task.key, storageId: task.storageId, parentId: task.parentId,
+    name: task.name, sizeBytes: task.sizeBytes, mimeType: task.metadata.mimeType, lastModified: task.lastModified,
+    partSizeBytes: task.limits.partSizeBytes, partCount: Math.ceil(task.sizeBytes / task.limits.partSizeBytes),
+    createdAt: task.createdAt, expiresAt: task.expiresAt, updatedAt: Date.now(), lastState: task.status, intent: task.intent };
+}
+
+function displayTask(task) {
+  return { id: task.id, scopeKey: task.scopeKey, name: task.name, sizeBytes: task.sizeBytes, parentId: task.parentId,
+    strategy: task.strategy, status: task.status, acknowledgedBytes: 0, completedParts: 0,
+    partCount: task.partCount ?? null, retryable: false, error: null, recovered: task.recovered === true,
+    needsFile: !task.file && task.strategy === 'multipart', pendingAction: task.intent || null };
+}
 
 function errorMessage(error) {
   const messages = {
@@ -47,8 +63,10 @@ function retryDelay(attempt, signal) {
 
 export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, canUpload = () => true,
   scopeKey = 'workspace', maxConcurrency = 3, autoClear = true,
-  createClient = createMultipartUploadClient, waitForRetry = retryDelay } = {}) {
+  createClient = createMultipartUploadClient, waitForRetry = retryDelay,
+  recoveryScope = null, recoveryStorageId = null, recoveryStore = uploadRecoveryStore } = {}) {
   const [items, setItems] = useState([]);
+  const [recoveryNotice, setRecoveryNotice] = useState(null);
   const tasksRef = useRef(new Map());
   const pendingRef = useRef([]);
   const activeRef = useRef(new Map());
@@ -61,7 +79,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const processRef = useRef(null);
   const concurrency = [1, 2, 3, 5].includes(maxConcurrency) ? maxConcurrency : 3;
   useLayoutEffect(() => {
-    optionsRef.current = { uploadFile, onComplete, onUnauthorized, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry };
+    optionsRef.current = { uploadFile, onComplete, onUnauthorized, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry, recoveryScope, recoveryStore };
     for (const task of activeRef.current.values()) {
       if (task.intent !== 'cancel' && !canUpload(task.storageId)) {
         task.permissionRevoked = true;
@@ -72,16 +90,32 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
 
   const alive = useCallback(task => mountedRef.current && task.epoch === epochRef.current
     && task.scopeKey === optionsRef.current.scopeKey && tasksRef.current.get(task.id) === task, []);
+  const persist = useCallback(async (task, remove = false) => {
+    if (task.strategy !== 'multipart' || !task.userScope || task.localOnly || (task.persistenceFailed && !remove && !['success','cancelled','expired'].includes(task.status))) return;
+    const removing = remove || ['success','cancelled','expired'].includes(task.status);
+    try {
+      if (removing) await task.recoveryStore.remove(task.userScope, task.id);
+      else await task.recoveryStore.save(taskRecord(task));
+    } catch {
+      task.persistenceFailed = true;
+      if (mountedRef.current && task.epoch === epochRef.current && task.scopeKey === optionsRef.current.scopeKey) {
+        setRecoveryNotice({ scopeKey: task.scopeKey, warning: removing
+          ? 'Local upload history could not be cleared on this device. It may reappear after reload.'
+          : 'Upload recovery could not be saved on this device. Keep this page open to retain the original file.' });
+      }
+    }
+  }, []);
   const update = useCallback((task, changes) => {
     if (!alive(task)) return;
     Object.assign(task, changes);
+    void persist(task);
     // Only public display metadata enters React state, never File/controller/client/key.
     setItems(current => current.map(item => item.id === task.id ? { ...item, ...changes } : item));
-  }, [alive]);
+  }, [alive, persist]);
 
   const dispose = useCallback(() => {
     epochRef.current++;
-    for (const task of tasksRef.current.values()) { task.controller?.abort(); task.file = null; task.client = null; }
+    for (const task of tasksRef.current.values()) { task.controller?.abort(); task.file = null; task.candidateFile = null; task.client = null; }
     tasksRef.current.clear(); activeRef.current.clear(); pendingRef.current = [];
     for (const timer of timersRef.current.values()) clearTimeout(timer);
     timersRef.current.clear();
@@ -138,17 +172,43 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         || session.partCount !== Math.ceil(task.sizeBytes / session.partSizeBytes) || session.partCount > task.limits.maxParts) {
         throw new MultipartUploadError('INVALID_RESPONSE');
       }
-      task.partCount = session.partCount;
+      task.partCount = session.partCount; task.expiresAt = session.expiresAt;
       update(task, firstPage ? { partCount: session.partCount }
         : { acknowledgedBytes: session.acknowledgedBytes, completedParts: session.parts.length, partCount: session.partCount });
     };
     while (alive(task) && !blockedRef.current) {
       task.controller = new AbortController();
       const handling = task.intent;
+      const operationMode = task.mode;
       try {
         const client = task.strategy === 'multipart' ? optionsRef.current.createClient({ storageId: task.storageId,
           signal: task.controller.signal, maxRetries: 0 }) : null;
         task.client = client;
+        if (operationMode === 'check' || operationMode === 'select') {
+          update(task, { status: operationMode === 'check' ? 'checking_server' : 'verifying', error: null });
+          if (!task.transferId) {
+            // Unknown creation: retain identity, but never issue POST during startup restore.
+            if (operationMode === 'select') task.file = task.candidateFile;
+            task.candidateFile = null; task.mode = null;
+            task.intent = handling === 'cancel' ? 'cancel' : 'pause';
+            update(task, { status: handling === 'cancel' ? 'error' : task.file ? 'paused' : 'waiting_file',
+              needsFile: !task.file, pendingAction: handling === 'cancel' ? 'cancel' : null,
+              retryable: handling === 'cancel', error: handling === 'cancel' ? 'Creation outcome is unknown. Retry cancellation using the original identity.' : null });
+            return;
+          }
+          const session = operationMode === 'select'
+            ? await client.reconcile(task.transferId, task.candidateFile) : await client.getCompletedParts(task.transferId);
+          snapshot(session);
+          if (session.state === 'completed') { finish(task, { file: session.object }); return; }
+          if (session.state === 'expired' || session.state === 'cancelled') throw new MultipartUploadError(session.state === 'expired' ? 'SESSION_EXPIRED' : 'SESSION_CANCELLED');
+          task.mode = null;
+          if (handling === 'cancel') {
+            update(task, { status: 'error', pendingAction: 'cancel', retryable: true, error: 'Cancellation is pending. Retry cancellation; this upload will not resume.' }); return;
+          }
+          if (operationMode === 'select') { task.file = task.candidateFile; task.candidateFile = null; task.intent = 'pause'; }
+          update(task, { status: task.file ? 'paused' : 'waiting_file', needsFile: !task.file, pendingAction: null, error: null });
+          return;
+        }
         if (task.strategy === 'legacy') {
           allowed();
           update(task, { status: 'uploading', error: null });
@@ -161,11 +221,14 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         if (!task.transferId) {
           // If a create response was lost, only this exact key/metadata may recover its ID.
           task.started = true;
+          await persist(task); check();
           const session = await client.createSession(task.metadata, task.key);
           check(); task.transferId = session.transferId;
           snapshot(session, true);
+          await persist(task); check();
         }
         if (handling) {
+          await persist(task); check();
           if (handling === 'pause') allowed();
           let result;
           try { result = handling === 'cancel' ? await client.cancelSession(task.transferId) : await client.pauseSession(task.transferId); }
@@ -178,7 +241,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           check();
           if (result.state === 'completed') { finish(task, { file: result.object }); return; }
           if (result.state !== (handling === 'cancel' ? 'cancelled' : 'paused')) throw new MultipartUploadError('INVALID_RESPONSE');
-          if (handling === 'cancel') { task.file = null; task.client = null; }
+          if (handling === 'cancel') { task.file = null; task.candidateFile = null; task.client = null; }
           else {
             const paused = await client.getCompletedParts(task.transferId);
             check();
@@ -188,6 +251,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           update(task, { status: handling === 'cancel' ? 'cancelled' : 'paused', error: null, retryable: false });
           return;
         }
+        if (!task.file) { task.mode = 'check'; continue; }
         update(task, { status: task.resumeRequested ? 'resuming' : retries ? 'reconciling' : 'verifying' });
         let session = await client.reconcile(task.transferId, task.file);
         snapshot(session);
@@ -236,6 +300,20 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           optionsRef.current.onUnauthorized?.(); return;
         }
         if (blockedRef.current) return;
+        if (operationMode === 'check' || operationMode === 'select') {
+          task.mode = null; task.candidateFile = null;
+          const terminal = error?.code === 'SESSION_EXPIRED' ? 'expired' : error?.code === 'SESSION_CANCELLED' ? 'cancelled' : null;
+          update(task, { status: terminal || (error?.code === 'FILE_MISMATCH' ? 'file_mismatch' : 'recovery_error'),
+            error: errorMessage(error), errorCode: error?.code, needsFile: !task.file, retryable: !terminal,
+            pendingAction: task.intent === 'cancel' ? 'cancel' : null });
+          return;
+        }
+        if (task.strategy === 'multipart' && error?.code === 'FILE_MISMATCH') {
+          task.file = null; task.candidateFile = null; task.intent = 'pause';
+          update(task, { status: 'file_mismatch', needsFile: true, pendingAction: null,
+            error: errorMessage(error), errorCode: error.code, retryable: false });
+          return;
+        }
         if (['FORBIDDEN', 'PERMISSION_REVOKED', 'CAPABILITY_UNAVAILABLE'].includes(error?.code)) writeBlockedRef.current = true;
         if (task.strategy === 'multipart' && !handling && TRANSIENT.has(error?.code) && retries < MAX_RETRIES) {
           update(task, { status: 'retry_wait', error: errorMessage(error) });
@@ -258,7 +336,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         return;
       }
     }
-  }, [alive, update, finish]);
+  }, [alive, update, finish, persist]);
 
   const processQueue = useCallback(() => {
     if (!mountedRef.current || blockedRef.current) return;
@@ -281,6 +359,80 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     queueMicrotask(() => processRef.current?.());
   }, [alive]);
 
+  useEffect(() => {
+    if (!recoveryScope || !recoveryStorageId) return undefined;
+    let cancelled = false;
+    const epoch = epochRef.current;
+    const current = () => !cancelled && mountedRef.current && epoch === epochRef.current;
+    queueMicrotask(async () => {
+      if (!current()) return;
+      setRecoveryNotice({ scopeKey, loading: true });
+      try {
+        const records = await recoveryStore.list(recoveryScope, recoveryStorageId);
+        if (!current()) return;
+        const restored = [];
+        const transferIds = new Set([...tasksRef.current.values()].map(task => task.transferId).filter(Boolean));
+        const createKeys = new Set([...tasksRef.current.values()].map(task => task.key).filter(Boolean));
+        for (const raw of records) {
+          let record;
+          try { record = normalizeRecoveryRecord(raw); } catch { continue; }
+          if (record.userScope !== recoveryScope || record.storageId !== recoveryStorageId || tasksRef.current.has(record.id)) continue;
+          if ((record.transferId && transferIds.has(record.transferId)) || createKeys.has(record.idempotencyKey)) {
+            void recoveryStore.remove(recoveryScope, record.id).catch(() => {});
+            continue;
+          }
+          const selected = selectUploadStrategy(record.sizeBytes, 0, { resumableUpload: true, maxFileBytes: 10 * 1024 ** 3,
+            partSizeBytes: record.partSizeBytes, maxParts: 1280, maxParallelParts: 1, sessionTtlSeconds: 604800 });
+          if (!selected.limits) continue;
+          const task = { id: record.id, userScope: recoveryScope, storageId: record.storageId, parentId: record.parentId,
+            transferId: record.transferId, key: record.idempotencyKey, name: record.name, sizeBytes: record.sizeBytes,
+            lastModified: record.lastModified, createdAt: record.createdAt, expiresAt: record.expiresAt,
+            metadata: { name: record.name, sizeBytes: record.sizeBytes, parentId: record.parentId, mimeType: record.mimeType },
+            limits: selected.limits, partCount: record.partCount, strategy: 'multipart', maxUploadBytes: 25 * 1024 ** 2,
+            epoch, scopeKey, recoveryStore, recovered: true, file: null, controller: null, notified: false,
+            status: 'restoring', mode: 'check', intent: record.intent, started: true };
+          tasksRef.current.set(task.id, task); createKeys.add(task.key); if (task.transferId) transferIds.add(task.transferId);
+          restored.push(displayTask(task)); pendingRef.current.push(task);
+        }
+        setItems(items => [...items, ...restored]);
+        setRecoveryNotice(previous => ({ ...(previous?.scopeKey === scopeKey ? previous : {}), scopeKey, loading: false }));
+        queueMicrotask(() => processRef.current?.());
+      } catch {
+        if (current()) setRecoveryNotice({ scopeKey, warning: 'Upload recovery is unavailable on this device. Existing uploads can continue while this page stays open.' });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [scopeKey, recoveryScope, recoveryStorageId, recoveryStore]);
+
+  const retryReconciliation = useCallback(id => {
+    const task = tasksRef.current.get(id);
+    if (!task || !alive(task) || !['recovery_error','waiting_file','file_mismatch'].includes(task.status)
+      || activeRef.current.has(id) || pendingRef.current.includes(task) || blockedRef.current) return;
+    task.mode = 'check'; update(task, { status: 'checking_server', error: null }); enqueue(task);
+  }, [alive, update, enqueue]);
+
+  const selectOriginalFile = useCallback((id, file) => {
+    const task = tasksRef.current.get(id);
+    if (!task || !alive(task) || task.intent === 'cancel' || activeRef.current.has(id) || pendingRef.current.includes(task)
+      || !['waiting_file','file_mismatch','recovery_error'].includes(task.status)) return;
+    if (!matchesOriginalFile({ name: task.name, sizeBytes: task.sizeBytes, lastModified: task.lastModified }, file)) {
+      update(task, { status: 'file_mismatch', needsFile: true, error: 'File name, size or modification time differs from the original. Select the original file.' }); return;
+    }
+    task.candidateFile = file; task.mode = 'select';
+    update(task, { status: 'verifying', error: null }); enqueue(task);
+  }, [alive, update, enqueue]);
+
+  const clearLocalHistory = useCallback(() => {
+    const removed = new Set();
+    for (const task of tasksRef.current.values()) {
+      if (activeRef.current.has(task.id) || pendingRef.current.includes(task)) continue;
+      void persist(task, true); task.localOnly = true; task.file = null; task.candidateFile = null; task.client = null;
+      clearTimeout(timersRef.current.get(task.id)); timersRef.current.delete(task.id);
+      tasksRef.current.delete(task.id); removed.add(task.id);
+    }
+    setItems(items => items.filter(item => !removed.has(item.id)));
+  }, [persist]);
+
   const addFiles = useCallback((files, { storageId, parentId = null, maxUploadBytes = null, transfers } = {}) => {
     if (!mountedRef.current || blockedRef.current || writeBlockedRef.current || !optionsRef.current.canUpload(storageId)) return [];
     const newItems = Array.from(files).map(file => {
@@ -291,6 +443,9 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         intent: null, controller: null, notified: false, retryable: false };
       if (task.strategy === 'multipart') {
         task.key = crypto.randomUUID();
+        task.userScope = optionsRef.current.recoveryScope; task.recoveryStore = optionsRef.current.recoveryStore;
+        task.createdAt = Date.now(); task.expiresAt = task.createdAt + task.limits.sessionTtlSeconds * 1000;
+        task.lastModified = Number.isSafeInteger(file.lastModified) && file.lastModified >= 0 ? file.lastModified : null;
         task.metadata = { name: file.name, sizeBytes: file.size, parentId, mimeType: file.type || 'application/octet-stream' };
       }
       tasksRef.current.set(task.id, task);
@@ -307,7 +462,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const cancelUpload = useCallback(id => {
     const task = tasksRef.current.get(id);
     if (!task || !alive(task) || ['success', 'expired', 'cancelled', 'cancelling'].includes(task.status)) return;
-    task.intent = 'cancel';
+    task.intent = 'cancel'; task.mode = null; task.candidateFile = null;
     if (task.strategy === 'multipart' && (task.started || task.transferId)) {
       update(task, { status: 'cancelling', retryable: false });
       if (activeRef.current.has(id)) task.controller?.abort(); else enqueue(task);
@@ -328,7 +483,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
 
   const resumeUpload = useCallback(id => {
     const task = tasksRef.current.get(id);
-    if (!task || task.status !== 'paused' || blockedRef.current || writeBlockedRef.current || !optionsRef.current.canUpload(task.storageId)) return;
+    if (!task || !task.file || task.status !== 'paused' || blockedRef.current || writeBlockedRef.current || !optionsRef.current.canUpload(task.storageId)) return;
     task.intent = null; task.resumeRequested = true;
     update(task, { status: 'resuming', error: null }); enqueue(task);
   }, [update, enqueue]);
@@ -345,14 +500,17 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     const finished = new Set();
     for (const task of tasksRef.current.values()) {
       if (!FINISHED.has(task.status) || activeRef.current.has(task.id)) continue;
+      void persist(task, true); task.localOnly = true;
       finished.add(task.id); task.file = null; task.client = null; tasksRef.current.delete(task.id);
       clearTimeout(timersRef.current.get(task.id)); timersRef.current.delete(task.id);
     }
     setItems(current => current.filter(item => !finished.has(item.id)));
-  }, []);
+  }, [persist]);
   // Lifecycle shutdown is deliberately distinct from explicit server cancellation.
   const reset = useCallback(() => { dispose(); blockedRef.current = false; writeBlockedRef.current = false; if (mountedRef.current) setItems([]); }, [dispose]);
   const cancelAll = useCallback(() => { for (const task of tasksRef.current.values()) cancelUpload(task.id); }, [cancelUpload]);
   return { items: items.filter(item => item.scopeKey === scopeKey), addFiles, cancelUpload, pauseUpload, resumeUpload,
-    retryUpload, clearFinished, cancelAll, reset, concurrency };
+    retryUpload, clearFinished, cancelAll, reset, concurrency, selectOriginalFile, retryReconciliation, clearLocalHistory,
+    restoring: recoveryNotice?.scopeKey === scopeKey && recoveryNotice.loading === true,
+    persistenceWarning: recoveryNotice?.scopeKey === scopeKey ? recoveryNotice.warning : null };
 }
