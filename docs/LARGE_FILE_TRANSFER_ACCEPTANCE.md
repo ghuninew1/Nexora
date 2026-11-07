@@ -1,5 +1,7 @@
 # Phase 3A — Isolated real-provider acceptance
 
+> **Final Phase 6 (2026-11-08):** สถานะรวมและ runbook ปัจจุบันอยู่ใน [Production readiness](LARGE_FILE_TRANSFER_PRODUCTION_READINESS.md). Source integration/local validation complete; real-provider acceptance BLOCKED, controlled rollout/production NOT READY. D1 schema0011 verified read-only on target; Shared schema0002 remains unverified. Earlier phase statements below retain their historical scope.
+
 วันที่: 2026-11-07 (Asia/Bangkok)
 
 **สถานะ: suite พร้อมให้ operator รัน; real-provider acceptance BLOCKED** ไม่มีการติดต่อ Garage, สร้าง cloud resources, เปลี่ยน production configuration, apply remote migrations หรือ deploy ในงานนี้ Runtime feature flags ยังคง default off
@@ -174,3 +176,9 @@ Required ก่อนenable:
 - [ ] Browser/mobileและfrontend Transfer Manager ผ่านphaseที่เกี่ยวข้องก่อนโฆษณาbrowser resumability
 
 Optional improvementsหลังมีmeasurement: OS/container high-water monitoring, longer soak tests, process-killระหว่างprovider/SQLcommit, controlled packet-lossnetworknamespace และbroader cross-device tests ไม่เพิ่มinfrastructure/dependenciesหรือเปลี่ยนproductionในPhase3Aนี้
+
+## Final Phase 6 runner additions
+
+The runner now performs full incremental SHA-256 downloads with connection/read-inactivity bounds rather than a five-minute total stream deadline. On the first100 MiB test object it additionally aborts an active HTTP response, resumes with its original strong If-Range and verifies the entire reconstructed checksum; checks stale If-Range returns full200; and verifies independent concurrent full downloads. Unit/loopback helper tests use test bytes and are not real-provider evidence.
+
+Machine-readable scenarios now explicitly retain manual BLOCKED gates for native browser/OS recovery, actual deployed logout/revocation, operator-controlled storage outage and provider CPU/disk monitoring. Actual Internet loss, disk destinations and workerd/Pages cannot be certified by this Node runner. The [Phase6 report](acceptance/phase-6-2026-11-08/results.json) has25 BLOCKED scenarios because no isolated resources were provided. Earlier Phase3A18-scenario report remains historical. Resource/throughput values remain null. See the readiness guide for the initial100 MiB/200 MiB-concurrency budget configuration and rollout/rollback checklist; never turn on production flags to run the fixture.

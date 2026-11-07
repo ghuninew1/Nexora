@@ -119,7 +119,9 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
   }
   async function receive(payload, status = 200) {
     const { safe, sharedId } = safeSession(payload, row);
-    await db.prepare('UPDATE transfer_sessions SET shared_session_id = ?, state = ? WHERE id = ?').bind(sharedId, safe.state, row.id).run();
+    await db.prepare(`UPDATE transfer_sessions SET shared_session_id = ?, state = ? WHERE id = ?
+      AND (shared_session_id IS NOT ? OR state IS NOT ?)`)
+      .bind(sharedId, safe.state, row.id, sharedId, safe.state).run();
     if (safe.state === 'completed') await recordActivity(db, user, { storageMountId: storageId, storageName: mount.name,
       action: 'upload', objectId: safe.object.objectId, objectName: safe.object.name, objectType: 'file', parentId: safe.object.parentId },
     { logger, eventId: row.id });

@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-08",
+  "timezone": "Asia/Bangkok",
+  "target": "Nexora production D1 nexora-db",
+  "check": "read-only sqlite_master and PRAGMA schema inspection",
+  "migration": "0011_transfer_sessions.sql",
+  "status": "PASS",
+  "tableAndIndexDefinitionsMatchSource": true,
+  "ownerIdempotencyUniqueColumns": [
+    "user_id",
+    "storage_id",
+    "request_key_hash"
+  ],
+  "rowsWritten": 0,
+  "changedDatabase": false,
+  "migrationSourceSha256": "a973d5c322eb5108cb7be0063127f81aad71b7afea04b426d02201f208b6e0e6",
+  "sharedMigration0002": "BLOCKED: no operator target access; not inferred from D1 or local fixtures",
+  "note": "Initial command reported a local log-path EPERM; rerun with WRANGLER_LOG_PATH in /private/tmp succeeded."
+}

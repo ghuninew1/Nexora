@@ -8,6 +8,7 @@ const TRANSIENT = new Set(['NETWORK_INTERRUPTION', 'REQUEST_TIMEOUT', 'PROVIDER_
 const AUTH = new Set(['UNAUTHENTICATED', 'AUTHENTICATION_FAILURE']);
 const FINISHED = new Set(['success', 'error', 'expired', 'cancelled']);
 const MAX_RETRIES = 2;
+const MAX_QUEUE_ITEMS = 50;
 
 function taskRecord(task) {
   return { schemaVersion: 1, id: task.id, userScope: task.userScope, transferId: task.transferId ?? null,
@@ -63,7 +64,7 @@ function retryDelay(attempt, signal, retryAfterMs = 0) {
   });
 }
 
-export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, canUpload = () => true,
+export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, onAdmissionError, canUpload = () => true,
   scopeKey = 'workspace', maxConcurrency = 3, autoClear = true,
   createClient = createMultipartUploadClient, waitForRetry = retryDelay,
   recoveryScope = null, recoveryStorageId = null, recoveryStore = uploadRecoveryStore } = {}) {
@@ -83,7 +84,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const offlineRef = useRef(globalThis.navigator?.onLine === false);
   const concurrency = [1, 2, 3, 5].includes(maxConcurrency) ? maxConcurrency : 3;
   useLayoutEffect(() => {
-    optionsRef.current = { uploadFile, onComplete, onUnauthorized, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry, recoveryScope, recoveryStore };
+    optionsRef.current = { uploadFile, onComplete, onUnauthorized, onAdmissionError, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry, recoveryScope, recoveryStore };
     for (const task of activeRef.current.values()) {
       if (task.intent !== 'cancel' && !canUpload(task.storageId)) {
         task.permissionRevoked = true;
@@ -492,6 +493,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         const transferIds = new Set([...tasksRef.current.values()].map(task => task.transferId).filter(Boolean));
         const createKeys = new Set([...tasksRef.current.values()].map(task => task.key).filter(Boolean));
         for (const raw of records) {
+          if (tasksRef.current.size >= MAX_QUEUE_ITEMS) break;
           let record;
           try { record = normalizeRecoveryRecord(raw); } catch { continue; }
           if (record.userScope !== recoveryScope || record.storageId !== recoveryStorageId || tasksRef.current.has(record.id)) continue;
@@ -553,7 +555,17 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
 
   const addFiles = useCallback((files, { storageId, parentId = null, maxUploadBytes = null, transfers } = {}) => {
     if (!mountedRef.current || blockedRef.current || writeBlockedRef.current || !optionsRef.current.canUpload(storageId)) return [];
-    const newItems = Array.from(files).map(file => {
+    // Reject the whole selection before retaining Files or starting requests. Do
+    // not silently upload a prefix of a selection or materialize an unbounded list.
+    const selectedFiles = [];
+    for (const file of files) {
+      if (tasksRef.current.size + selectedFiles.length >= MAX_QUEUE_ITEMS) {
+        optionsRef.current.onAdmissionError?.('Upload queue is limited to 50 files. Clear finished uploads or choose a smaller selection. No files from this selection were added.');
+        return [];
+      }
+      selectedFiles.push(file);
+    }
+    const newItems = selectedFiles.map(file => {
       const selected = selectUploadStrategy(file.size, maxUploadBytes, transfers);
       const task = { id: crypto.randomUUID(), file, storageId, parentId, maxUploadBytes: selected.smallLimit,
         sizeBytes: file.size, name: file.name, strategy: selected.strategy || 'legacy', limits: selected.limits,

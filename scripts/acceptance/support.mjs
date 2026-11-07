@@ -15,6 +15,9 @@ export const SCENARIOS = Object.freeze([
   'expiration-cleanup-clock-advanced', 'concurrent-files', 'no-partial-publication',
   'final-provider-cleanup', 'resource-budgets', 'proxy-request-path', 'proxy-slow-part-timeout',
   'production-resource-retention-gates',
+  'download-interruption-range-integrity', 'download-stale-if-range', 'concurrent-downloads',
+  'browser-native-durable-recovery', 'real-platform-logout-revocation', 'storage-unavailability',
+  'provider-cpu-disk-throughput',
 ]);
 export class AcceptanceError extends Error {
   constructor(code) { super(code); this.code = code; }

@@ -103,6 +103,20 @@ test('broker preserves ownership, streams parts, reconciles interruption and ded
   } finally {f.db.close();}
 });
 
+test('unchanged status polling does not rewrite broker rows but changed provider state is persisted',async()=>{
+  const mock=mockProvider(),f=await fixture(mock.fetchImpl);
+  try {
+    const id=(await (await create(f)).json()).data.transferId;
+    f.db.exec('CREATE TABLE broker_write_probe(n INTEGER); CREATE TRIGGER broker_write_probe AFTER UPDATE ON transfer_sessions BEGIN INSERT INTO broker_write_probe VALUES (1); END;');
+    for(let i=0;i<3;i++) assert.equal((await f.request(`/${id}`)).status,200);
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM broker_write_probe').get().n,0);
+    [...mock.sessions.values()][0].state='paused';
+    assert.equal((await f.request(`/${id}`)).status,200);
+    assert.equal(f.db.prepare('SELECT state FROM transfer_sessions WHERE id=?').get(id).state,'paused');
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM broker_write_probe').get().n,1);
+  } finally {f.db.close();}
+});
+
 test('authorization gates include revoked assignments, readonly, maintenance, capability and creator-only cleanup',async()=>{
   const mock=mockProvider(),f=await fixture(mock.fetchImpl);
   try {

@@ -1,5 +1,7 @@
 # Nexora — Phase 5.1 Backend Streaming & Range Download
 
+> **Final Phase 6 (2026-11-08):** สถานะรวมและ runbook ปัจจุบันอยู่ใน [Production readiness](LARGE_FILE_TRANSFER_PRODUCTION_READINESS.md). Source integration/local validation complete; real-provider acceptance BLOCKED, controlled rollout/production NOT READY. D1 schema0011 verified read-only on target; Shared schema0002 remains unverified. Earlier phase statements below retain their historical scope.
+
 วันที่: 2026-11-08 (Asia/Bangkok). สถานะ local validation ดูผลสรุปท้ายเอกสาร; source ไม่ใช่หลักฐาน deployed Garage/Cloudflare behavior. ไม่มี Download Manager, browser persistence, deployment, production flag/config change หรือ migration ใน phase นี้
 
 ## เส้นทางและ authorization

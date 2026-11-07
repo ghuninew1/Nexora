@@ -1,5 +1,7 @@
 # Large file transfer — frontend client
 
+> **Final Phase 6 (2026-11-08):** สถานะรวมและ runbook ปัจจุบันอยู่ใน [Production readiness](LARGE_FILE_TRANSFER_PRODUCTION_READINESS.md). Source integration/local validation complete; real-provider acceptance BLOCKED, controlled rollout/production NOT READY. D1 schema0011 verified read-only on target; Shared schema0002 remains unverified. Earlier phase statements below retain their historical scope.
+
 > Phase 5.1 follow-up (2026-11-08): backend streaming/Range contract and acceptance boundaries are documented in [LARGE_FILE_TRANSFER_DOWNLOAD.md](LARGE_FILE_TRANSFER_DOWNLOAD.md). Earlier phase statements below describe their historical scope. Phase5.2 now adds the active-page managed download queue in the same panel; see the download guide for its distinct disk/identity/lifecycle contract.
 
 Phase **4.1–4.5 COMPLETE locally** (2026-11-08). Multipart uploads retain metadata in native IndexedDB, coordinate same-origin tabs using Web Locks, and recover bounded network interruptions through the original session. Phase4.5 supplies the global upload Transfer Manager; real-provider acceptance remains pending. See PROJECT_HANDOFF.md for executed checks and the Phase4.4 completion result. Server flags stay disabled by default; local tests and mocked browser checks do not imply production activation or10GiB acceptance.

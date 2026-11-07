@@ -15,6 +15,7 @@ import { STORAGE_PERMISSION_NAMES } from '../../functions/_lib/storage-permissio
 import { AcceptanceError, check, validateConfig, fingerprint, privateJson, syntheticPart, d1,
   webServer, closeServer, blockedReport, scenario, reportMarkdown, MiB, PART_BYTES } from './support.mjs';
 import { MARKER_KEY, requireEmptyBucket, cleanOwnedResources } from './isolation.mjs';
+import { verifyStreamingDownload, verifyIfRangeFallback } from './download.mjs';
 
 const root = fileURLToPath(new URL('../../',import.meta.url));
 const digest = bytes=>createHash('sha256').update(bytes).digest('base64');
@@ -112,6 +113,12 @@ export async function runAcceptance(config,report,credentials,{cleanupJournal}={
   privateJson(journalPath,journal);
   report.privateWorkspace=directory; // Local path only; never credentials or provider references.
   report.evidence='real-provider-attempt';
+  for(const [id,reason] of Object.entries({
+    'browser-native-durable-recovery':'NATIVE_BROWSER_OS_AND_CONNECTIVITY_EVIDENCE_REQUIRED',
+    'real-platform-logout-revocation':'DEPLOYED_SESSION_AND_PERMISSION_REVOCATION_EVIDENCE_REQUIRED',
+    'storage-unavailability':'OPERATOR_CONTROLLED_ISOLATED_OUTAGE_EVIDENCE_REQUIRED',
+    'provider-cpu-disk-throughput':'PROVIDER_OS_CPU_DISK_AND_CAPACITY_MONITORING_REQUIRED',
+  })) report.scenarios.find(s=>s.id===id).reason=reason;
   report.providerVersion={operatorAttested:config.operatorProviderVersion || null, independentlyVerified:false};
   report.measurements={parentPeakRssBytes:process.memoryUsage().rss,sharedPeakRssBytes:0,sharedPeakActiveParts:0,
     environment:{node:process.version,sharedHttp:'actual Hono app factory and @hono/node-server; loopback unless explicitly proxied',nexoraRuntime:'Node HTTP using actual API handler; not workerd'},retryCounts:{automatic:0,controlledFailureRetries:0},requestCount:0};
@@ -188,7 +195,7 @@ export async function runAcceptance(config,report,credentials,{cleanupJournal}={
       const s=await status(id);
       return requireData(await retry(()=>api(`/${id}/complete`,{method:'POST',body:{version:s.version}})));
     };
-    async function upload(size,{session,seed=randomUUID(),interruptAt,restartAt,dropPartAck=false,dropCompleteAck=false,slowSeconds=0}={}) {
+    async function upload(size,{session,seed=randomUUID(),interruptAt,restartAt,dropPartAck=false,dropCompleteAck=false,slowSeconds=0,downloadAcceptance=false}={}) {
       check(size<=config.maxLogicalBytes,'CAPACITY_BUDGET_EXCEEDED');
       const s=session || await create(size),id=s.transferId;
       const expected=createHash('sha256'),started=performance.now();
@@ -229,22 +236,30 @@ export async function runAcceptance(config,report,credentials,{cleanupJournal}={
       check((afterComplete.commandCounts.CompleteMultipartUploadCommand || 0)-(beforeComplete.commandCounts.CompleteMultipartUploadCommand || 0)===1,'DUPLICATE_PROVIDER_COMPLETION');
       report.measurements.retryCounts.controlledFailureRetries+=retryCount;
       const uploadSeconds=(performance.now()-started)/1000,downloadStarted=performance.now();
-      const download=await fetch(`${origin}/api/storage/v1/storages/acceptance-mount/objects/${result.object.objectId}/download`,{
-        headers:{Cookie:cookie},redirect:'error',signal:AbortSignal.any([shutdown.signal,AbortSignal.timeout(300000)])});
-      check(download.status===200 && Number(download.headers.get('Content-Length'))===size,'DOWNLOAD_SIZE_HEADER_MISMATCH');
-      const actual=createHash('sha256');let received=0;
-      for await(const chunk of download.body){received+=chunk.byteLength;actual.update(chunk);}
-      const hash=expected.digest('hex');check(received===size && actual.digest('hex')===hash,'FULL_FILE_CHECKSUM_MISMATCH');
+      const hash=expected.digest('hex');
+      const downloadOptions={url:`${origin}/api/storage/v1/storages/acceptance-mount/objects/${result.object.objectId}/download`,
+        headers:{Cookie:cookie},size,sha256:hash,signal:shutdown.signal};
+      await verifyStreamingDownload(downloadOptions);
+      const downloadSeconds=(performance.now()-downloadStarted)/1000;
       const seconds=(performance.now()-started)/1000;
+      if(downloadAcceptance) {
+        await scenario(report,'download-interruption-range-integrity',()=>verifyStreamingDownload({...downloadOptions,interruptAfter:PART_BYTES}));
+        await scenario(report,'download-stale-if-range',()=>verifyIfRangeFallback(downloadOptions));
+        await scenario(report,'concurrent-downloads',async()=>{
+          const results=await Promise.allSettled(Array.from({length:config.concurrentFiles},()=>verifyStreamingDownload(downloadOptions)));
+          check(results.every(r=>r.status==='fulfilled'),'CONCURRENT_DOWNLOAD_FAILURE');
+          return {files:config.concurrentFiles,allFullChecksumsVerified:true};
+        });
+      }
       return {sizeBytes:size,sha256:hash,checksumVerifiedThroughNexoraDownload:true,elapsedSeconds:Number(seconds.toFixed(3)),
         uploadPayloadMiBPerSecond:Number((size/MiB/uploadSeconds).toFixed(3)),
-        downloadPayloadMiBPerSecond:Number((size/MiB/((performance.now()-downloadStarted)/1000)).toFixed(3)),
+        downloadPayloadMiBPerSecond:Number((size/MiB/downloadSeconds).toFixed(3)),
         roundTripPayloadMiBPerSecond:Number((2*size/MiB/seconds).toFixed(3)),injectedFailureRetries:retryCount};
     }
     async function cleanBetween() { await cleanOwnedResources(send,sdk,config,refreshJournal()); }
     for(const [id,size] of [['upload-100MiB',100*MiB],['upload-1GiB',1024*MiB],['upload-10GiB',10240*MiB]]) {
       if(!config.sizesMiB.includes(size/MiB) || size>config.maxLogicalBytes){report.scenarios.find(s=>s.id===id).reason='SIZE_NOT_AUTHORIZED_OR_CAPACITY_UNCONFIRMED';continue;}
-      await scenario(report,id,()=>upload(size));await cleanBetween();
+      await scenario(report,id,()=>upload(size,{downloadAcceptance:id==='upload-100MiB'}));await cleanBetween();
     }
     for(const [id,options] of [['interruption-same-session',{interruptAt:2}],['shared-process-restart-resume',{restartAt:2}],
       ['lost-part-ack-retry',{dropPartAck:true}],['lost-complete-ack-duplicate-completion',{dropCompleteAck:true}]]) {

@@ -93,3 +93,8 @@ The Header Transfers control opens one responsive, scrollable Base UI dialog wit
 ### Download recovery in Transfers
 
 Restored Downloads rows remain paused and show an explicit Recover action, preserved written checkpoint and destination-verification explanation. Permission/metadata errors remain inline with Use browser as the explicit alternative. Unsupported durable capability and persistence warnings are visible; native downloads retain their browser-controlled presentation. Checkpoints may leave committed partial files on disk, including after Cancel. Recovery never shows100% from local metadata alone. Shared Buttons, responsive44px action targets and the existing single Transfer Manager dialog remain unchanged.
+
+
+### Transfer admission feedback
+
+The Upload Queue retains at most50 tasks including finished/recovered entries. An overflowing selection is rejected as a whole before retaining files or starting requests. Reuse the existing File Browser operation alert to explain the limit and Clear finished/smaller-selection actions; never silently queue a subset or replace an active task. Download capacity remains independently bounded to50. See the transfer production-readiness guide for verified browser and infrastructure boundaries.

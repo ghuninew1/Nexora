@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-08",
+  "timezone": "Asia/Bangkok",
+  "evidence": "local-tests-and-mocked-api-browser-only",
+  "node": "v26.13.0",
+  "checks": {
+    "lint": "PASS",
+    "node": {
+      "pass": 263,
+      "fail": 0,
+      "skip": 0
+    },
+    "ui": {
+      "pass": 82,
+      "fail": 0
+    },
+    "shared": {
+      "pass": 49,
+      "fail": 0,
+      "skip": 0,
+      "provider": "mocked S3"
+    },
+    "build": "PASS",
+    "diffCheckBothRepositories": "PASS",
+    "chrome": {
+      "status": "PASS",
+      "viewports": [
+        "1280x900",
+        "390x844"
+      ],
+      "realApis": [
+        "OPFS",
+        "IndexedDB",
+        "Web Locks"
+      ],
+      "substituted": [
+        "Save picker",
+        "HTTP provider bytes",
+        "permission denial"
+      ],
+      "verifiedOutputBytes": 8388608,
+      "recovery": [
+        "reload",
+        "browser process restart",
+        "original If-Range",
+        "full prefix comparison"
+      ],
+      "uploadAdmission": "51-file selection rejected atomically; no upload row"
+    },
+    "liveD1Schema0011": "PASS read-only",
+    "sharedTargetSchema0002": "BLOCKED",
+    "realProvider": "BLOCKED",
+    "rollout": "NOT READY",
+    "production": "NOT READY"
+  },
+  "productionMutationsPerformed": false,
+  "limitations": [
+    "No real Garage throughput/RSS/CPU/disk measurements",
+    "No OS Save As or physical mobile test",
+    "Safari/Firefox not run",
+    "Cloudflare workerd/Tunnel/Access paths not tested"
+  ]
+}

@@ -91,6 +91,25 @@ it('routes only large files with compatible explicit capability; clamps legacy m
   expect(selectUploadStrategy(26 * 1024 ** 2, 99 * 1024 ** 2).error).toBe('UPLOAD_TOO_LARGE');
 });
 
+it('bounds retained upload Files and rejects an overflowing selection atomically before network work', async () => {
+  const onAdmissionError = vi.fn();
+  const h = setup({ onAdmissionError });
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+  const first = h.add(Array.from({ length: 49 }, (_, i) => file(`queued-${i}.bin`)));
+  expect(first).toHaveLength(49);
+  expect(h.add([file('overflow-a.bin'), file('overflow-b.bin')])).toEqual([]);
+  expect(h.result.current.items).toHaveLength(49);
+  expect(onAdmissionError).toHaveBeenCalledWith(expect.stringContaining('No files from this selection were added'));
+  expect(h.api.createClient).not.toHaveBeenCalled();
+  expect(h.add([file('last.bin')])).toHaveLength(1);
+  expect(h.add([file('overflow.bin')])).toEqual([]);
+  expect(h.result.current.items).toHaveLength(50);
+  act(() => h.result.current.cancelUpload(first[0]));
+  act(() => h.result.current.clearFinished());
+  expect(h.add([file('replacement.bin')])).toHaveLength(1);
+  await act(async () => {});
+});
+
 it('preserves the small-file path, limit and indeterminate UI without multipart controls', async () => {
   const h = setup();
   h.add([file()], { maxUploadBytes: 10, transfers: undefined });

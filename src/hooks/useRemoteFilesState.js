@@ -518,6 +518,7 @@ export default function useRemoteFilesState() {
   }
   uploadAllowedRef.current = authStatus === 'authenticated' && !signingOut && uploadScopeRef.current.allowed;
   const uploadQueue = useUploadQueue({
+    onAdmissionError: message => setOperationFeedback({ type: 'error', message }),
     uploadFile: ({ file, storageId: targetStorageId, parentId, maxUploadBytes, signal }) => {
       if (!uploadAllowedRef.current || targetStorageId !== uploadScopeRef.current.storageId) return Promise.reject({ code: 'FORBIDDEN' });
       return uploadStorageFile(
