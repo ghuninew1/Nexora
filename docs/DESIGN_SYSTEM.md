@@ -88,3 +88,8 @@ Phase4.4 retains the existing responsive Upload Queue. Multipart rows distinguis
 ## Global Transfer Manager
 
 The Header Transfers control opens one responsive, scrollable Base UI dialog with focus trapping, Escape dismissal and focus return. Reuse UploadQueue, shared Buttons, glass surfaces, cx and theme tokens; retain44px row actions and mobile wrapping. Header compacts gaps on narrow screens. The count includes nonterminal entries (including paused/waiting), with an amber attention dot and accessible state label. Uploads and Downloads are separate sections within the same dialog. Downloads have independent concurrency, written/remaining counters, supported per-item controls and a native fallback row without app progress. Server-verified counters cap99% until confirmation; legacy remains indeterminate. Upload speed/ETA use server acknowledgements; download speed/ETA use fulfilled disk writes. Download percentage caps99 until close commits the file, and Saving to disk disables Pause/Cancel. Queue owners exist independently of the dialog lifetime.
+
+
+### Download recovery in Transfers
+
+Restored Downloads rows remain paused and show an explicit Recover action, preserved written checkpoint and destination-verification explanation. Permission/metadata errors remain inline with Use browser as the explicit alternative. Unsupported durable capability and persistence warnings are visible; native downloads retain their browser-controlled presentation. Checkpoints may leave committed partial files on disk, including after Cancel. Recovery never shows100% from local metadata alone. Shared Buttons, responsive44px action targets and the existing single Transfer Manager dialog remain unchanged.

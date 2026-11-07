@@ -542,6 +542,8 @@ export default function useRemoteFilesState() {
       && canUseStorageCapability(capabilities, activeStorage, 'download'), rangeRead: capabilities?.rangeRead === true };
   }
   const downloadQueue = useDownloadQueue({
+    userScope: authStatus === 'authenticated' && !signingOut ? user?.id : null,
+    storageId: downloadScopeRef.current.storageId,
     scopeKey: JSON.stringify([authStatus, Boolean(signingOut), user?.id ?? null, downloadScopeRef.current.storageId]),
     allowed: authStatus === 'authenticated' && !signingOut && Boolean(user?.id) && downloadScopeRef.current.allowed,
     rangeRead: downloadScopeRef.current.rangeRead,

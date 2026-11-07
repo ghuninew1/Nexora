@@ -115,3 +115,50 @@ Still required before production claims: native Save As selection/permission den
 References: [FileSystemFileHandle.createWritable](https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createWritable), [showSaveFilePicker availability and activation](https://developer.mozilla.org/en-US/docs/Web/API/Window/showSaveFilePicker), [File System Access specification](https://wicg.github.io/file-system-access/).
 
 **Phase5.2 final result: COMPLETE locally.** PASS lint/build/diff; final full suite243 Node +79 UI,0 failures,1 optional acceptance-harness skip;25 new engine cases and5 React cases. Desktop/mobile local Chrome QA PASS with two byte-verified8MiB native OPFS files, route/pause/range/offline/cancel/native fallback and legacy upload. Exact commands/logs and resolved initial failures are in PROJECT_HANDOFF.md. OS Save As/visible file permissions, real Garage/large-file/production-like platform and other native browsers remain NOT RUN/BLOCKED; no production readiness or browser-restart recovery claim.
+
+
+## Phase 5.3 — Durable recovery (2026-11-08)
+
+This section supersedes Phase5.2's no-persistence and commit-only-at-completion limits. Existing server Range contracts remain unchanged. No Shared Storage/API, infrastructure, migration, feature flag, dependency or deployment changes.
+
+### Records and runtime support
+
+A dedicated version1 IndexedDB database (`nexora-download-recovery`, `downloads` store, `[userScope,id]` key, owner index) stores only public authenticated owner ID, Nexora storage/logical object IDs, original filename, authoritative expected size, strong opaque64-hex ETag, destination handle where structured cloning succeeds, committed checkpoint, state/intent and creation/update timestamps. No response bytes, credentials or provider references. Unknown/corrupt schemas are ignored; the initial schema creates only its own store/index. Up to50 known records per owner are retained. Upload persistence is independent.
+
+Recovery requires IndexedDB, Web Locks and an actual persistent FileSystemFileHandle with getFile/createWritable and usable readwrite permission. Support is discovered at runtime; cloning failures/quota/database errors show warnings. A save picker alone does not prove durable support. Unsupported managed browsers retain active-page semantics; unsupported picker/storage Range uses browser-native downloads without app progress or cross-restart claims. Native transfers remain browser controlled. Missing handles are never replaced through a hidden picker.
+
+### Checkpoint policy and lifecycle
+
+The initial user-selected destination authorizes a partial download file. In durable mode each acknowledged contiguous checkpoint starting at32MiB, then at twice the last committed offset (rounded to the next received stream chunk) and explicit Pause commits the current temporary file with truncate/close, then saves its verified checkpoint. Subsequent writers use keepExistingData:true. Geometric spacing bounds total prefix-copy amplification when keepExistingData copies the prior file; checkpoint spacing grows with file size, so a crash may lose a larger uncommitted suffix. Explicit Pause still commits its acknowledged prefix. Checkpointing occurs between reads, obeying backpressure; it does not buffer large Blobs. Close is an irreversible local commit already submitted to the filesystem. Uncommitted writes after the latest checkpoint are aborted/lost at teardown/crash. A crash between file close and metadata persistence yields an inconsistent size and fails closed; it does not infer a larger offset or silently truncate.
+
+Cancel deletes recovery metadata and aborts only the current temporary writer. **Committed partial files stay on disk**; users may remove them themselves. Clear finished removes local history, preserving committed files. If IndexedDB deletion fails, an explicit warning remains; retry Cancel/Clear before leaving. An unavailable browser database cannot guarantee durable cancellation. Success cleanup failures may leave a stale record; it still requires explicit full revalidation and cannot auto-write.
+
+Closing Transfers or changing routes keeps the queue. Logout/session expiry/account change/mount change/pagehide abort private in-flight resources and retain only scoped records. Transient storage loading preserves last confirmed scope. After authenticated discovery, only current-owner/current-mount rows are restored as paused, unverified recovery actions; even an interrupted run intent does not auto-resume. HEAD/network/destination access starts only on explicit Recover, after current permission/range capability checks. Restored rows remain inert while permission or assignment is unavailable. Original explicit Pause remains paused; successful Cancel removes its record.
+
+### Recovery verification, permission and ownership
+
+1. Recover invokes original handle requestPermission(readwrite) in user activation (queryPermission fallback where available). Denial/prompt/lost/deleted handle never invokes a new picker or writer. Use browser starts a new browser-controlled copy explicitly; recovery does not silently restart.
+2. One queue-wide exclusive Web Lock owns managed destinations across tabs. A second workspace tab cannot write or clear another owner's records; close the owning workspace tab before retrying. This conservative policy blocks even unrelated managed downloads in another tab, but preserves the existing1/2/3/5 same-tab concurrency preference. Native exclusive writer mode remains an additional destination guard. Dialog close alone does not release ownership.
+3. Authenticated HEAD repeats server authorization and verifies original size, opaque strong ETag, identity encoding and range support. A changed representation fails before opening a writer. Public user/storage IDs come from the existing authenticated lifecycle, never provider IDs.
+4. getFile must return exactly the recorded checkpoint size, bounded by original size. A different size, including a full file with only a partial checkpoint, is rejected. Counters never extend/truncate local files during recovery.
+5. For a nonempty checkpoint, fetch `Range: bytes=0-(checkpoint-1)` with original `If-Range`. Require exact206, ETag, Content-Length, Content-Range and identity encoding. Compare **all** committed bytes to that authenticated original representation in bounded64KiB local slices as server chunks arrive. Equal size alone is insufficient; altered equal-size content fails before opening a writable. Connection/idle deadlines and auth/lifecycle cancellation apply throughout verification. Prefix bytes are reread and downloaded again, so recovery has extra network/disk cost proportional to the prefix.
+6. Only after verification may keepExistingData:true open the original destination. Nonzero remaining download uses original If-Range, exact206 and exact range geometry/length. Unexpected200/changed ETag/incorrect416/stream mismatch cannot append. No automatic destructive Restart action is provided for durable records; use a separately initiated new native download if original identity/destination cannot be recovered.
+7. Full-size local files still require full-prefix comparison, fresh HEAD and matching416 at exact EOF (zero bytes remaining) before final close/success. Zero-size files require verified full200/EOF. Percent stays below100 until the validated response and successful final close.
+
+### Integrity assurance
+
+Recovered prefixes receive full byte-for-byte comparison against the original authenticated server representation; newly downloaded bytes receive validator/range/length/EOF checks and acknowledged disk writes. This is stronger than byte-count verification, but is **not an independently published cryptographic full-file checksum**, proof of physical disk fsync, or proof that the remote source itself is correct. Opaque ETags identify representations and are not content hashes. No whole multi-gigabyte file is loaded into memory. The protocol cannot prevent a separate external program from modifying a file after verification/commit; browser writer locks cover cooperating browser writers, not all OS processes.
+
+### Tested capability matrix and acceptance
+
+| Capability/environment | Status |
+| --- | --- |
+| Local Chrome native OPFS handles + actual IndexedDB structured cloning, reload | PASS |
+| Same profile, actual browser process close/relaunch, explicit Recover, byte-identical8MiB fixture | PASS |
+| Desktop1280×900 Dark / mobile viewport390×844 Light, real Downloads UI | PASS |
+| Permission denied/prompt, lost handle, deleted destination, changed bytes/size/checkpoint/ETag, ownership, cancellation, schema/owner isolation | PASS automated doubles; native OS permission UI NOT RUN |
+| User-visible OS Save As / file handles across OS/browser restarts / physical mobile / Safari / Firefox | NOT RUN; no durable-support claim |
+| Missing picker or Web Locks/IndexedDB/clone support | Active-page/native fallback only; durable recovery unavailable |
+| Real Garage100MiB/1GiB/10GiB, proxy/Access/Tunnel, RSS/disk-full/OS sleep | BLOCKED / NOT RUN; existing isolated acceptance gates remain |
+
+The browser fixture substitutes only the picker and authenticated API bytes, uses real OPFS createWritable/getFile and IndexedDB file-handle cloning, and closes/relaunches an actual Chrome process against an isolated persistent profile. Full output independently compared in bounded64KiB slices. This is not real Garage acceptance or validation of user-visible destination permissions. Phase5.3 is **COMPLETE only for this tested Chrome OPFS capability combination**; universal/browser-OS support is not claimed. See PROJECT_HANDOFF for final command results and evidence paths.

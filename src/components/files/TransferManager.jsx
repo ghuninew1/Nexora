@@ -25,7 +25,7 @@ export default function TransferManager() {
     </DialogTrigger>
     <DialogContent dialogSize="transfer" className={cx('w-full sm:max-w-2xl')}>
       <DialogTitle className={cx('pr-8')}>Transfer Manager</DialogTitle>
-      <DialogDescription>Transfers continue while this panel is closed and as you navigate your workspace. Downloads resume only while this page stays open.</DialogDescription>
+      <DialogDescription>Transfers continue while this panel is closed and as you navigate your workspace. Supported browsers can recover saved download checkpoints after reload with your permission.</DialogDescription>
       <div data-transfer-kind="uploads" className={cx('min-w-0')}>
         {queue.items.length === 0 && !queue.restoring && !queue.persistenceWarning && <div className={cx('rounded-xl border border-border p-4')}><h2 className={cx('text-sm font-semibold')}>Uploads</h2><p role="status" className={cx('mt-2 text-sm text-muted-foreground')}>No uploads yet. Add files from My Files.</p></div>}
         <UploadQueue items={queue.items} concurrency={queue.concurrency} restoring={queue.restoring} persistenceWarning={queue.persistenceWarning}

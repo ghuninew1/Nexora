@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { RemoteFilesContext } from '../../src/context/files-context';
+import DownloadQueue from '../../src/components/files/DownloadQueue';
 import TransferManager from '../../src/components/files/TransferManager';
 import useDownloadQueue from '../../src/hooks/useDownloadQueue';
 import { AuthProvider } from '../../src/context/AuthProvider';
@@ -84,4 +85,22 @@ it('unified dialog shows separate budgets and controls, verified progress and ho
   fireEvent.change(screen.getByRole('combobox',{name:'Download concurrency'}),{target:{value:'5'}});expect(downloads.setConcurrency).toHaveBeenCalledWith(5);expect(uploads.concurrency).toBe(3);
   fireEvent.click(screen.getByRole('button',{name:'Clear finished downloads'}));expect(downloads.clearFinished).toHaveBeenCalled();
   expect(screen.queryByRole('button',{name:'Cancel download disk.bin'})).toBeNull();
+});
+
+it('restored download exposes explicit Recover, destination warning, cancellation and native alternative',()=>{
+  const queue={items:[{id:'saved',name:'saved.bin',sizeBytes:100,writtenBytes:30,status:'paused',recoverable:true,recoveryWarning:'Destination metadata unavailable.'}],
+    concurrency:2,canResume:true,canUseNative:true,resume:vi.fn(),cancel:vi.fn(),useNative:vi.fn(),setConcurrency:vi.fn()};
+  render(<DownloadQueue queue={queue}/>);
+  expect(queue.resume).not.toHaveBeenCalled();
+  expect(screen.getByText(/30 B saved checkpoint \(unverified\)/)).toBeTruthy();
+  expect(screen.getByText(/Recovery requires destination permission/)).toBeTruthy();
+  expect(screen.getByText('Destination metadata unavailable.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'Recover download saved.bin'}));expect(queue.resume).toHaveBeenCalledWith('saved');
+  fireEvent.click(screen.getByRole('button',{name:'Cancel download saved.bin'}));expect(queue.cancel).toHaveBeenCalledWith('saved');
+  fireEvent.click(screen.getByRole('button',{name:'Use browser download saved.bin'}));expect(queue.useNative).toHaveBeenCalledWith('saved');
+});
+it('unavailable durable storage and unsupported capability are explicit in Downloads',()=>{
+  render(<DownloadQueue queue={{items:[],concurrency:2,supportsRecovery:false,recoveryWarning:'Saved downloads could not be read.'}}/>);
+  expect(screen.getByRole('alert').textContent).toBe('Saved downloads could not be read.');
+  expect(screen.getByText(/Durable recovery is unavailable in this browser/)).toBeTruthy();
 });

@@ -195,3 +195,10 @@ The uploads container is an explicit composition boundary for a future real Down
 ## Phase5.2 download integration
 
 The global panel now includes Downloads backed by a separate, React-independent streaming disk service and one workspace hook. Upload protocol, IndexedDB, Web Locks, retries, source File ownership, preferences and acknowledgement progress remain unchanged. Download concurrency defaults2 and is independently configurable1/2/3/5 for the current scope; it does not write upload preferences. Download pause retains only the active-page native temporary writer; unload/logout/mount switch discard it. There is no durable download recovery yet. See [download guide](LARGE_FILE_TRANSFER_DOWNLOAD.md) for version/Range/disk validation, native fallback, browser evidence and remaining provider/platform/OS picker acceptance.
+
+
+## Phase 5.3 download recovery follow-up
+
+The existing download scheduler now persists allowlisted owner/current-mount metadata and cloneable destination handles in its own IndexedDB database. Transfers restores paused Recover actions without automatic permission requests or writes. With IndexedDB/Web Locks and persistent readwrite destination access, partial files commit at geometric checkpoints starting at32MiB and on Pause; recovery compares the entire committed prefix to the original authenticated representation before continuing exact Range+If-Range. Cancel preserves committed partial files but forgets recovery metadata. No upload engine, persistence schema or protocol changes.
+
+Chrome OPFS/native IndexedDB reload and browser-process restart are locally verified with mocked APIs and8MiB byte-exact output, desktop/mobile viewports. OS Save As/visible permission prompts, other browsers/physical devices and real Garage remain NOT RUN/BLOCKED. Full-file independent cryptographic checksum validation is unavailable; prefix byte comparison plus response identity/length/EOF is the assurance level. See [current download policy and compatibility](LARGE_FILE_TRANSFER_DOWNLOAD.md#phase-53--durable-recovery-2026-11-08). This supersedes earlier Phase5.2-only restart limitations.
