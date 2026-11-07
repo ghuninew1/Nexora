@@ -423,6 +423,7 @@ export async function fetchStorageObjectPreview(storageId, object, { fetchImpl =
 export async function startStorageObjectDownload(storageId, objectId, { fetchImpl = fetch, signal, navigate = (url) => window.location.assign(url) } = {}) {
   const user = await getCurrentUser({ fetchImpl, signal });
   if (!user) throw new StorageApiError('UNAUTHENTICATED', 401);
+  if (signal?.aborted) throw new DOMException('Download initiation cancelled.', 'AbortError');
   const url = storageObjectDownloadUrl(storageId, objectId);
   navigate(url);
   return url;

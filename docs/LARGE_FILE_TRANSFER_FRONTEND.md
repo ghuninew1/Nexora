@@ -1,6 +1,6 @@
 # Large file transfer — frontend client
 
-> Phase 5.1 follow-up (2026-11-08): backend streaming/Range contract and acceptance boundaries are documented in [LARGE_FILE_TRANSFER_DOWNLOAD.md](LARGE_FILE_TRANSFER_DOWNLOAD.md). Earlier phase statements below describe their historical scope; no frontend Download Manager is added.
+> Phase 5.1 follow-up (2026-11-08): backend streaming/Range contract and acceptance boundaries are documented in [LARGE_FILE_TRANSFER_DOWNLOAD.md](LARGE_FILE_TRANSFER_DOWNLOAD.md). Earlier phase statements below describe their historical scope. Phase5.2 now adds the active-page managed download queue in the same panel; see the download guide for its distinct disk/identity/lifecycle contract.
 
 Phase **4.1–4.5 COMPLETE locally** (2026-11-08). Multipart uploads retain metadata in native IndexedDB, coordinate same-origin tabs using Web Locks, and recover bounded network interruptions through the original session. Phase4.5 supplies the global upload Transfer Manager; real-provider acceptance remains pending. See PROJECT_HANDOFF.md for executed checks and the Phase4.4 completion result. Server flags stay disabled by default; local tests and mocked browser checks do not imply production activation or10GiB acceptance.
 
@@ -190,3 +190,8 @@ Uploads render filename/size, all existing states, verified bytes/parts, capped 
 The queue samples positive acknowledgement deltas over at least1 second within uninterrupted uploading, excluding status/recovery jumps. Speed/ETA reset when leaving uploading; absent measurements render no estimate. ETA covers remaining acknowledged bytes, excludes server finalization and is approximate, not instantaneous wire throughput. Legacy small uploads remain indeterminate. Only confirmed success displays100%. No protocol, Web Locks, IndexedDB schema or Shared Storage API rewrite.
 
 The uploads container is an explicit composition boundary for a future real Downloads section. No Download tab, dummy queue or fake progress exists; Phase5/Range remain separate. Keyboard opening/Escape/focus return, multiple rows, supported bulk dispatch, recovery, completion cap and workspace teardown have automated coverage alongside existing lifecycle suites. Desktop/mobile mocked browser results and exact validation are recorded in PROJECT_HANDOFF.md. Production flags remain unchanged.
+
+
+## Phase5.2 download integration
+
+The global panel now includes Downloads backed by a separate, React-independent streaming disk service and one workspace hook. Upload protocol, IndexedDB, Web Locks, retries, source File ownership, preferences and acknowledgement progress remain unchanged. Download concurrency defaults2 and is independently configurable1/2/3/5 for the current scope; it does not write upload preferences. Download pause retains only the active-page native temporary writer; unload/logout/mount switch discard it. There is no durable download recovery yet. See [download guide](LARGE_FILE_TRANSFER_DOWNLOAD.md) for version/Range/disk validation, native fallback, browser evidence and remaining provider/platform/OS picker acceptance.
