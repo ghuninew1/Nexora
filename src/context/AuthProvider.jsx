@@ -4,6 +4,7 @@ import { getCurrentUser, signIn, signOut, updateDisplayName } from '../services/
 
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState({ status: 'loading', user: null });
+  const [signingOut, setSigningOut] = useState(false);
   const restoreSequence = useRef(0);
   const sessionVersion = useRef(0);
   const isCheckingActiveSession = useRef(false);
@@ -39,9 +40,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await signOut();
+    // Stop workspace transfers immediately, even if the logout request is slow/fails.
     sessionVersion.current += 1;
-    setAuth({ status: 'unauthenticated', user: null });
+    setSigningOut(true);
+    try {
+      await signOut();
+      setAuth({ status: 'unauthenticated', user: null });
+    } finally { setSigningOut(false); }
   }, []);
 
   const expireSession = useCallback(() => {
@@ -91,6 +96,6 @@ export function AuthProvider({ children }) {
     };
   }, [auth.status]);
 
-  const value = useMemo(() => ({ ...auth, login, logout, retrySession, expireSession, updateProfile }), [auth, login, logout, retrySession, expireSession, updateProfile]);
+  const value = useMemo(() => ({ ...auth, signingOut, login, logout, retrySession, expireSession, updateProfile }), [auth, signingOut, login, logout, retrySession, expireSession, updateProfile]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

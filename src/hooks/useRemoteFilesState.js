@@ -82,7 +82,7 @@ export default function useRemoteFilesState() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { status: storageStatus, activeStorage, capabilities, error: storageError } = useStorage();
-  const { expireSession, status: authStatus, user } = useAuth();
+  const { expireSession, status: authStatus, user, signingOut } = useAuth();
   const [browserState, setBrowserState] = useState(EMPTY_BROWSER_STATE);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [mutatingIds, setMutatingIds] = useState(() => new Set());
@@ -509,10 +509,17 @@ export default function useRemoteFilesState() {
     }
   }, []);
   const uploadAllowedRef = useRef(false);
-  uploadAllowedRef.current = storageStatus === 'ready' && activeStorage?.permissions?.upload === true && capabilities?.upload === true;
+  const uploadScopeRef = useRef({ storageId: null, allowed: false });
+  // Discovery briefly clears activeStorage during ordinary route refreshes. Keep
+  // existing work scoped to its last confirmed mount until discovery resolves.
+  if (storageStatus !== 'loading') {
+    uploadScopeRef.current = { storageId, allowed: storageStatus === 'ready'
+      && activeStorage?.permissions?.upload === true && canUseStorageCapability(capabilities, activeStorage, 'upload') };
+  }
+  uploadAllowedRef.current = authStatus === 'authenticated' && !signingOut && uploadScopeRef.current.allowed;
   const uploadQueue = useUploadQueue({
     uploadFile: ({ file, storageId: targetStorageId, parentId, maxUploadBytes, signal }) => {
-      if (!uploadAllowedRef.current || targetStorageId !== storageId) return Promise.reject({ code: 'FORBIDDEN' });
+      if (!uploadAllowedRef.current || targetStorageId !== uploadScopeRef.current.storageId) return Promise.reject({ code: 'FORBIDDEN' });
       return uploadStorageFile(
       targetStorageId,
       file,
@@ -522,10 +529,12 @@ export default function useRemoteFilesState() {
     },
     onComplete: refreshAfterUpload,
     onUnauthorized: expireSession,
+    scopeKey: JSON.stringify([authStatus, Boolean(signingOut), user?.id ?? user?.email ?? null, uploadScopeRef.current.storageId]),
+    canUpload: (targetStorageId) => uploadAllowedRef.current && targetStorageId === uploadScopeRef.current.storageId,
     maxConcurrency: preferences?.uploadConcurrency ?? 3,
     autoClear: preferences?.autoClearUploads ?? true,
   });
-  const { addFiles, cancelUpload, retryUpload, clearFinished: clearFinishedUploads, cancelAll: cancelAllUploads } = uploadQueue;
+  const { addFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload, clearFinished: clearFinishedUploads } = uploadQueue;
 
   const canUseCapability = useCallback((name) => Boolean(
     storageStatus === 'ready'
@@ -640,6 +649,7 @@ export default function useRemoteFilesState() {
       storageId,
       parentId: folderId,
       maxUploadBytes: capabilities.maxUploadBytes ?? null,
+      transfers: capabilities.transfers,
     });
   }, [canUseCapability, addFiles, storageId, folderId, capabilities]);
 
@@ -871,7 +881,6 @@ export default function useRemoteFilesState() {
       trashControllerRef.current?.abort();
       trashGenerationRef.current += 1;
       setTrashState(EMPTY_TRASH_STATE);
-      cancelAllUploads();
       createControllerRef.current?.abort();
       generationRef.current += 1;
       for (const controller of operationControllersRef.current.values()) controller.abort();
@@ -884,7 +893,6 @@ export default function useRemoteFilesState() {
       trashControllerRef.current?.abort();
       trashGenerationRef.current += 1;
       setTrashState(EMPTY_TRASH_STATE);
-      cancelAllUploads();
       cacheRef.current.clear();
       closePreview();
       for (const controller of operationControllersRef.current.values()) controller.abort();
@@ -892,7 +900,7 @@ export default function useRemoteFilesState() {
       setMutatingIds(new Set());
     }
     operationStorageRef.current = storageId;
-  }, [storageId, cancelAllUploads, authStatus, user?.email, closePreview]);
+  }, [storageId, authStatus, user?.email, closePreview]);
 
   useEffect(() => () => {
     for (const controller of operationControllersRef.current.values()) controller.abort();
@@ -1095,7 +1103,9 @@ export default function useRemoteFilesState() {
     uploadQueue,
     uploadFiles,
     cancelUpload,
-    retryUpload: (id) => { if (canUseCapability('upload')) retryUpload(id); },
+    pauseUpload,
+    resumeUpload: (id) => { if (canUseCapability('upload')) resumeUpload(id); },
+    retryUpload: (id) => { retryUpload(id); },
     clearFinishedUploads,
     renameObject,
     moveObject,
@@ -1116,7 +1126,7 @@ export default function useRemoteFilesState() {
     createFolder,
   }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice, activeStorage, capabilities,
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
-    operationFeedback, clearOperationFeedback, uploadQueue, uploadFiles, cancelUpload, retryUpload, clearFinishedUploads,
+    operationFeedback, clearOperationFeedback, uploadQueue, uploadFiles, cancelUpload, pauseUpload, resumeUpload, retryUpload, clearFinishedUploads,
     renameObject, moveObject, copyObject, downloadObject, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
     preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,

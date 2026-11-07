@@ -1,6 +1,46 @@
 # Large file transfer — frontend client
 
-Phase **4.1 COMPLETE locally** (2026-11-07). Phase 4 overall remains incomplete: Upload Queue integration, Transfer Manager, persistence, browser and real-provider acceptance are pending. Server feature flags remain disabled by default; no production activation is implied.
+Phase **4.1 and 4.2 COMPLETE locally** (2026-11-08). The multipart client is integrated into the existing workspace Upload Queue. Phase4 overall remains incomplete: persistent recovery, full cross-tab ownership, Transfer Manager and real-provider acceptance remain pending. Server flags stay disabled by default; source implementation and mocked browser checks do not imply production activation or10GiB acceptance.
+
+## Upload Queue integration (Phase4.2)
+
+- `src/utils/upload-strategy.js` selects legacy upload for files at/below the effective small-file limit (advertised limit clamped to the existing25MiB maximum;25MiB fallback). Larger files use multipart only with explicit compatible capability:8MiB parts,1 parallel part/session, safe positive limits, <=10GiB, <=1280 parts and consistent geometry. Missing/disabled/malformed capability or excessive file size fails locally. Multipart failure never falls back to `/files`.
+- `src/hooks/useUploadQueue.js` retains File, AbortController, immutable create key/metadata, transfer ID and client in refs/tasks, not React state. Display state contains safe queue metadata only. Existing preferences1/2/3/5 (fallback3) cap active file workers, including hashing, requests, backoff and controls. Each worker awaits each operation; multipart sessions can run concurrently, with one local operation/session. Lowering concurrency lets existing workers settle before starting more.
+- `useRemoteFilesState` supplies authenticated owner/mount scope, current upload policy, negotiated capability and existing completion/cache-refresh callbacks. Transient storage discovery retains the last confirmed mount for existing work so ordinary navigation does not erase the queue; a resolved mount change, unavailable assignment, auth change or workspace destruction aborts and discards that scope. Current backend authorization remains authoritative on every request. Known permission/readOnly/maintenance denial stops new upload writes; creator cancellation stays available.
+- `AuthProvider.signingOut` stops queue requests at logout initiation, before a slow logout request returns. A failed logout leaves the account UI available for retry but does not restore discarded transfer metadata. Epoch/mount/owner/task guards discard stale results and callbacks, including transports that ignore AbortSignal. Logout/unmount/assignment changes never issue automatic server cancellation.
+
+### Queue hook contract
+
+`useUploadQueue({uploadFile,onComplete,onUnauthorized,canUpload,scopeKey,maxConcurrency,autoClear})` extends the existing hook. `scopeKey` identifies the authenticated owner and resolved mount; `canUpload(storageId)` supplies the current write policy. `createClient` and `waitForRetry` are injectable for focused tests. Consumers enqueue with `addFiles(files,{storageId,parentId,maxUploadBytes,transfers})`, which returns queue IDs. Items expose `strategy`, `status`, `acknowledgedBytes`, `completedParts`, `partCount`, safe `error`, `errorCode`, `retryable` and `pendingAction`, without source/session secrets.
+
+Use `pauseUpload(id)`, `resumeUpload(id)`, `cancelUpload(id)`, `retryUpload(id)` and `clearFinished()` from the same instance. `cancelAll()` means explicit per-task cancellation; `reset()` means local lifecycle disposal only. Never use cancelAll on logout. `onComplete(task,{file})` is called once with the confirmed logical file and existing destination metadata, suitable for targeted listing invalidation. Failed cache refresh must not change confirmed success.
+
+### Controls and state transitions
+
+```text
+queued -> uploading -> verifying -> uploading -> finalizing -> success
+uploading/verifying/reconciling/retry_wait -> pausing -> paused
+paused -> resuming -> reconcile -> uploading
+uploading/paused/error -> cancelling -> cancelled (only server-confirmed)
+uploading -> retry_wait -> reconciling -> uploading
+expired -> terminal (select the file again for an explicit new upload)
+```
+
+Queued multipart work can pause/cancel locally before a server session exists. Once creation starts, Pause/Cancel abort local work, await its settlement, and recover the transfer ID with the exact original create key if needed before invoking server control. Pause refreshes all verified receipt pages after server confirmation. Resume reconciles source digests and authoritative status before resume/parts; an ambiguous pause never becomes an automatic resume. During finalization only Cancel is exposed, because backend publication may already be in progress.
+
+The queue uses Phase4.1 clients with `maxRetries:0` and owns a total budget of two automatic retries after the initial attempt, with500ms exponential50–100% jitter (up to1s base in this budget). The client still reconciles uncertain writes before returning. Queue retry waits, then reconciles/reuses the same session/key. Explicit Pause/Cancel interrupts retry waits and has no automatic control replay; ambiguous control failures require explicit Retry pause/cancel. The queue never labels an uncertain cancel as cancelled. Cancellation racing completed publication recovers the confirmed object as success instead. Completed callbacks are emitted once per task, including after a lost completion response.
+
+Transient network/timeout/provider/rate/version/ambiguous-complete errors are retryable. Authentication errors stop the whole queue and expire auth; permission/capability/validation/checksum errors never automatically retry. Expiration has a separate terminal label. Rejected grant/maintenance messages direct users to check storage access. Recoverable errors retain their File/key/session for explicit retry; no session metadata crosses authenticated scopes.
+
+### Progress and presentation
+
+Multipart progress uses all server-verified receipt pages and acknowledged bytes after each part, initial reconciliation and confirmed pause. Dispatching/hashing bytes does not increment progress. Verifying, retry_wait, reconciling, pausing/resuming/cancelling and finalizing are separate statuses. Display percentage is capped at99 until the server confirms completed, even when every byte is acknowledged; the row then says awaiting finalization. Count/byte updates occur at operation boundaries, not per network chunk. Legacy uploads retain indeterminate progress and have no Pause/Resume controls. Shared Button/cx/theme tokens,44px action targets, semantic progressbar labels and reduced-motion behavior are preserved.
+
+### Lifecycle and remaining limitations
+
+No IndexedDB, reload/reselect UI, background worker or cross-tab recovery is implemented. Reload/logout/assignment change/workspace teardown lose local keys/IDs/File references; server sessions remain for their existing TTL/operator cleanup. Clear finished explicitly discards failed-task recovery metadata without cancelling the server. Cancel first if cleanup is required. If create outcome is unknown and permission/feature access is revoked before its logical transfer ID can be recovered, cancellation cannot be confirmed from this client; show uncertainty and rely on authorized recovery or existing backend TTL cleanup. No new backend contract was introduced to bypass that boundary.
+
+HTTP abort is local only: provider work may still finish or hold a lease. An immediate control can therefore return conflict/busy and require explicit retry. Backend completion/cleanup restrictions still apply. Paused/failed workers release queue slots; control requests re-enter the same bounded scheduler. Multiple tabs/clients remain uncoordinated and rely on server fencing/conflicts. File bytes, server flags, credentials and remote data are never persisted or changed by this integration.
 
 ## Public API
 
@@ -54,14 +94,12 @@ Stable `.code` values include `NETWORK_INTERRUPTION`, `REQUEST_TIMEOUT`, `AUTHEN
 
 Only transient reads retry directly. Uncertain part/transition writes (including malformed success responses) reconcile first; create can only replay the exact retained key/body because no transfer ID may be known yet. Authentication, permission, checksum and validation errors never retry automatically. A409 triggers a fresh version/status, not blind reuse. Completion uncertainty must retain the transfer ID; do not start another upload. Cancellation after revoked status may require an explicit cleanup retry by the user.
 
-## Phase4.2 required integration
+## Remaining work after Phase4.2
 
-1. Own the client and AbortController at authenticated workspace scope; abort and discard clients, keys, source references and digest metadata on logout, expiry/account change/unmount. Gate multipart on explicit capabilities, retain the current small-file API and queue fallback.
-2. Serialize operations per transfer across UI actions and tabs. Await in-flight work before pause/cancel; reconcile after interruption, visibility/network recovery and before resuming. Never infer rollback from HTTP cancellation.
-3. Retain key plus immutable metadata before create and logical transfer ID once known. Durable account-scoped persistence/reselection is a separately reviewed step; this phase adds no IndexedDB or handles. Never persist provider fields or file bytes by default.
-4. Use authoritative acknowledged bytes for progress, not bytes sliced/hashed/dispatched. Refresh status to update counters after successful part receipt. Handle completed result from any recovery path and invalidate destination listing only once the object is confirmed.
-5. Show explicit auth/permission/expiry/conflict/ambiguous-complete states. Offer safe manual recovery without creating duplicate sessions. Test browser lifecycle, mobile, cross-tab coordination, reselect and real-provider interruption before enabling.
+1. Review account-scoped durable metadata/file reselection and cross-tab ownership before implementing persistence or a full Transfer Manager. Keep small-file fallback and explicit capabilities.
+2. Expand browser lifecycle/mobile/offline/permission/late-provider-effect testing and isolated real Garage acceptance, including10GiB, memory and proxy budgets. Current mocked browser checks are not provider acceptance.
+3. Keep default flags off until infrastructure gates pass and an operator authorizes activation; Range Download remains a separate phase.
 
 ## Validation boundary
 
-Focused unit tests mock same-origin transport, covering create idempotency, SHA-256/headers/boundaries, pagination>100, verified resume, missing/conflicting receipts, stale versions, lost part/complete/cancel responses, terminal states/auth, invalid snapshots, timeout/abort/locking, retry budgets and bounded sequential source reads. These are not real Garage or10GiB verification. See PROJECT_HANDOFF.md for executed suite totals and [backend contract](LARGE_FILE_TRANSFER_BACKEND.md) / [acceptance report](LARGE_FILE_TRANSFER_ACCEPTANCE.md) for outstanding infrastructure gates. No UI, IndexedDB, Range download or Shared Storage changes were made.
+Focused unit tests mock same-origin transport, covering create idempotency, SHA-256/headers/boundaries, pagination>100, verified resume, missing/conflicting receipts, stale versions, lost part/complete/cancel responses, terminal states/auth, invalid snapshots, timeout/abort/locking, retry budgets and bounded sequential source reads. These are not real Garage or10GiB verification. See PROJECT_HANDOFF.md for executed suite totals and [backend contract](LARGE_FILE_TRANSFER_BACKEND.md) / [acceptance report](LARGE_FILE_TRANSFER_ACCEPTANCE.md) for outstanding infrastructure gates. Phase4.2 adds queue/UI/lifecycle tests and mocked Chrome checks for26MiB multipart, Pause/Resume/Cancel,3-byte legacy routing and disabled capabilities. No IndexedDB, Range download or Shared Storage changes were made. Exact executed totals, browser environment, skips and limitations are recorded in PROJECT_HANDOFF.md.

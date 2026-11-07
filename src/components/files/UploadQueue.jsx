@@ -1,10 +1,19 @@
-import { CheckCircle2, File, Loader2, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle2, File, Loader2, Pause, Play, RotateCcw, XCircle } from 'lucide-react';
 import { cx } from '../../utils/cx';
 import { Button } from '../ui/button';
 
 const STATUS = {
   queued: { label: 'Queued', icon: File },
   uploading: { label: 'Uploading', icon: Loader2 },
+  verifying: { label: 'Verifying parts', icon: Loader2 },
+  finalizing: { label: 'Finalizing', icon: Loader2 },
+  pausing: { label: 'Pausing', icon: Loader2 },
+  paused: { label: 'Paused', icon: Pause },
+  resuming: { label: 'Resuming', icon: Loader2 },
+  cancelling: { label: 'Confirming cancellation', icon: Loader2 },
+  retry_wait: { label: 'Waiting to retry', icon: Loader2 },
+  reconciling: { label: 'Reconciling session', icon: Loader2 },
+  expired: { label: 'Session expired', icon: XCircle },
   success: { label: 'Uploaded', icon: CheckCircle2 },
   error: { label: 'Failed', icon: XCircle },
   cancelled: { label: 'Cancelled', icon: XCircle },
@@ -18,11 +27,11 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-function UploadQueue({ items, concurrency, onCancel, onRetry, onClearFinished, canRetry = true }) {
+function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume, onClearFinished, canRetry = true }) {
   if (items.length === 0) return null;
-  const activeCount = items.filter((item) => item.status === 'uploading').length;
+  const activeCount = items.filter((item) => ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'cancelling', 'retry_wait', 'reconciling'].includes(item.status)).length;
   const queuedCount = items.filter((item) => item.status === 'queued').length;
-  const finishedCount = items.filter((item) => ['success', 'error', 'cancelled'].includes(item.status)).length;
+  const finishedCount = items.filter((item) => ['success', 'error', 'expired', 'cancelled'].includes(item.status)).length;
 
   return <section aria-label="Upload queue" className={cx('overflow-hidden rounded-xl border border-border bg-card')}>
     <div className={cx('flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3')}>
@@ -38,21 +47,41 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onClearFinished, c
       {items.map((item) => {
         const config = STATUS[item.status] ?? STATUS.queued;
         const Icon = config.icon;
-        const canCancel = ['queued', 'uploading'].includes(item.status);
+        const multipart = item.strategy === 'multipart';
+        const canCancel = multipart
+          ? !['success', 'expired', 'cancelled', 'cancelling'].includes(item.status)
+          : ['queued', 'uploading'].includes(item.status);
+        const canPause = multipart && ['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling'].includes(item.status);
+        const percent = item.status === 'success' ? 100 : Math.min(99, Math.floor(100 * (item.acknowledgedBytes || 0) / item.sizeBytes));
         return <li key={item.id} className={cx('flex min-w-0 items-start gap-3 px-4 py-3')}>
-          <Icon className={cx('mt-0.5 size-5 shrink-0 text-muted-foreground', item.status === 'uploading' && 'motion-safe:animate-spin', item.status === 'success' && 'text-primary', item.status === 'error' && 'text-destructive')} aria-hidden="true" />
+          <Icon className={cx('mt-0.5 size-5 shrink-0 text-muted-foreground', ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'reconciling', 'cancelling'].includes(item.status) && 'motion-safe:animate-spin', item.status === 'success' && 'text-primary', item.status === 'error' && 'text-destructive')} aria-hidden="true" />
           <div className={cx('min-w-0 flex-1')}>
             <div className={cx('flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1')}>
               <span className={cx('min-w-0 max-w-full break-all text-sm font-medium text-foreground')} title={item.name}>{item.name}</span>
               <span className={cx('shrink-0 text-xs text-muted-foreground')}>{config.label} · {formatBytes(item.sizeBytes)}</span>
             </div>
-            {item.status === 'uploading' && <div role="progressbar" aria-label={`Uploading ${item.name}`} aria-valuetext="Upload in progress" className={cx('mt-2 h-1.5 overflow-hidden rounded-full bg-muted')}>
+            {multipart && <div className={cx('mt-2')}>
+              <div role="progressbar" aria-label={`Uploading ${item.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
+                aria-valuetext={`${formatBytes(item.acknowledgedBytes || 0)} acknowledged by server; ${config.label}`}
+                className={cx('h-1.5 overflow-hidden rounded-full bg-muted')}>
+                <div style={{ width: `${percent}%` }} className={cx('h-full rounded-full bg-primary motion-safe:transition-[width]')} />
+              </div>
+              <p role="status" aria-live="polite" className={cx('mt-1 text-xs text-muted-foreground')}>
+                {percent}% · {item.completedParts || 0}/{item.partCount ?? '—'} parts · {formatBytes(item.acknowledgedBytes || 0)} verified
+                {item.acknowledgedBytes === item.sizeBytes && item.status !== 'success' && ' · awaiting finalization'}
+              </p>
+            </div>}
+            {!multipart && item.status === 'uploading' && <div role="progressbar" aria-label={`Uploading ${item.name}`} aria-valuetext="Upload in progress" className={cx('mt-2 h-1.5 overflow-hidden rounded-full bg-muted')}>
               <div className={cx('h-full w-1/3 rounded-full bg-primary motion-safe:animate-pulse motion-reduce:animate-none')} />
             </div>}
             {item.error && <p className={cx('mt-1 text-xs text-destructive')} role="alert">{item.error}</p>}
           </div>
-          {canCancel && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-10 min-w-10 shrink-0')} onClick={() => onCancel(item.id)} aria-label={`Cancel upload ${item.name}`}><XCircle aria-hidden="true" /></Button>}
-          {item.status === 'error' && canRetry && <Button type="button" variant="outline" size="sm" className={cx('min-h-10 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />Retry</Button>}
+          <div className={cx('flex shrink-0 flex-wrap justify-end gap-1')}>
+            {canPause && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-11 min-w-11')} onClick={() => onPause(item.id)} aria-label={`Pause upload ${item.name}`}><Pause aria-hidden="true" /></Button>}
+            {multipart && item.status === 'paused' && canRetry && <Button type="button" variant="outline" size="sm" className={cx('min-h-11')} onClick={() => onResume(item.id)} aria-label={`Resume upload ${item.name}`}><Play aria-hidden="true" />Resume</Button>}
+            {canCancel && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-11 min-w-11 shrink-0')} onClick={() => onCancel(item.id)} aria-label={`Cancel upload ${item.name}`}><XCircle aria-hidden="true" /></Button>}
+            {item.status === 'error' && item.retryable && (canRetry || item.pendingAction === 'cancel') && <Button type="button" variant="outline" size="sm" className={cx('min-h-11 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />{item.pendingAction ? `Retry ${item.pendingAction}` : 'Retry'}</Button>}
+          </div>
         </li>;
       })}
     </ul>

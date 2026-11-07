@@ -59,7 +59,7 @@ Foundation, App Layout และหน้า workspace ใช้ design system �
 - Interaction อ้างอิง IssueDesk GlassButton: diagonal sheen, radial light ตามเมาส์, inset rim/shadow และ active scale 0.97; sheen, pointer light และ rim ของปุ่มใช้สีตัวอักษร จึงมองเห็นได้บนพื้นปุ่มทั้งสว่างและมืด ส่วนปุ่ม filled/destructive คงสีเพื่อรักษา contrast
 - Pointer tracking ไม่ทำงานกับ touch/disabled และไม่ใช้ React state ต่อการขยับเมาส์ Caller ยังส่ง `onPointerMove`, `ref`, `render` และ className callback ผ่าน Button ได้
 - ปุ่มตกแต่ง Search/Notifications เดิมใน Header ถูกแทนด้วยชื่อหน้าและคำอธิบาย ปุ่ม file search ใน toolbar ยังอยู่ตาม implementation เดิม
-- `FilesProvider` ยังมี legacy fixture helpers; Shared ใช้ `SharesProvider` และ D1 โดยแยกจาก listing cache; ข้อมูล demo รีเซ็ตเมื่อ refresh. Dashboard/Recent ใช้ remote Recent API; Favorites ใช้ state จาก Nexora D1/API และล้าง reference เมื่อ object ถูกลบจาก storage. Upload queue ของ demo จำลอง progress และไม่ส่งข้อมูลไป Storage Service. Trash ใช้ remote state แยกตาม storage mount และไม่ fallback เป็น fixture
+- `FilesProvider` ยังมี legacy fixture helpers; Shared ใช้ `SharesProvider` และ D1 โดยแยกจาก listing cache; ข้อมูล demo รีเซ็ตเมื่อ refresh. Dashboard/Recent ใช้ remote Recent API; Favorites ใช้ state จาก Nexora D1/API และล้าง reference เมื่อ object ถูกลบจาก storage. Upload Queue ที่เชื่อมต่อใช้ progress แบบ indeterminate สำหรับ legacy และ server-acknowledged bytes/parts สำหรับ multipart ที่มี capability; ไม่ใช้ fixture progress แทนข้อมูลจริง. Trash ใช้ remote state แยกตาม storage mount และไม่ fallback เป็น fixture
 - คิวอัปโหลดล้างรายการที่สำเร็จหลัง 5 วินาที โดยคงรายการที่ผิดพลาดหรือยกเลิกไว้ให้ผู้ใช้ตรวจสอบ
 - หน้าต่าง Copy/Move มีปุ่มสร้างโฟลเดอร์ด้านล่างซ้ายในแถวเดียวกับ Cancel เมื่อ storage อนุญาต
 - File Browser ใช้ไอคอนแยกสำหรับไฟล์รูปภาพ วิดีโอ ข้อความ และ PDF ทั้งใน list/grid และใช้ไอคอนทั่วไปสำหรับไฟล์อื่น
@@ -74,3 +74,5 @@ Foundation, App Layout และหน้า workspace ใช้ design system �
 Phase 9.6 public layout uses the Nexora logo, shared surface/Button/Dialog, root-scoped wrapping breadcrumbs, safe long-name wrapping and 44px primary public controls. Public route has no workspace navigation or owner identity. Local mock browser QA covered desktop and 390 × 844; live provider/image/PDF QA remains pending. See `PHASE_9_6.md`.
 
 - Storage Overview ใช้ glass cards แบบ mobile-first สำหรับจำนวน assigned storages และสถานะ Connected / Unavailable / Unknown โดยแยกข้อความ usage unavailable ออกจากสถานะการเชื่อมต่อ; จำนวน storage ไม่ใช่จำนวน project และไม่มีการแสดงยอด aggregate ที่ยังไม่รองรับ
+
+- Multipart Upload Queue ใช้ shared Button และ action targets อย่างน้อย44px; แสดง Verifying/Finalizing/Pause/Resume/Cancel แยกสถานะ โดยไม่แสดง100% ก่อน server ยืนยัน completion ไฟล์ legacy ไม่มี Pause/Resume และยังใช้ indeterminate progress.
