@@ -222,7 +222,7 @@ export async function handlePublicSharesApi({ request, env, parts, fetchImpl }) 
       let response;
       if (parts[7] === 'preview') response = await previewObjectResponse(ctx.client, request, mount, object);
       else {
-        const result = await ctx.client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(object.objectId)}/download` });
+        const result = await ctx.client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(object.objectId)}/download`, operation: 'download' });
         if (!result.response.ok) { await result.response.body?.cancel(); result.cleanup(); throw unavailable(); }
         response = streamResponse(result);
         response.headers.set('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(object.name).replaceAll("'", '%27')}`);

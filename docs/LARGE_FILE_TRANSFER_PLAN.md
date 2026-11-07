@@ -1,5 +1,7 @@
 # Nexora — Large File Transfer Plan (Phase 1: Audit Only)
 
+> Phase 5.1 follow-up (2026-11-08): backend streaming/Range contract and acceptance boundaries are documented in [LARGE_FILE_TRANSFER_DOWNLOAD.md](LARGE_FILE_TRANSFER_DOWNLOAD.md). Earlier phase statements below describe their historical scope; no frontend Download Manager is added.
+
 วันที่ตรวจ: 2026-11-07 (Asia/Bangkok) · เป้าหมายเริ่มต้น: **10 GiB = 10,737,418,240 bytes**
 
 สถานะ: ข้อเสนอสำหรับ implementation รอบถัดไป ยังไม่ใช่ความสามารถที่เปิดใช้งาน และยังไม่ยืนยันว่า infrastructure รองรับ 10 GiB จริง ไม่มี runtime changes, migration, deploy, production request หรือการแก้ Shared Storage ในงานนี้

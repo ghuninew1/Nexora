@@ -1,3 +1,4 @@
+import { downloadRequestHeaders, rangeDownloadResponse } from './range-download.js';
 import { handleUploadSessions, publicTransferCapabilities } from './upload-sessions.js';
 import { requiredStoragePermissions, intersectStoragePermissions, STORAGE_PERMISSION_NAMES } from './storage-permissions.js';
 import { getSystemSettings } from './system-settings.js';
@@ -154,33 +155,11 @@ function previewSpec(object) {
 }
 
 export function streamResponse(result) {
-  const { response, cleanup, abort, timedOut } = result;
-  const reader = response.body?.getReader();
-  if (!reader) { cleanup(); throw new ApiError('PROVIDER_UNAVAILABLE', 502); }
-  const body = new ReadableStream({
-    async pull(controller) {
-      try {
-        if (timedOut()) throw new Error('timeout');
-        const { done, value } = await reader.read();
-        if (done) { cleanup(); controller.close(); return; }
-        controller.enqueue(value);
-      } catch {
-        abort(); cleanup();
-        controller.error(new ApiError('TRANSFER_INCOMPLETE', 502));
-      }
-    },
-    async cancel(reason) { try { await reader.cancel(reason); } finally { abort(); cleanup(); } },
+  // Public downloads intentionally do not opt into browser Range headers.
+  return rangeDownloadResponse(result, new Request('https://download.invalid/'), {
+    contentType: safeContentType(result.response.headers.get('Content-Type')),
+    disposition: safeDisposition(result.response.headers.get('Content-Disposition')),
   });
-  const headers = new Headers({
-    'Cache-Control': 'private, no-store',
-    'X-Content-Type-Options': 'nosniff',
-    'Content-Type': safeContentType(response.headers.get('Content-Type')),
-  });
-  const size = response.headers.get('Content-Length');
-  if (size && /^(0|[1-9][0-9]{0,15})$/u.test(size)) headers.set('Content-Length', size);
-  const disposition = safeDisposition(response.headers.get('Content-Disposition'));
-  if (disposition) headers.set('Content-Disposition', disposition);
-  return new Response(body, { status: 200, headers });
 }
 
 function streamPreviewResponse(result, { mimeType, maxBytes }) {
@@ -288,6 +267,7 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
     const policy = await getSystemSettings(env.DB);
     const permissions = intersectStoragePermissions(grants, payload?.capabilities, { readOnly: mount.read_only, maintenance: user.role !== 'admin' && policy.maintenanceMode });
     if (!policy.publicSharingEnabled) { permissions.share = false; permissions.manageShare = false; }
+    caps.rangeRead = caps.rangeRead && permissions.download;
     caps.transfers = publicTransferCapabilities(payload?.capabilities, env.STORAGE_RESUMABLE_UPLOADS_ENABLED === 'true' && permissions.upload);
     caps.copy = caps.copy && permissions.read;
     for (const [flag, permission] of Object.entries({ list: 'read', stat: 'read', download: 'download', upload: 'upload', createFolder: 'createFolder', rename: 'rename', move: 'move', copy: 'copy', trash: 'delete', restore: 'delete', permanentDelete: 'permanentDelete' })) caps[flag] = caps[flag] && permissions[permission];
@@ -347,18 +327,18 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
       objectId: object.objectId, objectName: object.name, objectType: object.type, parentId: object.parentId }, { logger });
     return json({ file: object, operationId: typeof payload?.operationId === 'string' ? payload.operationId : null }, 201);
   }
-  if (route === 'files' && restTail.length === 2 && restTail[1] === 'download' && method === 'GET') {
+  if (route === 'files' && restTail.length === 2 && restTail[1] === 'download' && ['GET', 'HEAD'].includes(method)) {
     const objectId = requireObjectId(restTail[0]);
     await requireCapability(client, request, mount, 'download');
-    const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download` });
-    if (!result.response.ok) {
+    const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download`, method, operation: 'download', requestHeaders: downloadRequestHeaders(request) });
+    if (!result.response.ok && result.response.status !== 416) {
       const payload = await readBoundedJson(result.response);
       result.cleanup();
       const code = normalizeUpstreamError(payload, result.response.status);
       throw new ApiError(code, statusFor(code));
     }
-    await recordRecentBestEffort(env.DB, user, mount, objectId);
-    return streamResponse(result);
+    if (method === 'GET' && result.response.ok) await recordRecentBestEffort(env.DB, user, mount, objectId);
+    return rangeDownloadResponse(result, request, { contentType: safeContentType(result.response.headers.get('Content-Type')), disposition: safeDisposition(result.response.headers.get('Content-Disposition')) });
   }
   if (route === 'objects' && restTail.length >= 1) {
     const objectId = requireObjectId(restTail[0]);
@@ -377,17 +357,17 @@ export async function handleStorageApi({ request, env, user, parts, fetchImpl = 
         metadata: { previousName: previous?.object_name, newName: object.name } }, { logger });
       return json({ object });
     }
-    if (suffix[0] === 'download' && suffix.length === 1 && method === 'GET') {
+    if (suffix[0] === 'download' && suffix.length === 1 && ['GET', 'HEAD'].includes(method)) {
       await requireCapability(client, request, mount, 'download');
-      const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download` });
-      if (!result.response.ok) {
+      const result = await client.request({ request, projectId: mount.shared_storage_project_id, path: `/objects/${encodeURIComponent(objectId)}/download`, method, operation: 'download', requestHeaders: downloadRequestHeaders(request) });
+      if (!result.response.ok && result.response.status !== 416) {
         const payload = await readBoundedJson(result.response);
         result.cleanup();
         const code = normalizeUpstreamError(payload, result.response.status);
         throw new ApiError(code, statusFor(code));
       }
-      await recordRecentBestEffort(env.DB, user, mount, objectId);
-      return streamResponse(result);
+      if (method === 'GET' && result.response.ok) await recordRecentBestEffort(env.DB, user, mount, objectId);
+      return rangeDownloadResponse(result, request, { contentType: safeContentType(result.response.headers.get('Content-Type')), disposition: safeDisposition(result.response.headers.get('Content-Disposition')) });
     }
     if (suffix[0] === 'preview' && suffix.length === 1 && method === 'GET') {
       await requireCapability(client, request, mount, 'download');

@@ -1,5 +1,7 @@
 # Large File Transfer — Backend multipart implementation
 
+> Phase 5.1 follow-up (2026-11-08): backend streaming/Range contract and acceptance boundaries are documented in [LARGE_FILE_TRANSFER_DOWNLOAD.md](LARGE_FILE_TRANSFER_DOWNLOAD.md). Earlier phase statements below describe their historical scope; no frontend Download Manager is added.
+
 วันที่: 2026-11-07 · สถานะ: **implemented locally, disabled by default; infrastructure acceptance pending**
 
 เอกสารนี้ต่อจาก `LARGE_FILE_TRANSFER_PLAN.md` โดยทำ backend scope ของ Phase3 และ contract groundwork จาก Phase2 เท่านั้น Phase2 real-provider/limits probes ยังไม่ผ่าน gate เพราะไม่ได้เชื่อม test Garage ที่ได้รับอนุญาต จึงไม่เปิดใช้งานหรืออ้าง production-ready10 GiB

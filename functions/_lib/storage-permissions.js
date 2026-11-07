@@ -28,7 +28,7 @@ export function requiredStoragePermissions(method, tail) {
     if (verb === 'GET' && (tail.length === 1 || tail.length === 2)) return ['read'];
     if (tail.length === 2 && verb === 'PATCH') return ['rename'];
     if (tail.length === 2 && verb === 'DELETE') return ['delete'];
-    if (tail.length === 3 && verb === 'GET' && action === 'download') return ['read', 'download'];
+    if (tail.length === 3 && ['GET', 'HEAD'].includes(verb) && action === 'download') return ['read', 'download'];
     if (tail.length === 3 && verb === 'GET' && action === 'preview') return ['read', 'preview'];
     if (tail.length === 3 && verb === 'POST' && action === 'move') return ['move'];
     if (tail.length === 3 && verb === 'POST' && action === 'copy') return ['copy'];
@@ -41,7 +41,7 @@ export function requiredStoragePermissions(method, tail) {
   }
   if (route === 'folders' && tail.length === 1 && verb === 'POST') return ['createFolder'];
   if (route === 'files' && tail.length === 1 && verb === 'POST') return ['upload'];
-  if (route === 'files' && tail.length === 3 && verb === 'GET' && action === 'download') return ['read', 'download'];
+  if (route === 'files' && tail.length === 3 && ['GET', 'HEAD'].includes(verb) && action === 'download') return ['read', 'download'];
   if (route === 'trash' && tail.length === 1 && verb === 'GET') return ['read', 'delete'];
   if (route === 'trash' && tail.length === 3 && action === 'restore' && verb === 'POST') return ['delete'];
   if (route === 'trash' && tail.length === 3 && action === 'permanent' && verb === 'DELETE') return ['permanentDelete'];

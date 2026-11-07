@@ -79,9 +79,10 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
         'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
         'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
       });
+      if (operation === 'download') headers.set('Accept-Encoding', 'identity');
       if (contentType) headers.set('Content-Type', contentType);
       // Only transfer protocol headers may supplement server-owned authentication.
-      for (const name of ['Idempotency-Key', 'X-Part-SHA256']) {
+      for (const name of ['Idempotency-Key', 'X-Part-SHA256', ...(operation === 'download' ? ['Range', 'If-Range'] : [])]) {
         if (requestHeaders[name]) headers.set(name, requestHeaders[name]);
       }
     } catch (error) {
@@ -152,6 +153,7 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
         : `result=fetch-error type=${safeErrorType(error)} redirect=manual`);
       throw new ApiError(timedOut ? 'PROVIDER_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE', timedOut ? 504 : 503);
     }
+    if (operation === 'download' && [200, 206, 416].includes(response.status)) clearTimeout(timer);
     return {
       response,
       operation,
@@ -248,7 +250,7 @@ export function normalizeCapabilities(value, mount, maxUploadBytes = null) {
     rename: Boolean(caps.rename) && !mount.read_only, move: Boolean(caps.move) && !mount.read_only,
     copy: Boolean(caps.copy) && !mount.read_only, trash: Boolean(caps.trash) && !mount.read_only,
     restore: Boolean(caps.restore) && !mount.read_only, permanentDelete: Boolean(caps.permanentDelete) && !mount.read_only,
-    preview: false, share: false, rangeRead: false, readOnly: Boolean(mount.read_only),
+    preview: false, share: false, rangeRead: caps.rangeRead === true && caps.download === true, readOnly: Boolean(mount.read_only),
     maxUploadBytes: Number.isSafeInteger(caps.maxUploadBytes) && maxUploadBytes !== null
       ? Math.min(caps.maxUploadBytes, maxUploadBytes)
       : (Number.isSafeInteger(caps.maxUploadBytes) ? caps.maxUploadBytes : maxUploadBytes),

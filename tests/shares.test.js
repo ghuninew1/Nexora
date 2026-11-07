@@ -40,8 +40,8 @@ async function fixture() {
     }
     return Response.json({ items: listingOverride ?? [...objects.values()].filter(o => o.parentId === u.searchParams.get('parentId') && !o.deletedAt), nextCursor: null });
   } });
-  async function call(path, { user = 'alice', method = 'GET', body, origin = 'https://nexora.test' } = {}) {
-    return handler(new Request(`https://nexora.test${path}`, { method, headers: { ...(user ? { Cookie: cookies[user] } : {}), Origin: origin, 'Content-Type': 'application/json' }, ...((body || method === 'POST' && path.startsWith('/api/shares')) ? { body: JSON.stringify(method === 'POST' && path.startsWith('/api/shares') ? { expiresIn: 'never', ...body } : body) } : {}) }), env);
+  async function call(path, { user = 'alice', method = 'GET', body, headers = {}, origin = 'https://nexora.test' } = {}) {
+    return handler(new Request(`https://nexora.test${path}`, { method, headers: { ...(user ? { Cookie: cookies[user] } : {}), Origin: origin, 'Content-Type': 'application/json', ...headers }, ...((body || method === 'POST' && path.startsWith('/api/shares')) ? { body: JSON.stringify(method === 'POST' && path.startsWith('/api/shares') ? { expiresIn: 'never', ...body } : body) } : {}) }), env);
   }
   async function create(id = 'root', user = 'alice') { const r = await call('/api/shares', { method: 'POST', user, body: { storageId: `mount_${user}`, objectId: id } }); assert.equal(r.status, 201); return (await r.json()).data; }
   const publicApi = path => path.replace('/s/', '/api/public/shares/');
@@ -161,7 +161,9 @@ test('public file metadata/download/preview are anonymous, safe and never write 
   const f = await fixture(); const p = await f.create('single'); const api = f.publicApi(p.publicPath);
   const meta = await f.call(api, { user: null }); assert.equal(meta.status, 200); const json = await meta.json(); assert.equal(json.data.object.parentId, undefined);
   for (const action of ['download', 'preview']) {
-    const r = await f.call(`${api}/objects/single/${action}`, { user: null }); assert.equal(r.status, 200); assert.equal(await r.text(), 'safe');
+    const r = await f.call(`${api}/objects/single/${action}`, { user: null, headers: { Range: 'bytes=1-2', 'If-Range': '"old"' } }); assert.equal(r.status, 200); assert.equal(await r.text(), 'safe');
+    const upstream = f.calls.filter(call => call.url.pathname.endsWith('/download')).at(-1);
+    assert.equal(upstream.init.headers.get('Range'), null); assert.equal(upstream.init.headers.get('If-Range'), null);
     assert.match(r.headers.get('Cache-Control'), /no-store/u); assert.equal(r.headers.get('X-Content-Type-Options'), 'nosniff'); assert.equal(r.headers.get('X-Internal'), null);
     assert.match(r.headers.get('Content-Disposition'), action === 'preview' ? /^inline/u : /^attachment/u);
   }

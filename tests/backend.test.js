@@ -1,3 +1,4 @@
+import process from 'node:process';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -1066,7 +1067,9 @@ test('download streams with safe headers and cancels upstream when the browser c
 
 test('preview uses download authorization while keeping provider preview false and download attachment unchanged', async () => {
   requests = [];
-  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`);
+  const response = await request(`/api/storage/v1/storages/${storageId}/objects/${objectId}/preview`, { headers: { Range: 'bytes=1-2', 'If-Range': '"old"' } });
+  assert.equal(requests.at(-1).init.headers.get('Range'), null);
+  assert.equal(requests.at(-1).init.headers.get('If-Range'), null);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
@@ -1476,4 +1479,109 @@ test('admin storage metadata update validates and preserves storage and assignme
     sqlite.prepare("DELETE FROM storage_mounts WHERE id = 'duplicate_test'").run();
     sqlite.prepare("UPDATE storage_mounts SET name = 'Private', description = '' WHERE id = ?").run(storageId);
   }
+});
+
+test('download Range/HEAD routes recheck assignment and never forward browser credentials', async () => {
+  const etag = '"' + 'b'.repeat(64) + '"';
+  const path = `/api/storage/v1/storages/${storageId}/objects/${objectId}/download`;
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    if (new URL(url).pathname.endsWith('/capabilities')) return Response.json({capabilities:{list:true,stat:true,download:true,rangeRead:true}});
+    seen.push(init);
+    const partial = init.method !== 'HEAD' && init.headers.get('Range') === 'bytes=3-5' && init.headers.get('If-Range') === etag;
+    const unsatisfied = init.headers.get('Range') === 'bytes=10-';
+    return new Response(init.method === 'HEAD' || unsatisfied ? null : partial ? '345' : '0123456789', {status:unsatisfied?416:partial?206:200, headers:{
+      'Content-Length':unsatisfied?'0':partial?'3':'10', 'Accept-Ranges':'bytes', ETag:etag,
+      ...(unsatisfied?{'Content-Range':'bytes */10'}:partial?{'Content-Range':'bytes 3-5/10'}:{}),
+    }});
+  };
+  for (const method of ['GET','HEAD']) {
+    const response = await request(path,{method,headers:{Range:'bytes=3-5','If-Range':etag,'X-Untrusted':'bad'},fetchImpl});
+    assert.equal(response.status,method==='HEAD'?200:206);assert.equal(await response.text(),method==='HEAD'?'':'345');
+    assert.equal(seen.at(-1).headers.get('Cookie'),null);assert.equal(seen.at(-1).headers.get('X-Untrusted'),null);
+  }
+  const full = await request(path,{headers:{Range:'bytes=3-5','If-Range':'"old"'},fetchImpl});
+  assert.equal(full.status,200);assert.equal(await full.text(),'0123456789');
+  const invalid = await request(path,{headers:{Range:'bytes=10-'},fetchImpl});assert.equal(invalid.status,416);assert.equal(invalid.headers.get('Content-Range'),'bytes */10');
+  assert.equal((await request(path,{headers:{Cookie:''},fetchImpl})).status,401);
+  const assignment = sqlite.prepare('SELECT * FROM storage_access WHERE storage_id = ? AND user_id = ?').get(storageId,user.id);
+  assert.ok(assignment);
+  sqlite.prepare('UPDATE storage_access SET can_download = 0 WHERE storage_id = ? AND user_id = ?').run(storageId,user.id);
+  try {
+    for(const method of ['GET','HEAD']) assert.equal((await request(path,{method,headers:{Range:'bytes=3-5','If-Range':etag},fetchImpl:()=>{throw new Error('must not reach provider');}})).status,403);
+  } finally {
+    sqlite.prepare('UPDATE storage_access SET can_download = ? WHERE storage_id = ? AND user_id = ?').run(assignment.can_download,storageId,user.id);
+  }
+  sqlite.prepare('DELETE FROM storage_access WHERE storage_id = ? AND user_id = ?').run(storageId,user.id);
+  try {
+    for(const method of ['GET','HEAD']) assert.equal((await request(path,{method,headers:{Range:'bytes=3-5','If-Range':etag},fetchImpl:()=>{throw new Error('must not reach provider');}})).status,404);
+  } finally {
+    const columns = Object.keys(assignment);
+    sqlite.prepare(`INSERT INTO storage_access (${columns.join(',')}) VALUES (${columns.map(()=>'?').join(',')})`).run(...Object.values(assignment));
+  }
+});
+
+// Explicit local checkout only. Actual Hono/SQLite/manager/adapter, mocked S3 transport.
+test('Range bridge: Nexora → Shared Storage → Garage adapter (mock S3)', {skip:!process.env.NEXORA_SHARED_STORAGE_ROOT}, async () => {
+  const {pathToFileURL} = await import('node:url');
+  const {resolve} = await import('node:path');
+  const {createHash} = await import('node:crypto');
+  const root = pathToFileURL(resolve(process.env.NEXORA_SHARED_STORAGE_ROOT) + '/');
+  process.env.DATABASE_PATH = ':memory:';
+  const {db} = await import(new URL('src/db.js',root));
+  const {applyMigrations} = await import(new URL('src/storage/migrations.js',root));
+  const {createApp} = await import(new URL('src/app.js',root));
+  const {createStorageManager} = await import(new URL('src/storage/manager.js',root));
+  const {createProviderRegistry} = await import(new URL('src/storage/providers/index.js',root));
+  const {createGarageProvider} = await import(new URL('src/storage/providers/garage.js',root));
+  const {createFileManager} = await import(new URL('src/storage/file-manager.js',root));
+  await applyMigrations(db);
+  db.prepare("INSERT INTO apps(id,name) VALUES ('range-app','Range fixture')").run();
+  db.prepare('INSERT INTO app_credentials(id,app_id,secret_hash) VALUES (?,?,?)').run('range-credential','range-app',createHash('sha256').update(env.STORAGE_APP_SECRET).digest('hex'));
+  db.prepare('INSERT INTO projects(id,app_id,name,bucket) VALUES (?,?,?,?)').run(projectId,'range-app','Range fixture','test-only-bucket');
+  let bytes = new TextEncoder().encode('0123456789'), generation=1, cancelled=false, s3Signal, hold=false;
+  const metadata = () => ({ContentLength:bytes.length,ETag:`"generation-${generation}"`,LastModified:new Date('2026-01-01')});
+  const s3 = {async send(command,options){
+    if(command.constructor.name==='PutObjectCommand') return {};
+    if(command.constructor.name==='HeadObjectCommand') return metadata();
+    assert.equal(command.constructor.name,'GetObjectCommand');
+    assert.equal(command.input.IfMatch,metadata().ETag);
+    s3Signal=options.abortSignal;
+    const range = command.input.Range && /^bytes=(\d+)-(\d+)$/.exec(command.input.Range);
+    const data = range ? bytes.slice(Number(range[1]),Number(range[2])+1) : bytes;
+    return {...metadata(),ContentLength:data.length,$metadata:{httpStatusCode:range?206:200},
+      ...(range?{ContentRange:`bytes ${range[1]}-${range[2]}/${bytes.length}`} : {}),
+      Body:new ReadableStream({start(c){c.enqueue(data);if(!hold)c.close();},cancel(){cancelled=true;}})};
+  }};
+  const storage=createStorageManager(createProviderRegistry(createGarageProvider({s3})));
+  const app=createApp({db,storage,bucket:'test-only-bucket',apiToken:'test-only-legacy',maxFileSize:100});
+  const file=await createFileManager({db,storage}).createFile({projectId,appId:'range-app',parentId:null,name:'range.txt',contentType:'text/plain',body:bytes,size:bytes.length});
+  const path=`/api/storage/v1/storages/${storageId}/objects/${file.object.objectId}/download`;
+  const fetchImpl=(url,init)=>app.request(new URL(url).pathname,init);
+  try {
+    const head=await request(path,{method:'HEAD',fetchImpl});
+    assert.equal(head.status,200);assert.equal(head.headers.get('Content-Length'),'10');assert.equal(await head.text(),'');
+    const validator=head.headers.get('ETag');
+    assert.match(validator,/^"[a-f0-9]{64}"$/u);
+    for(const [range,status,expected] of [[null,200,'0123456789'],['bytes=0-2',206,'012'],['bytes=3-5',206,'345'],['bytes=7-',206,'789'],['bytes=-3',206,'789'],['bytes=10-',416,''],['bytes=0-1,3-4',200,'0123456789'],['bad',200,'0123456789']]) {
+      const response=await request(path,{headers:range?{Range:range,'If-Range':validator}:{},fetchImpl});
+      assert.equal(response.status,status,range);assert.equal(await response.text(),expected);
+      assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+      assert.equal([...response.headers.values()].join(' ').includes('generation-'),false);
+    }
+    bytes=new TextEncoder().encode('abcdefghij');generation++;
+    const changed=await request(path,{headers:{Range:'bytes=3-','If-Range':validator},fetchImpl});
+    assert.equal(changed.status,200);assert.equal(await changed.text(),'abcdefghij');
+    const current=changed.headers.get('ETag');assert.notEqual(current,validator);
+    const parallel=await Promise.all(Array.from({length:6},async(_,i)=>{
+      const response=await request(path,{headers:{Range:`bytes=${i}-${i}`,'If-Range':current},fetchImpl});
+      assert.equal(response.status,206);return response.text();
+    }));
+    assert.deepEqual(parallel,['a','b','c','d','e','f']);
+    hold=true;
+    const cancelResponse=await request(path,{fetchImpl});
+    await cancelResponse.body.cancel();
+    assert.equal(s3Signal.aborted,true);
+    assert.equal(cancelled,true);
+  } finally {db.close();}
 });
