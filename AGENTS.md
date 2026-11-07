@@ -298,4 +298,4 @@ The Storage page counts the current account’s active assigned mounts and shows
 
 ## Large File Transfer — frontend groundwork
 
-The capability normalizer retains validated public resumable-upload limits when explicitly advertised, but no frontend multipart uploader or Transfer Manager is implemented. See `docs/LARGE_FILE_TRANSFER_FRONTEND.md`; keep the existing small-file queue and default-disabled feature boundary until the remaining recovery, coordination, UI and verification work is complete.
+The capability normalizer retains validated public resumable-upload limits when explicitly advertised, and `src/services/multipart-upload.js` implements the isolated Phase4.1 session/part/reconciliation client. It is not connected to Upload Queue or Transfer Manager. Use stable caller-retained create keys, verify all receipt pages/source digests, serialize per-session work and reconcile uncertain writes before retrying. See `docs/LARGE_FILE_TRANSFER_FRONTEND.md`; keep the existing small-file queue and default-disabled feature boundary until the remaining recovery, coordination, UI and verification work is complete.
