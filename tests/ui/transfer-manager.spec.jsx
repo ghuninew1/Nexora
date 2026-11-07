@@ -16,6 +16,9 @@ it('opens from a keyboard, labels its dialog, closes with Escape and returns foc
   trigger.focus(); await user.keyboard('{Enter}');
   expect(screen.getByRole('dialog', { name: 'Transfer Manager' })).toBeTruthy();
   expect(screen.getByText(/No uploads yet/)).toBeTruthy();
+  expect(screen.getByText('Uploads continue while this panel is closed and as you navigate your workspace. Downloads are handled by your browser.')).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Download queue' })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: 'Download concurrency' })).toBeNull();
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(document.activeElement).toBe(trigger);

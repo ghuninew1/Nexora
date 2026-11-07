@@ -21,13 +21,13 @@ import {
   removeStorageFavorite,
   recordStorageRecent,
   StorageApiError,
+  startStorageObjectDownload,
   trashStorageObject,
   uploadStorageFile,
   validateStorageObjectName,
 } from '../services/storage';
 import { appendBreadcrumb, breadcrumbDestination, isValidObjectId, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../utils/storage-files';
 import useUploadQueue from './useUploadQueue';
-import useDownloadQueue from './useDownloadQueue';
 import { RemoteFilesCache } from '../utils/remote-files-cache';
 import { getStoragePreviewSpec, MAX_TEXT_PREVIEW_BYTES } from '../utils/storage-preview';
 import { PreviewRequestCoordinator } from '../utils/preview-request';
@@ -537,19 +537,6 @@ export default function useRemoteFilesState() {
     maxConcurrency: preferences?.uploadConcurrency ?? 3,
     autoClear: preferences?.autoClearUploads ?? true,
   });
-  const downloadScopeRef = useRef({ storageId: null, allowed: false, rangeRead: false });
-  if (storageStatus !== 'loading') {
-    downloadScopeRef.current = { storageId, allowed: storageStatus === 'ready' && activeStorage?.permissions?.download === true
-      && canUseStorageCapability(capabilities, activeStorage, 'download'), rangeRead: capabilities?.rangeRead === true };
-  }
-  const downloadQueue = useDownloadQueue({
-    userScope: authStatus === 'authenticated' && !signingOut ? user?.id : null,
-    storageId: downloadScopeRef.current.storageId,
-    scopeKey: JSON.stringify([authStatus, Boolean(signingOut), user?.id ?? null, downloadScopeRef.current.storageId]),
-    allowed: authStatus === 'authenticated' && !signingOut && Boolean(user?.id) && downloadScopeRef.current.allowed,
-    rangeRead: downloadScopeRef.current.rangeRead,
-    onUnauthorized: expireSession,
-  });
   const { addFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload, clearFinished: clearFinishedUploads } = uploadQueue;
 
   const canUseCapability = useCallback((name) => Boolean(
@@ -744,15 +731,33 @@ export default function useRemoteFilesState() {
     onResult: (result) => cacheRef.current.rememberObjects(storageId, [result.object]),
   }), [runObjectOperation, storageId]);
 
+  const downloadInitiationRef = useRef(null);
+  const canStartDownload = authStatus === 'authenticated' && !signingOut && canUseCapability('download');
+  useLayoutEffect(() => {
+    const controller = new AbortController();
+    downloadInitiationRef.current = controller;
+    return () => { controller.abort(); };
+  }, [canStartDownload, storageId, user?.id, user?.email]);
+
   const downloadObject = useCallback(async (file) => {
-    if (!canUseCapability('download') || file?.type !== 'file') return { error: 'FORBIDDEN' };
-    const result = await downloadQueue.startDownload({ ...file, storageId });
-    if (result?.native) {
-      setOperationFeedback({ type: 'success', message: 'Opened in browser. Progress and resume are managed by your browser.' });
+    if (!canStartDownload || file?.type !== 'file' || !isValidObjectId(file.objectId)
+      || (file.storageId && file.storageId !== storageId)) return { error: 'FORBIDDEN' };
+    const signal = downloadInitiationRef.current?.signal;
+    if (!signal || signal.aborted) return { error: 'CANCELLED' };
+    try {
+      await startStorageObjectDownload(storageId, file.objectId, { signal });
+      if (signal.aborted) return { error: 'CANCELLED' };
+      setOperationFeedback({ type: 'success', message: 'Download requested. Check your browser downloads.' });
       void refreshRecent();
-    } else if (result?.error) setOperationFeedback({ type: 'error', message: result.error === 'LIMIT' ? 'Clear finished downloads before adding more.' : 'Download is not available. Check storage access.' });
-    return result;
-  }, [canUseCapability, downloadQueue, storageId, refreshRecent]);
+      return { ok: true };
+    } catch (error) {
+      if (signal.aborted || error?.name === 'AbortError') return { error: 'CANCELLED' };
+      if (error instanceof StorageApiError && error.status === 401) expireSession();
+      const code = error instanceof StorageApiError ? error.code : 'PROVIDER_UNAVAILABLE';
+      setOperationFeedback({ type: 'error', message: operationErrorMessage(code) });
+      return { error: code };
+    }
+  }, [canStartDownload, storageId, refreshRecent, expireSession]);
 
   const trashObject = useCallback((file) => runObjectOperation({
     file,
@@ -1115,7 +1120,6 @@ export default function useRemoteFilesState() {
     operationFeedback,
     clearOperationFeedback,
     uploadQueue,
-    downloadQueue,
     uploadFiles,
     cancelUpload,
     pauseUpload,
@@ -1141,7 +1145,7 @@ export default function useRemoteFilesState() {
     createFolder,
   }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice, activeStorage, capabilities,
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
-    operationFeedback, clearOperationFeedback, uploadQueue, downloadQueue, uploadFiles, cancelUpload, pauseUpload, resumeUpload, retryUpload, clearFinishedUploads,
+    operationFeedback, clearOperationFeedback, uploadQueue, uploadFiles, cancelUpload, pauseUpload, resumeUpload, retryUpload, clearFinishedUploads,
     renameObject, moveObject, copyObject, downloadObject, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
     preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,

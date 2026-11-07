@@ -420,7 +420,15 @@ export async function fetchStorageObjectPreview(storageId, object, { fetchImpl =
   return { blob, kind: resolved.kind, mimeType: resolved.mimeType };
 }
 
-export async function startStorageObjectDownload(storageId, objectId, { fetchImpl = fetch, signal, navigate = (url) => window.location.assign(url) } = {}) {
+export async function startStorageObjectDownload(storageId, objectId, { fetchImpl = fetch, signal, navigate = (url) => {
+  // Independent native downloads; do not navigate the workspace or fetch file bytes.
+  // The server's Content-Disposition supplies the safe filename.
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = '';
+  document.body.append(link);
+  try { link.click(); } finally { link.remove(); }
+} } = {}) {
   const user = await getCurrentUser({ fetchImpl, signal });
   if (!user) throw new StorageApiError('UNAUTHENTICATED', 401);
   if (signal?.aborted) throw new DOMException('Download initiation cancelled.', 'AbortError');

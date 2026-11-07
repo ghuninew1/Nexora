@@ -1,5 +1,7 @@
 # Nexora — Final Phase 6 production readiness
 
+> **Historical Phase6 readiness snapshot.** The subsequent native-download simplification removes frontend managed download queues/recovery/controls. Current product behavior is [native browser downloads](LARGE_FILE_TRANSFER_DOWNLOAD.md#current-product-behavior--native-downloads-2026-11-08), with upload-only Transfers. Backend Range, upload implementation and production gates remain. The architecture/managed-browser evidence below belongs to the Phase6 snapshot, not the current UI.
+
 วันที่ตรวจ: **2026-11-08, Asia/Bangkok**. รายงานนี้แทนสถานะรวมของ transfer guides รุ่นก่อน โดยคงรายละเอียด contract/history ของแต่ละ guide ไว้
 
 | Deliverable | Decision |
