@@ -42,13 +42,13 @@ async function fixture(fetchImpl) {
   }),env);
   return {db,env,user,other,request,otherSession};
 }
-function mockProvider() {
+function mockProvider({ maxFileBytes = RESUMABLE_LIMITS.maxFileBytes } = {}) {
   const sessions=new Map(), calls=[];
   let failPart=false, loseCreate=false;
   const fetchImpl=async (url, init) => {
     const p=new URL(url).pathname, id=p.split('/')[5];
     calls.push({p,init});
-    if (p.endsWith('/capabilities')) return Response.json({capabilities:{upload:true,transfers:{resumableUpload:true,...RESUMABLE_LIMITS}}});
+    if (p.endsWith('/capabilities')) return Response.json({capabilities:{upload:true,transfers:{resumableUpload:true,...RESUMABLE_LIMITS,maxFileBytes}}});
     if (p.endsWith('/uploads') && init.method==='POST') {
       const body=JSON.parse(init.body), key=init.headers.get('Idempotency-Key');
       let s=[...sessions.values()].find(s=>s.key===key);
@@ -71,7 +71,7 @@ function mockProvider() {
     if(p.endsWith('/complete')) {s.state='completed';s.object={objectId:'logical-file',type:'file',name:'test.bin',parentId:null,sizeBytes:s.sizeBytes};}
     return Response.json({...s,providerReference:'must-not-leak'});
   };
-  return {fetchImpl,calls,sessions,failPart:()=>{failPart=true;},loseCreate:()=>{loseCreate=true;}};
+  return {fetchImpl,calls,sessions,setMaximum: value => { maxFileBytes = value; },failPart:()=>{failPart=true;},loseCreate:()=>{loseCreate=true;}};
 }
 const createBody = {name:'test.bin',parentId:null,sizeBytes:3,mimeType:'application/octet-stream'};
 const create = (f,key=randomUUID(),body=createBody) => f.request('',{method:'POST',headers:{'Idempotency-Key':key},body});
@@ -250,5 +250,66 @@ test('larger compatible upstream maximum is clamped and older oversized sessions
     [...mock.sessions.values()][0].sizeBytes = 5_000_000_001;
     [...mock.sessions.values()][0].partCount = Math.ceil(5_000_000_001 / RESUMABLE_LIMITS.partSizeBytes);
     assert.equal((await f.request(`/${id}`, { method: 'DELETE' })).status, 200);
+  } finally { f.db.close(); }
+});
+
+
+test('negotiates a smaller real storage maximum and admits 182.7 MB without widening direct uploads', async () => {
+  const maximum = 200_000_000;
+  const mock = mockProvider({ maxFileBytes: maximum }), f = await fixture(mock.fetchImpl);
+  try {
+    const caps = await f.request('/../capabilities');
+    assert.equal(caps.status, 200);
+    const negotiated = (await caps.json()).data.capabilities;
+    assert.equal(negotiated.maxUploadBytes, 25 * 1024 ** 2);
+    assert.equal(negotiated.transfers.maxFileBytes, maximum);
+    for (const sizeBytes of [182_700_000, maximum]) {
+      const response = await create(f, randomUUID(), { ...createBody, sizeBytes });
+      assert.equal(response.status, 201, await response.clone().text());
+    }
+    const before = mock.sessions.size;
+    assert.equal((await create(f, randomUUID(), { ...createBody, sizeBytes: maximum + 1 })).status, 413);
+    assert.equal(mock.sessions.size, before);
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM transfer_sessions').get().n, 2);
+  } finally { f.db.close(); }
+});
+
+test('capability negotiation keeps multipart default off and fails closed on invalid geometry', () => {
+  const valid = { transfers: { resumableUpload: true, ...RESUMABLE_LIMITS } };
+  assert.deepEqual(publicTransferCapabilities(valid, false), { resumableUpload: false });
+  assert.deepEqual(publicTransferCapabilities({ transfers: { resumableUpload: false } }, true), { resumableUpload: false });
+  for (const changes of [{ maxFileBytes: 0 }, { maxFileBytes: -1 }, { maxFileBytes: NaN }, { partSizeBytes: 4 }, { maxParallelParts: 2 }]) {
+    assert.throws(() => publicTransferCapabilities({ transfers: { ...valid.transfers, ...changes } }, true), { code: 'PROVIDER_UNAVAILABLE' });
+  }
+});
+
+
+test('reduced provider limits preserve existing status and cancellation while blocking further writes', async () => {
+  const mock = mockProvider({ maxFileBytes: 200_000_000 }), f = await fixture(mock.fetchImpl);
+  try {
+    const id = (await (await create(f, randomUUID(), { ...createBody, sizeBytes: 182_700_000 })).json()).data.transferId;
+    mock.setMaximum(100_000_000);
+    assert.equal((await f.request(`/${id}`)).status, 200);
+    assert.equal((await f.request(`/${id}/resume`, { method: 'POST', body: { version: 1 } })).status, 413);
+    assert.equal((await put(f, id)).status, 413);
+    assert.equal((await f.request(`/${id}/complete`, { method: 'POST', body: { version: 1 } })).status, 413);
+    assert.equal((await f.request(`/${id}`, { method: 'DELETE' })).status, 200);
+    assert.equal([...mock.sessions.values()][0].state, 'cancelled');
+    assert.ok(!mock.calls.some(c => c.p.endsWith('/resume') || c.p.endsWith('/complete') || c.p.includes('/parts/')));
+  } finally { f.db.close(); }
+});
+
+test('completion rechecks a provider file ceiling changed during authorization before publication', async () => {
+  const mock = mockProvider({ maxFileBytes: 200_000_000 });
+  let capabilityReads = 0;
+  const f = await fixture((url, init) => {
+    if (new URL(url).pathname.endsWith('/capabilities') && ++capabilityReads === 3) mock.setMaximum(100_000_000);
+    return mock.fetchImpl(url, init);
+  });
+  try {
+    const id = (await (await create(f, randomUUID(), { ...createBody, sizeBytes: 182_700_000 })).json()).data.transferId;
+    assert.equal((await f.request(`/${id}/complete`, { method: 'POST', body: { version: 1 } })).status, 413);
+    assert.equal(capabilityReads, 3);
+    assert.ok(!mock.calls.some(c => c.p.endsWith('/complete')));
   } finally { f.db.close(); }
 });

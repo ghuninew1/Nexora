@@ -236,3 +236,13 @@ test('completion uncertainty preserves provider Retry-After and does not issue a
   await assert.rejects(f.client.completeSession('transfer_test'), error => error.code === 'AMBIGUOUS_COMPLETION' && error.retryAfterMs > 599000);
   assert.equal(f.calls.length, 2);
 });
+
+
+test('multipart responses preserve quota, capability and size errors without retry or direct fallback', async () => {
+  for (const [status, code] of [[429, 'QUOTA_EXCEEDED'], [422, 'CAPABILITY_UNAVAILABLE'], [413, 'UPLOAD_TOO_LARGE']]) {
+    const f = fixture();
+    f.hook(() => Response.json({ error: { code } }, { status }));
+    await assert.rejects(f.client.createSession({ name: 'garage 2.zip', sizeBytes: 182_700_000 }, 'test_key'), { code, status });
+    assert.equal(f.calls.length, 1);
+  }
+});

@@ -26,6 +26,9 @@ export function classifyMultipartError(status, code) {
   if (status === 410) return 'SESSION_EXPIRED';
   if (status === 409) return 'VERSION_CONFLICT';
   if (status === 422 && code === 'UPLOAD_CHECKSUM_MISMATCH') return 'CHECKSUM_MISMATCH';
+  if (status === 422 && code === 'CAPABILITY_UNAVAILABLE') return 'CAPABILITY_UNAVAILABLE';
+  if (status === 413 && code === 'UPLOAD_TOO_LARGE') return 'UPLOAD_TOO_LARGE';
+  if (status === 429 && code === 'QUOTA_EXCEEDED') return 'QUOTA_EXCEEDED';
   if (status === 429) return 'RATE_LIMITED';
   if (status >= 500) return 'PROVIDER_UNAVAILABLE';
   return 'VALIDATION_FAILURE';

@@ -14,6 +14,9 @@ export function selectUploadStrategy(sizeBytes, maxUploadBytes, transfers) {
     && transfers.partSizeBytes === 8 * 1024 ** 2 && transfers.maxParallelParts === 1
     && transfers.maxFileBytes <= 10 * 1024 ** 3 && transfers.maxParts <= 1280
     && Math.ceil(transfers.maxFileBytes / transfers.partSizeBytes) <= transfers.maxParts;
-  if (!compatible || sizeBytes > transfers.maxFileBytes) return { error: 'UPLOAD_TOO_LARGE', smallLimit };
+  // maxUploadBytes is the direct-request limit, not the multipart file limit.
+  // Missing/disabled/incompatible multipart support is a readiness failure.
+  if (!compatible) return { error: 'MULTIPART_UNAVAILABLE', smallLimit };
+  if (sizeBytes > transfers.maxFileBytes) return { error: 'UPLOAD_TOO_LARGE', smallLimit };
   return { strategy: 'multipart', smallLimit, limits: Object.fromEntries(limits.map(key => [key, transfers[key]])) };
 }

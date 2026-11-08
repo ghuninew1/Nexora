@@ -17,11 +17,12 @@ export function publicTransferCapabilities(caps, enabled) {
   if (!enabled || value?.resumableUpload !== true) return { resumableUpload: false };
   // Version-one geometry is deliberately fixed until end-to-end limits are verified.
   if (Object.entries(RESUMABLE_LIMITS).some(([key, expected]) => key === 'maxFileBytes'
-    ? !Number.isSafeInteger(value[key]) || value[key] < expected
+    ? !Number.isSafeInteger(value[key]) || value[key] <= 0
     : value[key] !== expected)) {
     throw new ApiError('PROVIDER_UNAVAILABLE', 502);
   }
-  return { resumableUpload: true, ...RESUMABLE_LIMITS };
+  return { resumableUpload: true, ...RESUMABLE_LIMITS,
+    maxFileBytes: Math.min(value.maxFileBytes, RESUMABLE_LIMITS.maxFileBytes) };
 }
 
 export function isUploadCancellation(method, parts) {
@@ -107,9 +108,11 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
     const policy = await getSystemSettings(db);
     if (!intersectStoragePermissions(current.grants, caps, { readOnly: current.mount.read_only,
       maintenance: user.role !== 'admin' && policy.maintenanceMode }).upload) throw new ApiError('FORBIDDEN', 403);
-    if (!publicTransferCapabilities(caps, true).resumableUpload) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
+    const transfers = publicTransferCapabilities(caps, true);
+    if (!transfers.resumableUpload) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
+    return transfers;
   }
-  if (!cancellation) await authorizeUpload();
+  const transfers = !cancellation ? await authorizeUpload() : null;
   const url = new URL(request.url);
   let row;
   const id = tail[1];
@@ -141,7 +144,7 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
     if (Object.keys(body).some(k => !['name','parentId','sizeBytes','mimeType'].includes(k)) || !validName(body.name)
       || (body.parentId != null && !ID.test(body.parentId)) || !Number.isSafeInteger(body.sizeBytes) || body.sizeBytes <= 0
       || (body.mimeType !== undefined && (typeof body.mimeType !== 'string' || body.mimeType.length > 160 || !/^[\w.+-]+\/[\w.+-]+$/u.test(body.mimeType)))) throw new ApiError('INVALID_INPUT', 400);
-    if (body.sizeBytes > RESUMABLE_LIMITS.maxFileBytes) throw new ApiError('UPLOAD_TOO_LARGE', 413);
+    if (body.sizeBytes > transfers.maxFileBytes) throw new ApiError('UPLOAD_TOO_LARGE', 413);
     const name = body.name.normalize('NFC').trim(), parentId = body.parentId ?? null, mimeType = body.mimeType ?? 'application/octet-stream';
     const keyHash = await sha256Hex(key), fingerprint = await sha256Hex(JSON.stringify([name, parentId, body.sizeBytes, mimeType]));
     await db.prepare(`INSERT OR IGNORE INTO transfer_sessions
@@ -169,13 +172,13 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
   }
   if (!row) throw new ApiError('NOT_FOUND', 404);
   // Keep status and cancellation available for sessions created under an older limit.
-  if (row.size_bytes > RESUMABLE_LIMITS.maxFileBytes && (method === 'PUT' || method === 'POST')) {
+  if (transfers && row.size_bytes > transfers.maxFileBytes && (method === 'PUT' || method === 'POST')) {
     throw new ApiError('UPLOAD_TOO_LARGE', 413);
   }
   if (!row.shared_session_id) {
     // A create acknowledgement can be lost; stable upstream idempotency recovers it.
     if (method === 'GET' && tail.length === 2) {
-      if (row.size_bytes > RESUMABLE_LIMITS.maxFileBytes) throw new ApiError('UPLOAD_TOO_LARGE', 413);
+      if (row.size_bytes > transfers.maxFileBytes) throw new ApiError('UPLOAD_TOO_LARGE', 413);
       return createUpstream(200);
     }
     if (!cancellation) throw new ApiError('UPLOAD_CONFLICT', 409);
@@ -213,7 +216,10 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
     const body = await readJson(request);
     if (Object.keys(body).some(k => k !== 'version') || !Number.isInteger(body.version) || body.version < 0) throw new ApiError('INVALID_INPUT', 400);
     // Refresh authorization immediately before publication, never trust creation grants.
-    if (tail[2] === 'complete') await authorizeUpload();
+    if (tail[2] === 'complete') {
+      const current = await authorizeUpload();
+      if (row.size_bytes > current.maxFileBytes) throw new ApiError('UPLOAD_TOO_LARGE', 413);
+    }
     return receive(await call(`${base}/${tail[2]}`, { method: 'POST', contentType: 'application/json', body: JSON.stringify(body) }));
   }
   throw new ApiError('NOT_FOUND', 404);

@@ -82,13 +82,13 @@ function setup(extra = {}) {
 
 it('routes only large files with compatible explicit capability; clamps legacy maximum', () => {
   expect(selectUploadStrategy(10, 10).strategy).toBe('legacy');
-  expect(selectUploadStrategy(11, 10).error).toBe('UPLOAD_TOO_LARGE');
+  expect(selectUploadStrategy(11, 10).error).toBe('MULTIPART_UNAVAILABLE');
   expect(selectUploadStrategy(11, 10, limits).strategy).toBe('multipart');
   for (const transfer of [undefined, { ...limits, resumableUpload: false }, { ...limits, partSizeBytes: 4 },
     { ...limits, maxParallelParts: 2 }, { ...limits, maxParts: 1 }, { ...limits, maxFileBytes: NaN }]) {
-    expect(selectUploadStrategy(11, 10, transfer).error).toBe('UPLOAD_TOO_LARGE');
+    expect(selectUploadStrategy(11, 10, transfer).error).toBe('MULTIPART_UNAVAILABLE');
   }
-  expect(selectUploadStrategy(26 * 1024 ** 2, 99 * 1024 ** 2).error).toBe('UPLOAD_TOO_LARGE');
+  expect(selectUploadStrategy(26 * 1024 ** 2, 99 * 1024 ** 2).error).toBe('MULTIPART_UNAVAILABLE');
 });
 
 it('bounds retained upload Files and rejects an overflowing selection atomically before network work', async () => {
@@ -560,4 +560,56 @@ it('rejects files larger than the decimal 5 GB application limit', () => {
   const transfers = { resumableUpload: true, maxFileBytes: 10 * 1024 ** 3, partSizeBytes: 8 * 1024 ** 2, maxParts: 1280, maxParallelParts: 1, sessionTtlSeconds: 604800 };
   expect(selectUploadStrategy(5_000_000_000, 10, transfers).strategy).toBe('multipart');
   expect(selectUploadStrategy(5_000_000_001, 10, transfers).error).toBe('UPLOAD_TOO_LARGE');
+});
+
+
+it('accepts 182.7 MB through multipart independently of the direct request ceiling', async () => {
+  const h = setup();
+  // Metadata double: no 182 MB buffer or stress transfer is needed for admission.
+  h.add([{ name: 'garage 2.zip', size: 182_700_000, type: 'application/zip', lastModified: 1 }],
+    { maxUploadBytes: 25 * 1024 ** 2, transfers: { ...limits, maxFileBytes: 5_000_000_000 } });
+  await waitFor(() => expect(h.status()).toBe('success'));
+  expect(h.options.uploadFile).not.toHaveBeenCalled();
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(22);
+  expect(h.result.current.items[0].strategy).toBe('multipart');
+});
+
+it('explains missing multipart readiness without sending an oversized direct request', async () => {
+  const h = setup();
+  h.add([{ name: 'garage 2.zip', size: 182_700_000 }], { maxUploadBytes: 25 * 1024 ** 2, transfers: { resumableUpload: false } });
+  expect(h.status()).toBe('error');
+  expect(h.result.current.items[0].error).toMatch(/direct upload limit.*Multipart uploads are not available/);
+  expect(h.result.current.items[0].error).not.toMatch(/too large for the connected storage/);
+  render(<UploadQueue items={h.result.current.items} concurrency={1} />);
+  expect(screen.getByText(/Ask the administrator/)).toBeTruthy();
+  await act(async () => {});
+  expect(h.api.createClient).not.toHaveBeenCalled();
+  expect(h.options.uploadFile).not.toHaveBeenCalled();
+});
+
+it('honors direct and multipart boundaries without confusing them with part size or quota', () => {
+  const direct = 25 * 1024 ** 2;
+  const transfers = { ...limits, maxFileBytes: 200_000_000 };
+  expect(selectUploadStrategy(direct, direct, transfers).strategy).toBe('legacy');
+  expect(selectUploadStrategy(direct + 1, direct, transfers).strategy).toBe('multipart');
+  expect(selectUploadStrategy(182_700_000, direct, transfers).strategy).toBe('multipart');
+  expect(selectUploadStrategy(Math.ceil(182.7 * 1024 ** 2), direct, transfers).strategy).toBe('multipart');
+  expect(selectUploadStrategy(200_000_000, direct, transfers).strategy).toBe('multipart');
+  expect(selectUploadStrategy(200_000_001, direct, transfers).error).toBe('UPLOAD_TOO_LARGE');
+});
+
+it.each([
+  ['QUOTA_EXCEEDED', /storage limit has been reached/],
+  ['CAPABILITY_UNAVAILABLE', /Uploads are unavailable/],
+  ['PERMISSION_REVOKED', /Upload permission is unavailable/],
+])('keeps %s distinct from file size in the transfer manager', async (code, message) => {
+  const h = setup();
+  h.api.hooks.create = async () => { throw err(code); };
+  h.add();
+  await waitFor(() => expect(h.status()).toBe('error'));
+  render(<UploadQueue items={h.result.current.items} concurrency={1} />);
+  expect(screen.getByText(message)).toBeTruthy();
+  expect(h.result.current.items[0].error).not.toMatch(/too large/);
+  expect(h.options.uploadFile).not.toHaveBeenCalled();
 });

@@ -29,6 +29,7 @@ function errorMessage(error) {
   const messages = {
     NAME_CONFLICT: 'A file or folder with this name already exists here.',
     UPLOAD_TOO_LARGE: 'This file is too large for the connected storage.',
+    MULTIPART_UNAVAILABLE: 'This file exceeds the direct upload limit. Multipart uploads are not available. Ask the administrator to enable compatible multipart uploads on Nexora and Shared Storage.',
     INVALID_INPUT: 'Check the file name and size.',
     FORBIDDEN: 'Upload permission is unavailable. Check storage access or maintenance status.',
     PERMISSION_REVOKED: 'Upload permission is unavailable. Check storage access or maintenance status.',
