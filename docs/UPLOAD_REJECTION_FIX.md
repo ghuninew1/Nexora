@@ -1,5 +1,7 @@
 # Upload rejection: diagnosis and real-test preparation
 
+Later on 2026-11-08, the operator confirmed the capability issue was resolved and a real multipart upload started; the same file later completed after an interruption. The false-capability response below is a historical observation, not a claim about the current deployment. See [multipart interruption/retry findings](MULTIPART_UPLOAD_RECOVERY.md) for the subsequent investigation.
+
 ## Verified findings (2026-11-08, Asia/Bangkok)
 
 The authenticated **production** Nexora capabilities response was inspected read-only in the user's Chrome session:

@@ -98,8 +98,23 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
   if (!mount || mount.provider !== 'garage' || (!cancellation && mount.status !== 'active')) throw new ApiError('NOT_FOUND', 404);
   if (!cancellation && !access.grants.upload) throw new ApiError('FORBIDDEN', 403);
   const client = createStorageClient({ env, fetchImpl, logger });
-  const call = (path, options = {}) => client.jsonRequest({ request, projectId: mount.shared_storage_project_id, path,
-    operation: 'upload-session', maxResponseBytes: 65536, ...options });
+  const rawRequestId = request.headers.get('X-Upload-Request-ID');
+  const requestId = /^[a-f0-9-]{36}$/u.test(rawRequestId || '') ? rawRequestId : crypto.randomUUID();
+  const call = async (path, options = {}) => {
+    try {
+      return await client.jsonRequest({ request, projectId: mount.shared_storage_project_id, path,
+        operation: 'upload-session', maxResponseBytes: 65536, ...options });
+    } catch (error) {
+      const part = /\/parts\/([1-9][0-9]{0,3})$/u.exec(path)?.[1];
+      const stage = path === '/capabilities' ? 'capabilities' : part ? 'part-upload'
+        : path === '/uploads' ? 'create' : path.endsWith('/complete') ? 'complete'
+          : path.endsWith('/pause') ? 'pause' : path.endsWith('/resume') ? 'resume'
+            : options.method === 'DELETE' ? 'cancel' : 'session-status';
+      try { logger?.warn?.(`[upload-upstream] request=${requestId} timestamp=${new Date().toISOString()} stage=${stage} method=${options.method || 'GET'} part=${part || 'none'} status=${error instanceof ApiError ? error.status : 500} upstreamStatus=${error.upstreamStatus || 0} result=${error.upstreamFailure || 'request-error'}`); }
+      catch { /* Diagnostics never fail an upload or reveal identifiers/body/headers. */ }
+      throw error;
+    }
+  };
   async function authorizeUpload() {
     const current = await getStorageAccessForUser(db, user, storageId);
     if (!current || current.mount.status !== 'active' || current.mount.shared_storage_project_id !== mount.shared_storage_project_id) throw new ApiError('NOT_FOUND', 404);

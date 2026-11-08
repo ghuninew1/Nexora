@@ -107,6 +107,10 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
               <div className={cx('h-full w-1/3 rounded-full bg-primary motion-safe:animate-pulse motion-reduce:animate-none')} />
             </div>}
             {item.error && <p className={cx('mt-1 text-xs text-destructive')} role="alert">{item.error}</p>}
+            {item.error && item.diagnostics && <details className={cx('mt-2 text-xs text-muted-foreground')}>
+              <summary className={cx('cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring')}>Upload diagnostics</summary>
+              <pre className={cx('mt-1 whitespace-pre-wrap break-all font-mono')}>{JSON.stringify(item.diagnostics, null, 2)}</pre>
+            </details>}
           </div>
           <div className={cx('ml-auto flex max-w-full shrink-0 flex-wrap justify-end gap-1')}>
             {item.needsFile && !item.pendingAction && ['waiting_file','file_mismatch','recovery_error'].includes(item.status) && <OriginalFileButton id={item.id} name={item.name} onSelect={onSelectOriginal} />}

@@ -91,7 +91,7 @@ Check this map against actual files when changing the architecture; update READM
 - Header spans the viewport; the desktop Sidebar begins below it, while mobile navigation remains a drawer.
 - Sidebar NavLinks use the shared Liquid Glass hover treatment like the Collapse button in Light and Dark themes, with a separate active state.
 - Never log auth request bodies, credentials, passwords, password hashes, salts, cookies, session tokens, authorization headers, or raw secrets. Use the shared password helper for all user creation and verification.
-- Storage diagnostics may log only binding presence, request stage, HTTP status, allowlisted error type/result, and redirect origin classification; never log storage/project IDs, upstream/redirect URL, provider references, headers/values, or response bodies.
+- Storage diagnostics may log only binding presence, request stage, HTTP status, allowlisted error type/result, and redirect origin classification; never log storage/project IDs, upstream/redirect URL, provider references, credentials or raw headers/response bodies. Multipart failure diagnostics additionally allow a validated random request correlation ID, UTC timestamp, operation/method, bounded part number and upstream HTTP status/result; the sole correlation header is not an authorization credential.
 
 ## File Browser behavior
 
@@ -353,3 +353,8 @@ Current upload policy: cap new files at decimal 5 GB (5,000,000,000 bytes); old 
 ## Upload rejection and capability limits
 
 `maxUploadBytes` and `STORAGE_MAX_UPLOAD_BYTES` limit the direct path (hard cap 25 MiB), not multipart files. Multipart requires both active server flags and compatible provider capabilities; absent/disabled/incompatible support produces a local `MULTIPART_UNAVAILABLE` readiness error, never an oversized direct fallback. Negotiate `transfers.maxFileBytes` as `min(provider maximum, 5_000_000_000)` while retaining fixed 8 MiB part geometry. Enforce this maximum on create and further writes/resume/complete, while preserving existing-session status/cancellation. Quota, permission and capability errors remain distinct. See `docs/UPLOAD_REJECTION_FIX.md` for read-only findings and operator steps; live Garage success is not established by local tests.
+
+
+## Multipart interruption recovery
+
+Manual Retry/Resume/reconciliation must retain enqueue intent while an old worker is finishing IndexedDB writes and releasing Web Locks; dispatch only after that worker releases its active slot. Deduplicate clicks and preserve cancellation/logout/epoch guards. Manual retry resets the existing automatic retry budget, retains server Retry-After, reconciles the same session and may explicitly resume a paused valid session. Never recreate an identified session or resend a verified part unnecessarily. Error diagnostics are bounded, in memory only and contain endpoint templates, allowlisted response codes/format, request UUID/validated Ray ID, timestamp, stage/part/status, original-File availability and last-confirmed session state; never raw provider messages, body, URLs or auth. See `docs/MULTIPART_UPLOAD_RECOVERY.md` for source findings and production evidence limits.

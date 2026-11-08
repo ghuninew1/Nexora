@@ -5,6 +5,9 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const DIGEST = /^[A-Za-z0-9+/]{43}=$/u;
 const STATES = ['creating', 'active', 'paused', 'completing', 'completed', 'cancelling', 'cancelled', 'expired'];
 const TRANSIENT = new Set(['NETWORK_INTERRUPTION', 'REQUEST_TIMEOUT', 'PROVIDER_UNAVAILABLE', 'RATE_LIMITED', 'VERSION_CONFLICT']);
+const RESPONSE_CODES = new Set(['UNAUTHENTICATED', 'FORBIDDEN', 'NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT',
+  'UPLOAD_EXPIRED', 'UPLOAD_CONFLICT', 'UPLOAD_BUSY', 'UPLOAD_CHECKSUM_MISMATCH', 'UPLOAD_TOO_LARGE',
+  'CAPABILITY_UNAVAILABLE', 'QUOTA_EXCEEDED', 'TRANSFER_INCOMPLETE', 'PROVIDER_UNAVAILABLE', 'INTERNAL_ERROR', 'RATE_LIMITED']);
 
 export class MultipartUploadError extends Error {
   constructor(code, status = 0, retryAfterMs = 0) {
@@ -24,6 +27,7 @@ export function classifyMultipartError(status, code) {
   if (status === 403) return 'PERMISSION_REVOKED';
   if (status === 404) return 'SESSION_UNAVAILABLE';
   if (status === 410) return 'SESSION_EXPIRED';
+  if (status === 409 && code === 'NAME_CONFLICT') return 'NAME_CONFLICT';
   if (status === 409) return 'VERSION_CONFLICT';
   if (status === 422 && code === 'UPLOAD_CHECKSUM_MISMATCH') return 'CHECKSUM_MISMATCH';
   if (status === 422 && code === 'CAPABILITY_UNAVAILABLE') return 'CAPABILITY_UNAVAILABLE';
@@ -110,19 +114,35 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
     try { return await operation(); } finally { busy.delete(key); }
   };
   const wait = (attempt, retryAfterMs = 0) => sleep(Math.max(retryAfterMs, Math.min(10000, 500 * 2 ** attempt) * (0.5 + random() * 0.5)), signal);
-  async function request(path, method = 'GET', body, extraHeaders = {}) {
+  async function request(path, method = 'GET', body, extraHeaders = {}, operationStage) {
     if (signal?.aborted) fail('ABORTED');
     if (globalThis.navigator?.onLine === false) fail('OFFLINE');
     if (cooldown?.until > Date.now()) throw new MultipartUploadError(cooldown.code, cooldown.status, cooldown.until - Date.now());
     const controller = new AbortController();
+    const requestId = cryptoImpl.randomUUID();
+    const partNumber = /\/parts\/([1-9][0-9]*)$/u.exec(path)?.[1];
+    const action = path.split('/').at(-1)?.split('?')[0];
+    const stage = operationStage || (partNumber ? 'part-upload' : ['complete', 'pause', 'resume'].includes(action) ? action
+      : method === 'POST' ? 'create' : method === 'DELETE' ? 'cancel' : 'session-status');
+    const endpoint = '/api/storage/v1/storages/:storageId/uploads'
+      + (path ? '/:transferId' : '') + (partNumber ? '/parts/:partNumber' : ['complete', 'pause', 'resume'].includes(action) ? '/' + action : '');
+    let status = 0, responseBody = null, rayId = null;
+    const diagnose = error => {
+      error.diagnostics = { timestamp: new Date().toISOString(), requestId, method, endpoint, stage,
+        partNumber: partNumber ? Number(partNumber) : null, status, code: error.code, responseBody, rayId };
+      return error;
+    };
     let timedOut = false;
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     try {
       const response = await fetchImpl(base + path, { method, credentials: 'same-origin', signal: controller.signal,
-        headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': body instanceof Blob ? 'application/octet-stream' : 'application/json' }), ...extraHeaders },
+        headers: { Accept: 'application/json', 'X-Upload-Request-ID': requestId, ...(body === undefined ? {} : { 'Content-Type': body instanceof Blob ? 'application/octet-stream' : 'application/json' }), ...extraHeaders },
         ...(body === undefined ? {} : { body: body instanceof Blob ? body : JSON.stringify(body) }) });
+      status = response.status;
+      const ray = response.headers.get('CF-Ray');
+      rayId = /^[a-f0-9]{16,32}(?:-[A-Z]{3})?$/u.test(ray || '') ? ray : null;
       const responseError = code => {
         const error = new MultipartUploadError(classifyMultipartError(response.status, code), response.status,
           retryAfterMilliseconds(response.headers.get('Retry-After')));
@@ -131,31 +151,34 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
       };
       let payload;
       try { payload = await response.json(); } catch {
+        responseBody = { format: 'non-json' };
         if (!response.ok) throw responseError();
         fail();
       }
+      // Keep only the allowlisted error code; raw messages/HTML can contain secrets.
+      if (!response.ok) responseBody = { error: { code: RESPONSE_CODES.has(payload?.error?.code) ? payload.error.code : 'UNRECOGNIZED' } };
       if (!response.ok) throw responseError(payload?.error?.code);
       if (!payload?.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) fail();
       return payload.data;
     } catch (error) {
       if (signal?.aborted) fail('ABORTED');
-      if (timedOut) fail('REQUEST_TIMEOUT');
-      if (error instanceof MultipartUploadError) throw error;
-      fail('NETWORK_INTERRUPTION');
+      if (timedOut) throw diagnose(new MultipartUploadError('REQUEST_TIMEOUT', status));
+      if (error instanceof MultipartUploadError) throw diagnose(error);
+      throw diagnose(new MultipartUploadError('NETWORK_INTERRUPTION', status));
     } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
   }
-  async function read(transferId, cursor = '0') {
+  async function read(transferId, cursor = '0', stage = 'session-status') {
     id(transferId);
     for (let attempt = 0; ; attempt++) {
-      try { return normalizeSession(await request(`/${transferId}?partsCursor=${cursor}&limit=100`), transferId); }
+      try { return normalizeSession(await request(`/${transferId}?partsCursor=${cursor}&limit=100`, 'GET', undefined, {}, stage), transferId); }
       catch (error) {
         if (!TRANSIENT.has(error.code) || error.code === 'VERSION_CONFLICT' || (attempt >= maxRetries || error.retryAfterMs > 300000)) throw error;
         await wait(attempt, error.retryAfterMs);
       }
     }
   }
-  async function discover(transferId) {
-    const first = await read(transferId);
+  async function discover(transferId, stage = 'verification') {
+    const first = await read(transferId, '0', stage);
     const parts = new Map();
     let page = first, cursor = 0;
     for (;;) {
@@ -167,7 +190,7 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
       const next = Number(page.nextCursor);
       if (next <= cursor || next > first.partCount || next !== page.parts.at(-1)?.partNumber) fail();
       cursor = next;
-      page = await read(transferId, String(cursor));
+      page = await read(transferId, String(cursor), stage);
       for (const key of ['state', 'version', 'sizeBytes', 'partSizeBytes', 'partCount', 'expiresAt', 'acknowledgedBytes']) {
         if (page[key] !== first[key]) fail('VERSION_CONFLICT');
       }
@@ -181,7 +204,7 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
     if (session.state === 'cancelled' || session.state === 'cancelling') fail('SESSION_CANCELLED');
   }
   async function reconcile(transferId, file) {
-    const session = await discover(transferId);
+    const session = await discover(transferId, 'reconciliation');
     usable(session);
     checkFile(file, session);
     if (session.state === 'completed') return session;
@@ -205,12 +228,21 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
       } catch (error) {
         if (!TRANSIENT.has(error.code) && error.code !== 'INVALID_RESPONSE') throw error;
         try { current = await read(transferId); } catch (readError) {
-          if (action === 'complete' && TRANSIENT.has(readError.code)) throw new MultipartUploadError('AMBIGUOUS_COMPLETION', readError.status, readError.retryAfterMs);
+          if (action === 'complete' && TRANSIENT.has(readError.code)) {
+            const uncertain = new MultipartUploadError('AMBIGUOUS_COMPLETION', readError.status, readError.retryAfterMs);
+            uncertain.diagnostics = readError.diagnostics;
+            uncertain.previousDiagnostics = error.diagnostics;
+            throw uncertain;
+          }
           throw readError;
         }
         if (current.state === target) return current;
         if (attempt >= maxRetries || error.retryAfterMs > 300000) {
-          if (action === 'complete') fail('AMBIGUOUS_COMPLETION');
+          if (action === 'complete') {
+            const uncertain = new MultipartUploadError('AMBIGUOUS_COMPLETION', error.status, error.retryAfterMs);
+            uncertain.diagnostics = error.diagnostics;
+            throw uncertain;
+          }
           throw error;
         }
         await wait(attempt, error.retryAfterMs);
@@ -238,7 +270,12 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
         return { partNumber: number, sizeBytes: length, sha256 };
       } catch (error) {
         if (!TRANSIENT.has(error.code) && error.code !== 'INVALID_RESPONSE') throw error;
-        session = await reconcile(transferId, file);
+        try { session = await reconcile(transferId, file); }
+        catch (readError) {
+          // Preserve the failed PUT as well as the failed recovery GET, bounded to two records.
+          if (error.diagnostics) readError.previousDiagnostics = error.diagnostics;
+          throw readError;
+        }
         if (session.state === 'completed') return session;
         if (session.state !== 'active') fail('SESSION_NOT_ACTIVE');
         const verified = session.parts.find(part => part.partNumber === number);

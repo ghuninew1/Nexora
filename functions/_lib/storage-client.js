@@ -85,6 +85,8 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
       for (const name of ['Idempotency-Key', 'X-Part-SHA256', ...(operation === 'download' ? ['Range', 'If-Range'] : [])]) {
         if (requestHeaders[name]) headers.set(name, requestHeaders[name]);
       }
+      const uploadRequestId = incomingRequest.headers.get('X-Upload-Request-ID');
+      if (operation === 'upload-session' && /^[a-f0-9-]{36}$/u.test(uploadRequestId || '')) headers.set('X-Upload-Request-ID', uploadRequestId);
     } catch (error) {
       diagnostic(logger, operation, `stage=request-build result=header-error type=${safeErrorType(error)}`);
       throw error;
@@ -151,7 +153,9 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
       diagnostic(logger, operation, timedOut
         ? 'result=timeout'
         : `result=fetch-error type=${safeErrorType(error)} redirect=manual`);
-      throw new ApiError(timedOut ? 'PROVIDER_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE', timedOut ? 504 : 503);
+      const failure = new ApiError('PROVIDER_UNAVAILABLE', timedOut ? 504 : 503);
+      failure.upstreamFailure = timedOut ? 'timeout' : 'fetch-error';
+      throw failure;
     }
     if (operation === 'download' && [200, 206, 416].includes(response.status)) clearTimeout(timer);
     return {
@@ -184,7 +188,10 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
             ? `result=provider-error source=${upstreamCode === 'PROVIDER_UNAVAILABLE' ? 'upstream-code' : 'http-status'}`
             : `result=operation-error code=${code}`);
         } else diagnostic(logger, result.operation, `result=http-error status=${result.response.status}`);
-        throw new ApiError(code, statusFor(code));
+        const failure = new ApiError(code, statusFor(code));
+        failure.upstreamStatus = result.response.status;
+        failure.upstreamFailure = 'http-error';
+        throw failure;
       }
       try {
         if (result.operation === 'copy') diagnostic(logger, result.operation, `stage=response-parse status=${result.response.status}`);
@@ -197,7 +204,10 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
         diagnostic(logger, result.operation, result.operation === 'copy'
           ? `result=invalid-response status=${result.response.status}`
           : `result=parse-error status=${result.response.status}`);
-        throw new ApiError('PROVIDER_UNAVAILABLE', 502);
+        const failure = new ApiError('PROVIDER_UNAVAILABLE', 502);
+        failure.upstreamStatus = result.response.status;
+        failure.upstreamFailure = 'invalid-response';
+        throw failure;
       }
     } finally { result.cleanup(); }
   }

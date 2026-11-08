@@ -62,7 +62,7 @@ The safe fallback when Web Locks or authenticated public identity is unavailable
 
 Ownership is retained until local operations and queued persistence settle, then released on success, confirmed cancellation, pause/error/offline wait, or lifecycle teardown. Account/logout/unmount aborts pending lock requests and local HTTP, invalidates epochs and releases File references; it never DELETEs the server session. A late response cannot update a disposed task or emit completion. Closing an entire browser context is handled by the native lock lifecycle, not a heartbeat deadline. Completed callbacks remain once per local task; separate tabs may independently discover the same already-completed logical object, but do not POST completion again.
 
-Five named Web Locks bound multipart workers across **all cooperating tabs/owners on the same origin** to5. Per-queue1/2/3/5 preferences still apply within that ceiling. This budget includes hashing, requests, controls and retry waits. Waiting for another tab consumes a local queue slot conservatively; it does not send backend requests. Locks do not coordinate different browsers/devices, isolated storage partitions or old bundles; server authorization/version/lease checks remain the final boundary.
+Five named Web Locks bound multipart workers across **all cooperating tabs/owners on the same origin** to5. Current per-queue concurrency is fixed at one file per tab; saved concurrency preferences are ignored. This budget includes hashing, requests, controls and retry waits. Waiting for another tab consumes a local queue slot conservatively; it does not send backend requests. Locks do not coordinate different browsers/devices, isolated storage partitions or old bundles; server authorization/version/lease checks remain the final boundary.
 
 ### Offline and bounded reconnection
 
@@ -197,3 +197,10 @@ The uploads container is the sole Transfer Manager section. Downloads intentiona
 ## Current download integration — native browser only
 
 Managed Phase5.2/5.3 download engines, hook, persistence, locks and Downloads UI were removed on2026-11-08. Downloads go directly through the existing authenticated same-origin native endpoint and never enter Transfers. The panel retains Upload Queue only. No File System Access API, downloaded-byte state or download concurrency exists in frontend runtime. Upload implementation/recovery/locks/preferences are unchanged. Public native downloads and safe previews remain. See [current download product behavior](LARGE_FILE_TRANSFER_DOWNLOAD.md#current-product-behavior--native-downloads-2026-11-08) and the latest PROJECT_HANDOFF entry for checks and real-provider limits.
+
+
+## Multipart interruption recovery and diagnostics
+
+The worker can render an error/paused state while still awaiting IndexedDB writes and Web Locks release. Explicit Retry/Resume/reconciliation intents are now deferred until that worker releases its active slot, rather than being discarded as already-active work. Rapid clicks remain deduplicated. Retry retains session/create identity, resets the existing automatic retry budget and rechecks verified receipts; a valid paused session may be explicitly resumed. Server Retry-After remains effective. Cancel/logout/unmount supersede a pending retry safely.
+
+Failed rows expose a collapsed Upload diagnostics panel: sanitized request UUID, UTC timestamp, HTTP method, endpoint template, stage, part number, status, allowlisted error code/body shape, validated CF-Ray, original File availability and last confirmed remote state. A failed PUT followed by failed recovery GET retains both records; ambiguous completion preserves POST/status evidence. Diagnostics are memory-only and clear on completion/workspace teardown. See `MULTIPART_UPLOAD_RECOVERY.md` for exact validation and limitations; a last-confirmed state is not proof the session still exists after a failing status check.

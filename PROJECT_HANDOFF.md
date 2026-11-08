@@ -854,3 +854,34 @@ Validation:
 Browser plugin unavailable; used existing cached Playwright/Chrome for local QA with a separate temporary profile. npm wrapper cache was unwritable and initial sandbox browser launch aborted; direct cached runtime and approved local Chrome execution resolved these environment failures. All task-created browser/dev server processes closed and182.7 MB fixture removed in finally. The user's existing browser was used only to read the production capability; no production upload was initiated.
 
 Evidence outside Git: `/private/tmp/nexora-upload-test-final.log`, `/private/tmp/nexora-upload-lint.log`, `/private/tmp/nexora-upload-build.log`, `/private/tmp/nexora-upload-browser.log`, `/private/tmp/nexora-upload-schema-result.json`, `/private/tmp/nexora-upload-readiness.png`, `/private/tmp/nexora-upload-desktop.png`, `/private/tmp/nexora-upload-mobile.png`. No 10 GiB/load/stress run, production writes, deployment, migrations, environment/secret updates, infrastructure changes, commit or push. After the operator activates compatible multipart and deploys the patch,182.7 MB is within the verified local strategy; real Garage success remains to be checked with the actual file and checksum.
+
+
+## Multipart interruption and manual retry recovery (2026-11-08)
+
+Operator reported production `garage 2.zip` at56%,13/23 acknowledged parts/104 MB verified, availability error and Retry connection not continuing. Read-only inspection of the existing Chrome session subsequently showed the file in My Files and an empty Transfer Manager; the operator confirmed it succeeded later. The original HTTP endpoint/status/body/request ID/timestamp and File reference were no longer inspectable. Shared/Garage runtime logs were not accessible through a configured host connection. **The original production interruption remains unverified; do not attribute it to Garage or claim a captured503.** No new production retry/upload was initiated.
+
+Confirmed source defect: queue publishes an error before its worker finishes persistence/Web Locks teardown; manual Retry changes state to reconciling but the old enqueue guard drops an active task. A deterministic delayed-error-persistence test failed on old source (`success` expected, `reconciling` remained), then passed with the fix. This establishes a real Retry race, but cannot prove the vanished production event took that path. Existing manual retry already reset retryAttempts; the fix retains the enqueue intent rather than claiming the reset was missing.
+
+Changed runtime files:
+- `src/hooks/useUploadQueue.js`: retain/deduplicate pending control dispatch until worker release; allow recovery reconciliation through that teardown window; explicit normal Retry may resume a valid paused session. Cancel/logout/unmount/epoch/permission guards, original File/session identity, Retry-After and single-file queue preserved. Failed rows receive safe in-memory diagnostics; completion clears them.
+- `src/services/multipart-upload.js`: permanent NAME_CONFLICT classification; request UUID/method/endpoint template/stage/part/status/time and safe response-code/shape diagnostics, validated CF-Ray, at most one preceding failed PUT/POST when recovery GET fails. Preserve ambiguity/cooldown metadata through completion errors. Receipt/checksum recovery retains existing semantics, including accepted-before-timeout parts.
+- `src/components/files/UploadQueue.jsx`: collapsed Upload diagnostics details with cx/accessibility and wrapped text.
+- `functions/_lib/storage-client.js`, `functions/_lib/upload-sessions.js`: validated non-secret X-Upload-Request-ID forwarding and value-free upstream failure logs with correlation/time/stage/part/normalized and actual upstream status/failure kind. No provider IDs/URLs/headers/raw bodies or credentials logged. Current Shared/Garage do not automatically log the forwarded header.
+
+Tests updated: `tests/ui/upload-queue.spec.jsx`, `tests/multipart-upload.test.js`, `tests/upload-sessions.test.js`. Coverage includes manual Retry during teardown, duplicate clicks, reset budget,23-part recovery from13 verified receipts, 503, accepted-then-timeout no second PUT, expired sessions, cancellation/unmount cleanup, permanent conflict classification, safe diagnostics/correlation and ambiguous completion. No size/part/concurrency, migrations, recovery schema or dependency changes.
+
+Documentation reviewed/aligned: README, AGENTS, frontend transfer notes, historical upload-rejection report (now marked historical); new `docs/MULTIPART_UPLOAD_RECOVERY.md` has evidence boundaries, safe diagnostics meaning, read-only tail/host commands, source-derived timeouts/cleanup and deployment/reselection instructions.
+
+| Check | Result |
+| --- | --- |
+| Before-fix regression | **FAIL expected**; stuck reconciling after error persistence release |
+| `pnpm lint` | **PASS** |
+| Full `pnpm test` with existing Shared/acceptance dependency paths | **PASS237 Node +97 UI**, zero failures/skips; actual Shared route/SQLite/adapter bridges mock S3 |
+| `pnpm build` | **PASS** |
+| `git diff --check`, final diff review | **PASS** |
+| Chrome desktop1280×900/mobile390×844 localhost5184 | **PASS**, real client plus mocked API:191,574,836 bytes/23 parts, part14 returns503 three times after13 verified, manual Retry completes same session. Parts1–13 each sent once, part14 four attempts, part17 accepted then response lost and not re-uploaded; all other parts once, one create/complete. Every received part length/SHA-256 checked. Diagnostics exposed exact synthetic failure and File presence; IndexedDB recovery count0 after success. No overlay/app/page errors;4 expected injected network console errors, no others. No mobile horizontal overflow; screenshots visually inspected |
+| Original production failure and host log correlation | **NOT VERIFIED**; operator confirms later success, historical failure details unavailable; no production mutation |
+
+Browser plugin unavailable; used preinstalled cached Playwright/Chrome with an isolated temporary profile and approved local execution. All task-created browser/server processes closed,191.6 MB fixture deleted. No10 GiB/load/stress, migration, production DB/data/config changes, restart, deployment, commit or push. No infrastructure/configuration change is justified by current evidence. Existing valid interrupted sessions can recover with retained metadata/authorization and matching original-file reselection after reload; completed/expired/cancelled/missing sessions are not recreated to bypass checks.
+
+Evidence: `/private/tmp/nexora-retry-before.log`, `/private/tmp/nexora-retry-tests-final.log`, `/private/tmp/nexora-retry-lint-final.log`, `/private/tmp/nexora-retry-build-final.log`, `/private/tmp/nexora-retry-browser.log`, `/private/tmp/nexora-retry-diagnostics.png`, `/private/tmp/nexora-retry-mobile.png`, `/private/tmp/nexora-retry-completed.png`.

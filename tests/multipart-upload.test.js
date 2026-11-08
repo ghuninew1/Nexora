@@ -246,3 +246,84 @@ test('multipart responses preserve quota, capability and size errors without ret
     assert.equal(f.calls.length, 1);
   }
 });
+
+test('temporary 503 part response reconciles and then retries only the missing part', async () => {
+  const f = fixture(); let first = true;
+  f.hook((url, init) => {
+    if (init.method === 'PUT' && first) { first = false; return Response.json({ error: { code: 'PROVIDER_UNAVAILABLE' } }, { status: 503 }); }
+  });
+  const receipt = await f.client.uploadPart('transfer_test', file, 1);
+  assert.equal(receipt.sha256, digest('abcd'));
+  assert.equal(f.calls.filter(c => c.method === 'PUT').length, 2);
+  assert.equal(f.session.parts.length, 1);
+});
+
+test('timeout after remote acceptance reconciles the receipt without a second PUT', async () => {
+  const f = fixture({ timeoutMs: 10, maxRetries: 0 });
+  f.hook((url, init) => {
+    if (init.method !== 'PUT') return;
+    f.session.parts = [{ partNumber: 1, sizeBytes: 4, sha256: digest('abcd') }];
+    f.session.acknowledgedBytes = 4;
+    return new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('timed out', 'AbortError')), { once: true }));
+  });
+  const receipt = await f.client.uploadPart('transfer_test', file, 1);
+  assert.equal(receipt.sha256, digest('abcd'));
+  assert.equal(f.calls.filter(c => c.method === 'PUT').length, 1);
+  assert.equal(f.calls.at(-1).method, 'GET');
+});
+
+test('failed PUT and failed reconciliation preserve bounded safe diagnostics with request correlation', async () => {
+  const f = fixture({ maxRetries: 0 }); let partFailed = false;
+  f.hook((url, init) => {
+    if (init.method === 'PUT') {
+      partFailed = true;
+      return Response.json({ error: { code: 'PROVIDER_UNAVAILABLE', message: 'private-provider-url-and-secret' }, secret: 'never-display' }, { status: 503, headers: { 'CF-Ray': '0123456789abcdef-BKK' } });
+    }
+    if (partFailed) return new Response('private-HTML-token', { status: 502 });
+  });
+  await assert.rejects(f.client.uploadPart('transfer_test', file, 2), error => {
+    assert.equal(error.code, 'PROVIDER_UNAVAILABLE');
+    assert.equal(error.diagnostics.stage, 'reconciliation');
+    assert.equal(error.diagnostics.status, 502);
+    assert.deepEqual(error.diagnostics.responseBody, { format: 'non-json' });
+    assert.equal(error.previousDiagnostics.partNumber, 2);
+    assert.equal(error.previousDiagnostics.method, 'PUT');
+    assert.equal(error.previousDiagnostics.status, 503);
+    assert.equal(error.previousDiagnostics.rayId, '0123456789abcdef-BKK');
+    assert.deepEqual(error.previousDiagnostics.responseBody, { error: { code: 'PROVIDER_UNAVAILABLE' } });
+    assert.match(error.previousDiagnostics.requestId, /^[a-f0-9-]{36}$/u);
+    assert.match(error.previousDiagnostics.timestamp, /^\d{4}-\d\d-\d\dT/u);
+    assert.equal(error.previousDiagnostics.requestId, f.calls.find(c => c.method === 'PUT').headers['X-Upload-Request-ID']);
+    assert.doesNotMatch(JSON.stringify([error.diagnostics, error.previousDiagnostics]), /private-|secret|never-display|mount_test|transfer_test/u);
+    return true;
+  });
+});
+
+test('permanent name conflicts do not retry and unknown body/header content is not exposed', async () => {
+  const f = fixture();
+  f.hook(() => Response.json({ error: { code: 'NAME_CONFLICT', message: 'private' } }, { status: 409, headers: { 'CF-Ray': 'sensitive-value' } }));
+  await assert.rejects(f.client.createSession({ name: 'test.bin', sizeBytes: 10 }, 'test_key'), error => {
+    assert.equal(error.code, 'NAME_CONFLICT');
+    assert.equal(error.diagnostics.rayId, null);
+    assert.doesNotMatch(JSON.stringify(error.diagnostics), /private|sensitive-value/u);
+    return true;
+  });
+  assert.equal(f.calls.length, 1);
+});
+
+test('uncertain completion retains the failed POST and failed status request diagnostics', async () => {
+  const f = fixture({ maxRetries: 0 }); let completing = false;
+  f.hook((url) => {
+    if (url.endsWith('/complete')) completing = true;
+    if (completing) return Response.json({ error: { code: 'PROVIDER_UNAVAILABLE' } }, { status: 503 });
+  });
+  await assert.rejects(f.client.completeSession('transfer_test'), error => {
+    assert.equal(error.code, 'AMBIGUOUS_COMPLETION');
+    assert.equal(error.diagnostics.stage, 'session-status');
+    assert.equal(error.diagnostics.method, 'GET');
+    assert.equal(error.previousDiagnostics.stage, 'complete');
+    assert.equal(error.previousDiagnostics.method, 'POST');
+    assert.equal(error.previousDiagnostics.status, 503);
+    return true;
+  });
+});

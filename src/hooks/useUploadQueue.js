@@ -168,7 +168,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const finish = useCallback((task, result) => {
     if (!alive(task) || task.notified) return;
     task.notified = true;
-    update(task, { status: 'success', error: null, retryable: false,
+    update(task, { status: 'success', error: null, diagnostics: null, retryable: false,
       ...(task.strategy === 'multipart' ? { acknowledgedBytes: task.sizeBytes, completedParts: task.partCount } : {}) });
     try { optionsRef.current.onComplete?.(task, result); } catch { /* A refresh cannot undo confirmed publication. */ }
     task.file = null; task.client = null;
@@ -198,8 +198,8 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         throw new MultipartUploadError('INVALID_RESPONSE');
       }
       task.partCount = session.partCount; task.expiresAt = session.expiresAt;
-      update(task, firstPage ? { partCount: session.partCount }
-        : { acknowledgedBytes: session.acknowledgedBytes, completedParts: session.parts.length, partCount: session.partCount });
+      update(task, firstPage ? { partCount: session.partCount, sessionState: session.state }
+        : { acknowledgedBytes: session.acknowledgedBytes, completedParts: session.parts.length, partCount: session.partCount, sessionState: session.state });
     };
     while (alive(task) && !blockedRef.current) {
       task.controller = new AbortController();
@@ -318,6 +318,10 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         if (!alive(task)) return;
         const error = task.permissionRevoked ? new MultipartUploadError('PERMISSION_REVOKED') : caughtError;
         task.permissionRevoked = false;
+        update(task, { diagnostics: { ...(error.diagnostics ?? { timestamp: new Date().toISOString(), code: error.code, stage: 'local-validation' }),
+          previousFailure: error.previousDiagnostics ?? null, queueStage: task.status,
+          originalFileAvailable: Boolean(task.file) && !['SESSION_EXPIRED', 'SESSION_CANCELLED', 'FILE_MISMATCH'].includes(error.code),
+          lastConfirmedSessionState: task.sessionState ?? null } });
         if (error?.retryAfterMs > 0) task.retryAfterUntil = Date.now() + error.retryAfterMs;
         // An explicit intent takes precedence over retries; a changed intent restarts only control handling.
         if (task.strategy === 'multipart' && task.intent && task.intent !== handling) continue;
@@ -424,6 +428,12 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
       void ownedRun().finally(() => {
         if (!alive(task)) return;
         activeRef.current.delete(task.id); task.controller = null;
+        // UI controls can run after a terminal state is rendered but before
+        // persistence/Web Locks finish releasing this worker. Keep that intent.
+        if (task.enqueueAfterRelease) {
+          task.enqueueAfterRelease = false;
+          if (!FINISHED.has(task.status) && !pendingRef.current.includes(task)) pendingRef.current.push(task);
+        }
         queueMicrotask(() => { processRef.current?.(); if (!offlineRef.current) recoverNetworkRef.current?.(); });
       });
     }
@@ -431,7 +441,8 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   useLayoutEffect(() => { processRef.current = processQueue; queueMicrotask(processQueue); }, [processQueue, concurrency]);
 
   const enqueue = useCallback(task => {
-    if (!alive(task) || activeRef.current.has(task.id) || pendingRef.current.includes(task)) return;
+    if (!alive(task) || pendingRef.current.includes(task)) return;
+    if (activeRef.current.has(task.id)) { task.enqueueAfterRelease = true; return; }
     pendingRef.current.push(task);
     queueMicrotask(() => processRef.current?.());
   }, [alive]);
@@ -528,7 +539,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const retryReconciliation = useCallback(id => {
     const task = tasksRef.current.get(id);
     if (!task || !alive(task) || !['recovery_error','waiting_file','file_mismatch','waiting_ownership'].includes(task.status)
-      || activeRef.current.has(id) || pendingRef.current.includes(task) || blockedRef.current) return;
+      || pendingRef.current.includes(task) || blockedRef.current) return;
     task.mode = 'check'; update(task, { status: 'checking_server', error: null }); enqueue(task);
   }, [alive, update, enqueue]);
 
@@ -624,6 +635,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     if (!task || task.status !== 'error' || !task.retryable || blockedRef.current
       || (task.intent !== 'cancel' && (writeBlockedRef.current || !optionsRef.current.canUpload(task.storageId)))) return;
     task.retryAttempts = 0;
+    if (!task.intent) task.resumeRequested = true;
     update(task, { status: task.intent === 'cancel' ? 'cancelling' : task.intent === 'pause' ? 'pausing' : 'reconciling', error: null });
     enqueue(task);
   }, [update, enqueue]);

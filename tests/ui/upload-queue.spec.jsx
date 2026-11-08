@@ -613,3 +613,84 @@ it.each([
   expect(h.result.current.items[0].error).not.toMatch(/too large/);
   expect(h.options.uploadFile).not.toHaveBeenCalled();
 });
+
+it('retains manual retry during worker teardown and deduplicates rapid clicks', async () => {
+  const releasePersistence = deferred();
+  const recoveryStore = { save: vi.fn(record => record.lastState === 'error' ? releasePersistence.promise : Promise.resolve()), remove: vi.fn(async () => {}) };
+  const h = setup({ recoveryStore, waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = () => { throw err('PROVIDER_UNAVAILABLE'); };
+  const [id] = h.add();
+  await waitFor(() => expect(h.status()).toBe('error'));
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(3);
+  h.api.hooks.part = undefined;
+  act(() => { h.result.current.retryUpload(id); h.result.current.retryUpload(id); });
+  expect(h.status()).toBe('reconciling');
+  await act(async () => releasePersistence.resolve());
+  await waitFor(() => expect(h.status()).toBe('success'));
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(4);
+  expect(h.options.onComplete).toHaveBeenCalledTimes(1);
+});
+
+it('resumes 13 of 23 acknowledged parts after 503 exhaustion without retransmitting them', async () => {
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  let unavailable = true;
+  h.api.hooks.part = (id, source, number) => { if (number === 14 && unavailable) throw err('PROVIDER_UNAVAILABLE'); };
+  const [id] = h.add([{ name: 'garage 2.zip', size: Math.ceil(182.7 * 1024 ** 2), type: 'application/zip' }]);
+  await waitFor(() => expect(h.status()).toBe('error'));
+  expect(h.result.current.items[0]).toMatchObject({ partCount: 23, completedParts: 13, acknowledgedBytes: 13 * limits.partSizeBytes, retryable: true });
+  unavailable = false;
+  act(() => { h.result.current.retryUpload(id); h.result.current.retryUpload(id); });
+  await waitFor(() => expect(h.status()).toBe('success'));
+  for (let number = 1; number <= 23; number++) {
+    expect(h.api.calls.filter(c => c.name === 'part' && c.args[2] === number)).toHaveLength(number === 14 ? 4 : 1);
+  }
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'complete')).toHaveLength(1);
+  expect(h.options.uploadFile).not.toHaveBeenCalled();
+});
+
+it('manual retry restores the automatic budget and resumes a valid paused remote session', async () => {
+  const wait = vi.fn(async () => {}), h = setup({ waitForRetry: wait });
+  h.api.hooks.part = () => { throw err('PROVIDER_UNAVAILABLE'); };
+  const [id] = h.add();
+  await waitFor(() => expect(h.status()).toBe('error'));
+  const remote = h.api.sessions.get('session_1'); remote.state = 'paused';
+  let failOnce = true;
+  h.api.hooks.part = () => { if (failOnce) { failOnce = false; throw err('PROVIDER_UNAVAILABLE'); } };
+  act(() => h.result.current.retryUpload(id));
+  await waitFor(() => expect(h.status()).toBe('success'));
+  expect(wait.mock.calls.map(c => c[0])).toEqual([0, 1, 0]);
+  expect(h.api.calls.filter(c => c.name === 'resume')).toHaveLength(1);
+  expect(h.api.sessions.size).toBe(1);
+});
+
+it.each(['cancel', 'unmount'])('pending retry survives teardown safely when followed by %s', async action => {
+  const gate = deferred();
+  const recoveryStore = { save: vi.fn(r => r.lastState === 'error' ? gate.promise : Promise.resolve()), remove: vi.fn(async () => {}) };
+  const h = setup({ recoveryStore, waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = () => { throw err('PROVIDER_UNAVAILABLE'); };
+  const [id] = h.add();
+  await waitFor(() => expect(h.status()).toBe('error'));
+  act(() => h.result.current.retryUpload(id));
+  if (action === 'cancel') act(() => h.result.current.cancelUpload(id)); else h.unmount();
+  await act(async () => gate.resolve());
+  if (action === 'cancel') await waitFor(() => expect(h.status()).toBe('cancelled'));
+  await waitFor(() => expect(navigator.locks.held.size).toBe(0));
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(3);
+  expect(h.api.calls.filter(c => c.name === 'cancel')).toHaveLength(action === 'cancel' ? 1 : 0);
+  expect(h.options.onComplete).not.toHaveBeenCalled();
+});
+
+it('an expired session on manual reconciliation stops without replacement or further part writes', async () => {
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  h.api.hooks.part = () => { throw err('PROVIDER_UNAVAILABLE'); };
+  const [id] = h.add(); await waitFor(() => expect(h.status()).toBe('error'));
+  h.api.sessions.get('session_1').state = 'expired';
+  act(() => h.result.current.retryUpload(id));
+  await waitFor(() => expect(h.status()).toBe('expired'));
+  expect(h.result.current.items[0].retryable).toBe(false);
+  expect(h.result.current.items[0].diagnostics.originalFileAvailable).toBe(false);
+  expect(h.api.sessions.size).toBe(1);
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(3);
+});

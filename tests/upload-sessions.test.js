@@ -23,7 +23,7 @@ function d1(db) {
     },
   };
 }
-async function fixture(fetchImpl) {
+async function fixture(fetchImpl, logger = { warn() {} }) {
   const db = new DatabaseSync(':memory:');
   const migrations = new URL('../migrations/', import.meta.url);
   for (const name of readdirSync(migrations).filter(n => n.endsWith('.sql')).sort()) db.exec(readFileSync(new URL(name, migrations), 'utf8'));
@@ -35,7 +35,7 @@ async function fixture(fetchImpl) {
   db.prepare('INSERT INTO storage_access(storage_id,user_id,can_upload,created_at,updated_at) VALUES (?,?,1,1,1)').run('mount_test',user.id);
   const session = await login(new Request(`${origin}/api/auth/login`),env,{email:user.email,password:'valid password for tests'});
   const otherSession = await login(new Request(`${origin}/api/auth/login`),env,{email:other.email,password:'valid password for tests'});
-  const handler = createApiHandler({fetchImpl,logger:{warn(){}}});
+  const handler = createApiHandler({fetchImpl,logger});
   const request = (suffix = '', { method='GET', body, headers={}, token=session.token } = {}) => handler(new Request(origin+path+suffix, {
     method, headers: { Cookie: `nexora_session=${token}`, Origin:origin, ...(body && !(body instanceof Uint8Array) ? {'Content-Type':'application/json'} : {}), ...headers },
     ...(body === undefined ? {} : {body: body instanceof Uint8Array ? body : JSON.stringify(body)}),
@@ -311,5 +311,32 @@ test('completion rechecks a provider file ceiling changed during authorization b
     assert.equal((await f.request(`/${id}/complete`, { method: 'POST', body: { version: 1 } })).status, 413);
     assert.equal(capabilityReads, 3);
     assert.ok(!mock.calls.some(c => c.p.endsWith('/complete')));
+  } finally { f.db.close(); }
+});
+
+
+test('upload diagnostics correlate upstream failure without logging identifiers, bytes or secrets', async () => {
+  const mock = mockProvider(), lines = [];
+  const trace = '01234567-89ab-4cde-8fab-0123456789ab';
+  let forwarded;
+  const f = await fixture((url, init) => {
+    if (new URL(url).pathname.includes('/parts/')) {
+      forwarded = init.headers.get('X-Upload-Request-ID');
+      return Response.json({ error: { code: 'PROVIDER_UNAVAILABLE', message: 'private-upstream-token' } }, { status: 503 });
+    }
+    return mock.fetchImpl(url, init);
+  }, { warn: line => lines.push(line) });
+  try {
+    const id = (await (await create(f)).json()).data.transferId;
+    const response = await f.request(`/${id}/parts/1`, { method: 'PUT', headers: {
+      'Content-Type': 'application/octet-stream', 'X-Part-SHA256': digest(Buffer.from('abc')), 'X-Upload-Request-ID': trace,
+    }, body: Buffer.from('abc') });
+    assert.equal(response.status, 503);
+    assert.equal(forwarded, trace);
+    const output = lines.join('\n');
+    assert.match(output, new RegExp('request=' + trace));
+    assert.match(output, /timestamp=.*stage=part-upload method=PUT part=1 status=503 upstreamStatus=503 result=http-error/u);
+    assert.doesNotMatch(output, /private-upstream-token|test-project|test-only-secret|test-only-access|providerReference|X-Part-SHA256/u);
+    assert.ok(!output.includes(id));
   } finally { f.db.close(); }
 });
