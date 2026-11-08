@@ -12,7 +12,13 @@ function archivePath(path) {
   return path;
 }
 
-export async function collectFolderZip(root, { list, signal }) {
+export async function collectFolderZip(root, options) {
+  if (root.type !== 'folder') fail('Folder is unavailable.');
+  return collectSelectedZip([root], options);
+}
+
+export async function collectSelectedZip(roots, { list, signal, onProgress = () => {} }) {
+  if (!Array.isArray(roots) || !roots.length || roots.length > MAX_ZIP_ENTRIES) fail(ZIP_LIMIT_MESSAGE);
   const entries = [], seen = new Set(), paths = new Set();
   let bytes = 0;
   const add = (object, path) => {
@@ -25,7 +31,9 @@ export async function collectFolderZip(root, { list, signal }) {
       bytes += object.sizeBytes;
       if (bytes > MAX_ZIP_BYTES) fail(ZIP_LIMIT_MESSAGE);
     } else if (object.type !== 'folder') fail('Unsupported folder entry.');
-    const entry = { ...object, path }; entries.push(entry); return entry;
+    const entry = { ...object, path }; entries.push(entry);
+    onProgress({ stage: 'listing', name: path, discoveredEntries: entries.length, transferred: 0, total: null });
+    return entry;
   };
   const visit = async (folder, path) => {
     check(signal); add(folder, path);
@@ -49,8 +57,12 @@ export async function collectFolderZip(root, { list, signal }) {
       }
     } while (cursor !== null);
   };
-  if (root.type !== 'folder' || safePath(root.name).length !== 1) fail('Folder is unavailable.');
-  await visit(root, root.name);
+  for (const root of roots) {
+    check(signal);
+    if (safePath(root.name).length !== 1) fail('Unsafe archive filename.');
+    if (root.type === 'folder') await visit(root, root.name);
+    else add(root, root.name);
+  }
   return { entries, bytes };
 }
 
@@ -73,7 +85,7 @@ export async function buildFolderZip(manifest, { read, signal, onProgress = () =
     if (name.length > 65535) fail('Archive path is too long.');
     const start = offset, size = folder ? 0 : entry.sizeBytes;
     if (!Number.isSafeInteger(size) || size < 0 || size > MAX_ZIP_BYTES) fail(ZIP_LIMIT_MESSAGE);
-    onProgress({ name: entry.path, transferred, total: manifest.bytes, stage: 'downloading' });
+    onProgress({ name: entry.path, transferred, total: manifest.bytes, discoveredEntries: manifest.entries.length, stage: 'downloading' });
     const local = header(30); local.view.setUint32(0, 0x04034b50, true); local.view.setUint16(4, 20, true);
     local.view.setUint16(6, 0x0808, true); local.view.setUint16(12, 33, true); local.view.setUint16(26, name.length, true);
     append(local.bytes); append(name);
@@ -82,6 +94,8 @@ export async function buildFolderZip(manifest, { read, signal, onProgress = () =
       const stream = await read(entry, signal);
       if (signal?.aborted) { await stream.cancel().catch(() => {}); check(signal); }
       const reader = stream.getReader();
+      const cancelReader = () => { void reader.cancel().catch(() => {}); };
+      signal?.addEventListener('abort', cancelReader, { once: true });
       try {
         for (;;) {
           check(signal); const result = await reader.read(); check(signal);
@@ -91,9 +105,9 @@ export async function buildFolderZip(manifest, { read, signal, onProgress = () =
           if (received > size || transferred > MAX_ZIP_BYTES) fail('File size changed or ZIP limit exceeded. Refresh and try again.');
           for (const byte of chunk) crc = CRC_TABLE[(crc ^ byte) & 255] ^ (crc >>> 8);
           append(chunk);
-          onProgress({ name: entry.path, transferred, total: manifest.bytes, stage: 'downloading' });
+          onProgress({ name: entry.path, transferred, total: manifest.bytes, discoveredEntries: manifest.entries.length, stage: 'downloading' });
         }
-      } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+      } finally { signal?.removeEventListener('abort', cancelReader); await reader.cancel().catch(() => {}); reader.releaseLock(); }
       if (received !== size) fail('A file was truncated or changed. Refresh and try again.');
     }
     crc = (crc ^ 0xffffffff) >>> 0;

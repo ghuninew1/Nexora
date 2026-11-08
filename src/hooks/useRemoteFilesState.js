@@ -772,6 +772,13 @@ export default function useRemoteFilesState() {
     }
   }, [canStartDownload, canUseCapability, storageId, refreshRecent, expireSession, folderDownload]);
 
+  const downloadObjects = useCallback(async files => {
+    if (!canStartDownload || !canUseCapability('list') || !canUseCapability('stat') || !Array.isArray(files) || files.length < 2
+      || files.some(file => !file || !['file', 'folder'].includes(file.type) || !isValidObjectId(file.objectId)
+        || (file.storageId && file.storageId !== storageId))) return { error: 'FORBIDDEN' };
+    return folderDownload.start(files);
+  }, [canStartDownload, canUseCapability, storageId, folderDownload]);
+
   const trashObject = useCallback((file) => runObjectOperation({
     file,
     capability: 'trash',
@@ -1145,6 +1152,7 @@ export default function useRemoteFilesState() {
     moveObject,
     copyObject,
     downloadObject,
+    downloadObjects,
     trashObject,
     moveObjects,
     trashObjects,
@@ -1161,7 +1169,7 @@ export default function useRemoteFilesState() {
   }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice, activeStorage, capabilities,
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
     operationFeedback, clearOperationFeedback, uploadQueue, uploadFiles, cancelUpload, pauseUpload, resumeUpload, retryUpload, clearFinishedUploads,
-    renameObject, moveObject, copyObject, downloadObject, folderDownload, canStartDownload, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
+    renameObject, moveObject, copyObject, downloadObject, downloadObjects, folderDownload, canStartDownload, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
     preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,
     favoriteState, refreshFavorites, toggleFavorite, recentState, refreshRecent, recordRecentAccess,

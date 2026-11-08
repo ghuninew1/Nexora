@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { collectFolderZip, buildFolderZip, MAX_ZIP_BYTES, MAX_ZIP_ENTRIES } from '../src/utils/folder-zip.js';
+import { collectFolderZip, collectSelectedZip, buildFolderZip, MAX_ZIP_BYTES, MAX_ZIP_ENTRIES } from '../src/utils/folder-zip.js';
 const folder = (objectId, name, parentId = null) => ({ objectId, name, parentId, type: 'folder' });
 const file = (objectId, name, parentId, sizeBytes = 5) => ({ objectId, name, parentId, sizeBytes, type: 'file' });
 const root = folder('r', 'โครงการ');
@@ -52,4 +52,44 @@ test('download errors, truncated/excess bodies and cancellation never return a p
   await assert.rejects(buildFolderZip(m, { signal: controller.signal, read: async () => stream('pdf'), onProgress: p => { if (p.transferred) controller.abort(); } }), { name: 'AbortError' });
   const cancelled = new AbortController(); cancelled.abort();
   await assert.rejects(collectFolderZip(root, { signal: cancelled.signal, list: () => assert.fail('no request') }), { name: 'AbortError' });
+});
+
+for (const kind of ['files', 'folders', 'mixed']) {
+  test(`multiple roots: ${kind} preserve UTF-8 names, nested/empty folders and independent extraction integrity`, async () => {
+    const a = file('a', 'รายงาน.pdf', null, 3), b = file('b', 'image.png', null, 3);
+    const project = folder('p', 'Project-A'), other = folder('o', 'โครงการ-B');
+    const roots = kind === 'files' ? [a, b] : kind === 'folders' ? [project, other] : [a, b, project, other];
+    const progress = [];
+    const manifest = await collectSelectedZip(roots, { onProgress: p => progress.push(p), list: async id => ({
+      items: id === 'p' ? [folder('docs', 'Documents', 'p'), folder('empty', 'Empty', 'p')]
+        : id === 'docs' ? [file('notes', 'บันทึก.txt', 'docs', 3)] : [], nextCursor: null }) });
+    const blob = await buildFolderZip(manifest, { read: async () => stream('abc') });
+    const result = spawnSync('python3', ['-c', `import io,sys,zipfile,json
+z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read()))
+assert z.testzip() is None
+for e in z.infolist():
+ if not e.is_dir(): assert z.read(e) == b'abc'
+print(json.dumps(z.namelist(),ensure_ascii=False))`], { input: new Uint8Array(await blob.arrayBuffer()), encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), manifest.entries.map(e => e.path + (e.type === 'folder' ? '/' : '')));
+    assert.equal(progress.at(-1).discoveredEntries, manifest.entries.length);
+    if (kind !== 'files') assert.match(result.stdout, /Project-A\/Empty\//);
+  });
+}
+test('multiple roots share size/count budgets and reject duplicate/overlapping paths and unsafe root names', async () => {
+  const empty = async () => ({ items: [], nextCursor: null });
+  await assert.rejects(collectSelectedZip([file('a', 'a', null, MAX_ZIP_BYTES / 2 + 1), file('b', 'b', null, MAX_ZIP_BYTES / 2)], { list: empty }), /64 MiB/);
+  await assert.rejects(collectSelectedZip([folder('a', 'a'), folder('b', 'b')], { list: async id => ({ items: Array.from({ length: 250 }, (_, i) => file(id + i, String(i), id, 0)), nextCursor: null }) }), /500/);
+  for (const roots of [[file('a', 'same', null), file('b', 'same', null)], [folder('a', 'same'), folder('b', 'same')], [file('a', 'same', null), folder('b', 'same')], [file('a', 'x', null), file('a', 'y', null)], [file('a', '../x', null), file('b', 'b', null)]]) {
+    await assert.rejects(collectSelectedZip(roots, { list: empty }));
+  }
+  await assert.rejects(collectSelectedZip([folder('a', 'a'), file('b', 'b', 'a')], { list: async () => ({ items: [file('b', 'b', 'a')], nextCursor: null }) }), /duplicate/);
+});
+test('cancelling a pending stream read releases the reader and never returns a partial ZIP', async () => {
+  const manifest = await collectSelectedZip([file('a', 'a', null)], { list: () => assert.fail('files do not list') });
+  const controller = new AbortController(); let cancelled = false;
+  const pending = buildFolderZip(manifest, { signal: controller.signal, read: async () => new ReadableStream({
+    pull() { setTimeout(() => controller.abort(), 0); }, cancel() { cancelled = true; }
+  }) });
+  await assert.rejects(pending, { name: 'AbortError' }); assert.equal(cancelled, true);
 });

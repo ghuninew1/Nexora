@@ -1,5 +1,5 @@
 import {
-  ChevronDown, FolderPlus, Grid2X2, List, Plus, RefreshCw,
+  Download, ChevronDown, FolderPlus, Grid2X2, List, Plus, RefreshCw,
   Share2, Search, Trash2, ArrowUpDown, Eye, Star, Copy, ArrowRightLeft, Scissors, ClipboardPaste, Pencil,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
@@ -9,7 +9,7 @@ import { Separator } from "../ui/separator";
 import { cx } from "../../utils/cx";
 import UploadButton from "./UploadButton";
 
-function FileToolbar({ canFavorite, canPaste, onClipboardCopy, onClipboardCut, onPaste, onRenameSelected, canRenameSelected, canShareSelected, onShareSelected, selectedCount, selectedFile, selectedFavorite, isSelectionBusy = false, canPreviewSelected = false, canMoveSelected = false, canCopySelected = false, canTrashSelected = false, onPreviewSelected, onToggleFavoriteSelected, onMoveSelected, onCopySelected, onTrashSelected, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange }) {
+function FileToolbar({ canDownloadSelected = false, onDownloadSelected, canFavorite, canPaste, onClipboardCopy, onClipboardCut, onPaste, onRenameSelected, canRenameSelected, canShareSelected, onShareSelected, selectedCount, selectedFile, selectedFavorite, isSelectionBusy = false, canPreviewSelected = false, canMoveSelected = false, canCopySelected = false, canTrashSelected = false, onPreviewSelected, onToggleFavoriteSelected, onMoveSelected, onCopySelected, onTrashSelected, onNewFolder, canCreateFolder, isCreatingFolder, canUpload, onUploadFiles, onRefresh, isRefreshing, query, onQueryChange, sortBy, onSortChange, sortDirection, onSortDirectionChange, view, onViewChange }) {
   const hasSelection = selectedCount > 0;
   const isBusy = isRefreshing || isCreatingFolder;
   return (
@@ -23,6 +23,7 @@ function FileToolbar({ canFavorite, canPaste, onClipboardCopy, onClipboardCut, o
         </div>
         {hasSelection ? <>
           {selectedCount > 1 ? <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label="Actions for selected items">
+            <Button variant="ghost" size="sm" onClick={onDownloadSelected} disabled={!canDownloadSelected || isSelectionBusy} title={canDownloadSelected ? 'Download selected items as one ZIP' : 'Download access is unavailable or another ZIP is being prepared.'}><Download />Download ZIP</Button>
             <Button variant="ghost" size="sm" onClick={onMoveSelected} disabled={!canMoveSelected || isSelectionBusy} title="Move selected items"><ArrowRightLeft />Move</Button>
             <Button variant="outline" size="sm" onClick={onTrashSelected} disabled={!canTrashSelected || isSelectionBusy} title="Move selected items to Trash"><Trash2 />Move to Trash</Button>
           </div> : selectedCount === 1 && selectedFile && <div className={cx("flex shrink-0 items-center gap-1")} role="group" aria-label={`Actions for ${selectedFile.name}`}>

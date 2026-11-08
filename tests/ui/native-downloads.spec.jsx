@@ -77,3 +77,14 @@ it('folder ZIP requires read and download grants plus list/stat/download capabil
   hook.rerender();
   expect(hook.result.current.canDownloadFolder).toBe(false);
 });
+it('bulk downloads reject missing grants, foreign mounts and invalid IDs before any request', async () => {
+  const hook = setup();
+  await act(async () => { expect(await hook.result.current.downloadObjects([file, { ...file, objectId: 'file_b' }])).toEqual({ error: 'FORBIDDEN' }); });
+  mocks.storage.activeStorage.permissions.read = true; mocks.storage.capabilities.stat = true; hook.rerender();
+  await act(async () => {
+    for (const other of [{ ...file, storageId: 'foreign' }, { ...file, objectId: '../bad' }]) {
+      expect(await hook.result.current.downloadObjects([file, other])).toEqual({ error: 'FORBIDDEN' });
+    }
+  });
+  expect(clicks).toEqual([]); expect(mocks.me).not.toHaveBeenCalled();
+});

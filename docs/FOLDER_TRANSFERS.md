@@ -26,6 +26,18 @@ Directory picker and folder drop support depend on browser/OS APIs. Safari/Firef
 
 References: [directory picker](https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory), [directory drop API](https://developer.mozilla.org/en-US/docs/Web/API/DataTransferItem/webkitGetAsEntry), [ZIP format](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
 
+## Multi-selection ZIP download
+
+Select two or more My Files items and choose **Download ZIP** in the existing bulk toolbar. Multiple files, multiple folders and mixed selections use `Selected-Files.zip`, with every selected item at the archive root under its original name. No additional wrapper directory is added. The selection is retained after success, failure or Cancel; Move/Trash and single-item Rename behavior stay unchanged. On narrow screens the existing action toolbar scrolls horizontally.
+
+The existing `folder-download.js` service refreshes every selected root through stat, then `collectSelectedZip` traverses folders and adds file roots to one bounded manifest. All roots share the same ZIP32 STORE/CRC32 writer, authorized same-origin file reads, and a single combined **64 MiB / 500 entries / depth 32** budget. Duplicate logical IDs, overlapping roots and duplicate archive paths fail closed before file content requests; the app does not rename, merge or silently omit selected items. Each backend endpoint remains responsible for current session/assignment/ownership/capability authorization.
+
+The existing workspace ZIP hook accepts either one folder or an array of selected items, and retains one active ZIP operation. Progress includes selected file/folder counts, discovered entries, received content bytes and current path, with completion/error/cancellation states. Success byte counts exclude archive headers. Cancel aborts active requests and explicitly cancels a pending stream reader; scope/permission teardown prevents late publication and releases URLs/timers. Only complete archives reach the native Blob save link. Single-file actions still use native streaming downloads; a single folder retains `FolderName.zip`.
+
+The bulk action is disabled without read/download grants and list/stat/download capabilities, while a ZIP is running, or while selected items are being mutated. Local tests cannot establish real-provider permissions or browser/OS saving behavior. The user reports the preceding single-folder ZIP implementation working in production; multi-selection production acceptance has not been performed by this task. Existing memory, snapshot, unsafe-name, browser and recovery limits above still apply. No deployment configuration, API or migration changes are required.
+
+Changed source: `src/utils/folder-zip.js`, `src/services/folder-download.js`, `src/hooks/useFolderDownload.js`, `src/hooks/useRemoteFilesState.js`, `src/components/files/FileBrowser.jsx`, `src/components/files/FileToolbar.jsx`. Tests: extended `tests/folder-zip.test.js`, `tests/ui/folder-download.spec.jsx`, `tests/ui/native-downloads.spec.jsx`; added `tests/ui/multi-download-toolbar.spec.jsx`.
+
 ## Changed source and tests
 
 | Phase | Files and responsibilities |

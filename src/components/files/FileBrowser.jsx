@@ -198,8 +198,8 @@ function FileBrowser() {
         <p className={cx('text-xs text-muted-foreground')}>Folder ZIP: up to 64 MiB, 500 files/folders, 32 levels. Drop folders here to upload (up to 50 files/folders).</p>
         {browser.folderDownload?.state && <div className={cx('rounded-xl border border-border bg-card p-3')}>
           <p role={browser.folderDownload.state.stage === 'error' ? 'alert' : 'status'} className={cx('text-sm [overflow-wrap:anywhere]')}>{browser.folderDownload.state.message || `${browser.folderDownload.state.stage === 'listing' ? 'Reading folder' : 'Preparing ZIP'}: ${browser.folderDownload.state.name}`}</p>
+          <p className={cx('mt-1 text-xs text-muted-foreground')}>{browser.folderDownload.state.selectedCount ?? 1} selected ({browser.folderDownload.state.selectedFiles ?? 0} files, {browser.folderDownload.state.selectedFolders ?? 1} folders) · {browser.folderDownload.state.discoveredEntries ?? 0} entries discovered · {browser.folderDownload.state.transferred ?? 0} / {browser.folderDownload.state.total ?? '…'} bytes received</p>
           {['listing', 'downloading'].includes(browser.folderDownload.state.stage) && <>
-            <p className={cx('mt-1 text-xs text-muted-foreground')}>{browser.folderDownload.state.transferred ?? 0} / {browser.folderDownload.state.total ?? '…'} bytes received</p>
             <div role="progressbar" aria-label="Folder ZIP download" aria-valuemin={0} aria-valuemax={browser.folderDownload.state.total || undefined} aria-valuenow={browser.folderDownload.state.total ? browser.folderDownload.state.transferred : undefined} className={cx('my-2 h-1.5 overflow-hidden rounded-full bg-muted')}><div className={cx('h-full bg-primary')} style={{ width: `${browser.folderDownload.state.total ? browser.folderDownload.state.transferred / browser.folderDownload.state.total * 100 : 0}%` }} /></div>
             <Button type="button" variant="outline" size="sm" onClick={browser.folderDownload.cancel}>Cancel folder ZIP</Button>
           </>}
@@ -211,6 +211,8 @@ function FileBrowser() {
         {browser.notice && <p className={cx("rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite">{browser.notice}</p>}
         {browser.revalidationError && <div className={cx("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-sm text-muted-foreground")} role="status" aria-live="polite"><span>{browser.revalidationError}</span><Button type="button" variant="ghost" size="sm" onClick={() => void browser.refreshCurrentFolder()}>Refresh</Button></div>}
         <FileToolbar
+          canDownloadSelected={browser.canDownloadFolder && selectedFiles.length === selectedCount && !['listing', 'downloading'].includes(browser.folderDownload?.state?.stage)}
+          onDownloadSelected={() => void browser.downloadObjects(selectedFiles)}
           selectedCount={selectedCount}
           canFavorite={browser.canFavorite}
           canPaste={canPaste}
