@@ -122,7 +122,7 @@ it('preserves the small-file path, limit and indeterminate UI without multipart 
   expect(screen.queryByRole('button', { name: /Pause/ })).toBeNull();
 });
 
-it('keeps multiple multipart sessions within preference concurrency and one operation per session', async () => {
+it('queues multipart files one at a time even when a higher concurrency is requested', async () => {
   const h = setup({ maxConcurrency: 2 }); const gate = deferred();
   const active = new Map(); let peak = 0;
   h.api.hooks.part = async id => {
@@ -131,11 +131,12 @@ it('keeps multiple multipart sessions within preference concurrency and one oper
     await gate.promise; active.delete(id);
   };
   h.add([file('a'), file('b'), file('c')]);
-  await waitFor(() => expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(2));
-  expect(h.api.sessions.size).toBe(2);
+  await waitFor(() => expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(1));
+  expect(h.api.sessions.size).toBe(1);
+  expect(h.result.current.concurrency).toBe(1);
   await act(async () => gate.resolve());
   await waitFor(() => expect(h.result.current.items.every(i => i.status === 'success')).toBe(true));
-  expect(peak).toBe(2); expect(h.options.onComplete).toHaveBeenCalledTimes(3);
+  expect(peak).toBe(1); expect(h.options.onComplete).toHaveBeenCalledTimes(3);
   for (const item of h.result.current.items) { expect(item.file).toBeUndefined(); expect(item.controller).toBeUndefined(); expect(item.key).toBeUndefined(); }
 });
 
@@ -552,4 +553,11 @@ it('measures only acknowledged byte deltas and clears speed on pause', async () 
     expect(h.result.current.items[0].bytesPerSecond).toBeNull();
     expect(h.result.current.items[0].etaSeconds).toBeNull();
   } finally { gate.resolve(); h.unmount(); time.mockRestore(); }
+});
+
+
+it('rejects files larger than the decimal 5 GB application limit', () => {
+  const transfers = { resumableUpload: true, maxFileBytes: 10 * 1024 ** 3, partSizeBytes: 8 * 1024 ** 2, maxParts: 1280, maxParallelParts: 1, sessionTtlSeconds: 604800 };
+  expect(selectUploadStrategy(5_000_000_000, 10, transfers).strategy).toBe('multipart');
+  expect(selectUploadStrategy(5_000_000_001, 10, transfers).error).toBe('UPLOAD_TOO_LARGE');
 });

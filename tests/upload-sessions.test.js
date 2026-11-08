@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
 import { createApiHandler } from '../functions/_lib/api.js';
 import { createUser, login } from '../functions/_lib/auth.js';
-import { RESUMABLE_LIMITS, exactPartStream } from '../functions/_lib/upload-sessions.js';
+import { RESUMABLE_LIMITS, exactPartStream, publicTransferCapabilities } from '../functions/_lib/upload-sessions.js';
 
 const origin = 'https://nexora.example.test';
 const path = '/api/storage/v1/storages/mount_test/uploads';
@@ -226,4 +226,29 @@ test('Nexora → Shared Hono → real multipart adapter integration', { skip: !p
     assert.equal(commands.filter(c=>c==='CompleteMultipartUploadCommand').length,1);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM storage_objects').get().n,1);
   }finally{f.db.close();db.close();}
+});
+
+
+test('multipart creation enforces the decimal 5 GB boundary before creating a provider session', async () => {
+  const mock = mockProvider(), f = await fixture(mock.fetchImpl);
+  try {
+    assert.equal((await create(f, randomUUID(), { ...createBody, sizeBytes: 5_000_000_000 })).status, 201);
+    const before = mock.sessions.size;
+    assert.equal((await create(f, randomUUID(), { ...createBody, sizeBytes: 5_000_000_001 })).status, 413);
+    assert.equal(mock.sessions.size, before);
+  } finally { f.db.close(); }
+});
+
+
+test('larger compatible upstream maximum is clamped and older oversized sessions can still be cancelled', async () => {
+  assert.equal(publicTransferCapabilities({ transfers: { resumableUpload: true, ...RESUMABLE_LIMITS, maxFileBytes: 10 * 1024 ** 3 } }, true).maxFileBytes, 5_000_000_000);
+  const mock = mockProvider(), f = await fixture(mock.fetchImpl);
+  try {
+    const id = (await (await create(f)).json()).data.transferId;
+    f.db.prepare('UPDATE transfer_sessions SET size_bytes = ? WHERE id = ?').run(5_000_000_001, id);
+    assert.equal((await f.request(`/${id}/resume`, { method: 'POST', body: { version: 1 } })).status, 413);
+    [...mock.sessions.values()][0].sizeBytes = 5_000_000_001;
+    [...mock.sessions.values()][0].partCount = Math.ceil(5_000_000_001 / RESUMABLE_LIMITS.partSizeBytes);
+    assert.equal((await f.request(`/${id}`, { method: 'DELETE' })).status, 200);
+  } finally { f.db.close(); }
 });

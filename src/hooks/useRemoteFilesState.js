@@ -534,7 +534,6 @@ export default function useRemoteFilesState() {
     recoveryStorageId: uploadScopeRef.current.storageId,
     scopeKey: JSON.stringify([authStatus, Boolean(signingOut), user?.id ?? user?.email ?? null, uploadScopeRef.current.storageId]),
     canUpload: (targetStorageId) => uploadAllowedRef.current && targetStorageId === uploadScopeRef.current.storageId,
-    maxConcurrency: preferences?.uploadConcurrency ?? 3,
     autoClear: preferences?.autoClearUploads ?? true,
   });
   const { addFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload, clearFinished: clearFinishedUploads } = uploadQueue;

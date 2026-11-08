@@ -65,7 +65,7 @@ function retryDelay(attempt, signal, retryAfterMs = 0) {
 }
 
 export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, onAdmissionError, canUpload = () => true,
-  scopeKey = 'workspace', maxConcurrency = 3, autoClear = true,
+  scopeKey = 'workspace', autoClear = true,
   createClient = createMultipartUploadClient, waitForRetry = retryDelay,
   recoveryScope = null, recoveryStorageId = null, recoveryStore = uploadRecoveryStore } = {}) {
   const [items, setItems] = useState([]);
@@ -82,7 +82,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const processRef = useRef(null);
   const recoverNetworkRef = useRef(null);
   const offlineRef = useRef(globalThis.navigator?.onLine === false);
-  const concurrency = [1, 2, 3, 5].includes(maxConcurrency) ? maxConcurrency : 3;
+  const concurrency = 1;
   useLayoutEffect(() => {
     optionsRef.current = { uploadFile, onComplete, onUnauthorized, onAdmissionError, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry, recoveryScope, recoveryStore };
     for (const task of activeRef.current.values()) {
@@ -501,7 +501,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
             void recoveryStore.remove(recoveryScope, record.id).catch(() => {});
             continue;
           }
-          const selected = selectUploadStrategy(record.sizeBytes, 0, { resumableUpload: true, maxFileBytes: 10 * 1024 ** 3,
+          const selected = selectUploadStrategy(Math.min(record.sizeBytes, 5_000_000_000), 0, { resumableUpload: true, maxFileBytes: 5_000_000_000,
             partSizeBytes: record.partSizeBytes, maxParts: 1280, maxParallelParts: 1, sessionTtlSeconds: 604800 });
           if (!selected.limits) continue;
           const task = { id: record.id, userScope: recoveryScope, storageId: record.storageId, parentId: record.parentId,

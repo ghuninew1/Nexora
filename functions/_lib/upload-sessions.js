@@ -8,7 +8,7 @@ import { recordActivity } from './activity.js';
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/u;
 const DIGEST = /^[A-Za-z0-9+/]{43}=$/u;
-export const RESUMABLE_LIMITS = Object.freeze({ maxFileBytes: 10 * 1024 ** 3, partSizeBytes: 8 * 1024 ** 2,
+export const RESUMABLE_LIMITS = Object.freeze({ maxFileBytes: 5_000_000_000, partSizeBytes: 8 * 1024 ** 2,
   maxParts: 1280, maxParallelParts: 1, sessionTtlSeconds: 7 * 86400 });
 const STATES = new Set(['creating', 'active', 'paused', 'completing', 'completed', 'cancelling', 'cancelled', 'expired']);
 
@@ -16,7 +16,9 @@ export function publicTransferCapabilities(caps, enabled) {
   const value = caps?.transfers;
   if (!enabled || value?.resumableUpload !== true) return { resumableUpload: false };
   // Version-one geometry is deliberately fixed until end-to-end limits are verified.
-  if (Object.entries(RESUMABLE_LIMITS).some(([key, expected]) => value[key] !== expected)) {
+  if (Object.entries(RESUMABLE_LIMITS).some(([key, expected]) => key === 'maxFileBytes'
+    ? !Number.isSafeInteger(value[key]) || value[key] < expected
+    : value[key] !== expected)) {
     throw new ApiError('PROVIDER_UNAVAILABLE', 502);
   }
   return { resumableUpload: true, ...RESUMABLE_LIMITS };
@@ -166,9 +168,16 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
       expiresAt: r.expires_at, statusSource: 'broker-snapshot' })), nextCursor: rows.results.length > limit ? selected.at(-1).id : null });
   }
   if (!row) throw new ApiError('NOT_FOUND', 404);
+  // Keep status and cancellation available for sessions created under an older limit.
+  if (row.size_bytes > RESUMABLE_LIMITS.maxFileBytes && (method === 'PUT' || method === 'POST')) {
+    throw new ApiError('UPLOAD_TOO_LARGE', 413);
+  }
   if (!row.shared_session_id) {
     // A create acknowledgement can be lost; stable upstream idempotency recovers it.
-    if (method === 'GET' && tail.length === 2) return createUpstream(200);
+    if (method === 'GET' && tail.length === 2) {
+      if (row.size_bytes > RESUMABLE_LIMITS.maxFileBytes) throw new ApiError('UPLOAD_TOO_LARGE', 413);
+      return createUpstream(200);
+    }
     if (!cancellation) throw new ApiError('UPLOAD_CONFLICT', 409);
     await call(`/uploads/by-key/${encodeURIComponent(row.id)}`, { method: 'DELETE' });
     await db.prepare("UPDATE transfer_sessions SET state = 'cancelled' WHERE id = ?").bind(row.id).run();
