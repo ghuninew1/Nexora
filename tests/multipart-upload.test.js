@@ -327,3 +327,39 @@ test('uncertain completion retains the failed POST and failed status request dia
     return true;
   });
 });
+
+test('Cloudflare resource failures stop automatic retries and reconciliation loops safely', async () => {
+  for (const body of [
+    JSON.stringify({ error: { code: 'worker_exceeded_resources', message: 'private-runtime-detail' } }),
+    JSON.stringify({ error: { code: 1102 } }),
+    'error code: 1102',
+    '<html>Cloudflare Error 1102: Worker exceeded resource limits. private-runtime-detail</html>',
+  ]) {
+    const f = fixture();
+    f.hook((url, init) => init.method === 'PUT' ? new Response(body, { status: 503, headers: { 'CF-Ray': 'a575a617fd8491b4-SIN' } }) : undefined);
+    await assert.rejects(f.client.uploadPart('transfer_test', file, 1), error => {
+      assert.equal(error.code, 'WORKER_RESOURCE_LIMIT');
+      assert.equal(error.diagnostics.partNumber, 1);
+      assert.equal(error.diagnostics.rayId, 'a575a617fd8491b4-SIN');
+      assert.deepEqual(error.diagnostics.responseBody, { error: { code: 'WORKER_RESOURCE_LIMIT' } });
+      assert.doesNotMatch(JSON.stringify(error.diagnostics), /private-runtime-detail/);
+      return true;
+    });
+    assert.equal(f.calls.filter(c => c.method === 'PUT').length, 1);
+    assert.equal(f.calls.at(-1).method, 'PUT');
+  }
+});
+
+test('resource error inspection is bounded and cancels an excessive error body', async () => {
+  let cancelled = false, reads = 0;
+  const first = new TextEncoder().encode('Cloudflare Error 1102 worker_exceeded_resources');
+  const f = fixture();
+  f.hook(() => new Response(new ReadableStream({
+    pull(c) { reads++; c.enqueue(reads === 1 ? first : new Uint8Array(8192)); },
+    cancel() { cancelled = true; },
+  }), { status: 503 }));
+  await assert.rejects(f.client.createSession({ name: 'test.bin', sizeBytes: 10 }, 'test_key'), { code: 'WORKER_RESOURCE_LIMIT' });
+  assert.equal(cancelled, true);
+  assert.ok(reads <= 4);
+  assert.equal(f.calls.length, 1);
+});

@@ -1,5 +1,7 @@
 # Multipart interruption and manual retry recovery
 
+A subsequent production failure supplied explicit Cloudflare1102 evidence. The next investigation confirmed Nexora Pages CPU-limit errors and added native streaming, fewer status reads and manual-only resource-error recovery. See [resource-limit report](UPLOAD_RESOURCE_LIMIT.md); this document's original interruption remains historical.
+
 ## Findings and evidence boundary (2026-11-08)
 
 The reported production failure was `garage 2.zip`, 182.7 MB as displayed by the UI, at 56%, 13/23 parts and 104.0 MB verified. These counters do **not** identify a failed request: the next PUT, receipt/status GET, reconciliation or another operation could fail while the last verified counter remains 13. `PROVIDER_UNAVAILABLE` covers several 5xx/transport failures and is not proof of a Garage outage.

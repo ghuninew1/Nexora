@@ -18,6 +18,7 @@ const messages = {
   PREVIEW_UNSUPPORTED: 'Preview is not available for this file.',
   OPERATION_TOO_LARGE: 'This operation exceeds the supported synchronous size.',
   PROVIDER_UNAVAILABLE: 'Storage is temporarily unavailable.',
+  WORKER_RESOURCE_LIMIT: 'A Cloudflare Worker exceeded its resource limit. Retry after the deployment is corrected.',
   TRANSFER_INCOMPLETE: 'The storage transfer did not complete.',
   RATE_LIMITED: 'Too many attempts. Try again later.',
   INTERNAL_ERROR: 'The request could not be completed.',
@@ -49,7 +50,7 @@ export function fail(code, status) {
 export function statusFor(code) {
   return ({ UPLOAD_CONFLICT: 409, UPLOAD_EXPIRED: 410, UPLOAD_BUSY: 429, UPLOAD_CHECKSUM_MISMATCH: 422, UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, INVALID_INPUT: 400, NAME_CONFLICT: 409,
     CAPABILITY_UNAVAILABLE: 422, QUOTA_EXCEEDED: 429, UPLOAD_TOO_LARGE: 413, OPERATION_TOO_LARGE: 413, PROVIDER_UNAVAILABLE: 503,
-    TRANSFER_INCOMPLETE: 502, RATE_LIMITED: 429, INTERNAL_ERROR: 500 })[code] || 500;
+    WORKER_RESOURCE_LIMIT: 503, TRANSFER_INCOMPLETE: 502, RATE_LIMITED: 429, INTERNAL_ERROR: 500 })[code] || 500;
 }
 
 export function requireSameOrigin(request) {
@@ -104,6 +105,7 @@ export function decodePath(pathname) {
 }
 
 export function normalizeUpstreamError(payload, status) {
+  if (status >= 500 && ['WORKER_RESOURCE_LIMIT', 'worker_exceeded_resources', 1102, '1102'].includes(payload?.error?.code)) return 'WORKER_RESOURCE_LIMIT';
   const allowed = new Set(['UPLOAD_CONFLICT', 'UPLOAD_EXPIRED', 'UPLOAD_BUSY', 'UPLOAD_CHECKSUM_MISMATCH', 'NOT_FOUND', 'INVALID_INPUT', 'NAME_CONFLICT', 'CAPABILITY_UNAVAILABLE', 'UPLOAD_TOO_LARGE', 'OPERATION_TOO_LARGE', 'QUOTA_EXCEEDED', 'TRANSFER_INCOMPLETE']);
   const code = payload?.error?.code;
   if (allowed.has(code)) return code;

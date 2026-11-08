@@ -118,7 +118,7 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
             {canPause && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-11 min-w-11')} onClick={() => onPause(item.id)} aria-label={`Pause upload ${item.name}`}><Pause aria-hidden="true" /></Button>}
             {multipart && item.status === 'paused' && canRetry && <Button type="button" variant="outline" size="sm" className={cx('min-h-11')} onClick={() => onResume(item.id)} aria-label={`Resume upload ${item.name}`}><Play aria-hidden="true" />Resume</Button>}
             {canCancel && <Button type="button" variant="ghost" size="icon-sm" className={cx('min-h-11 min-w-11 shrink-0')} onClick={() => onCancel(item.id)} aria-label={`Cancel upload ${item.name}`}><XCircle aria-hidden="true" /></Button>}
-            {item.status === 'error' && item.retryable && (canRetry || item.pendingAction === 'cancel') && <Button type="button" variant="outline" size="sm" className={cx('min-h-11 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />{item.pendingAction ? `Retry ${item.pendingAction}` : multipart ? 'Retry connection' : 'Retry'}</Button>}
+            {item.status === 'error' && item.retryable && (canRetry || item.pendingAction === 'cancel') && <Button type="button" variant="outline" size="sm" className={cx('min-h-11 shrink-0')} onClick={() => onRetry(item.id)} aria-label={`Retry upload ${item.name}`}><RotateCcw aria-hidden="true" />{item.pendingAction ? `Retry ${item.pendingAction}` : item.errorCode === 'WORKER_RESOURCE_LIMIT' ? 'Retry after fix' : multipart ? 'Retry connection' : 'Retry'}</Button>}
           </div>
         </li>;
       })}

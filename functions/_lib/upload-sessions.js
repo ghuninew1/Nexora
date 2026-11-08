@@ -64,6 +64,13 @@ function safeSession(payload, row) {
 // Bound each raw part without materializing a file (or a part) inside Pages.
 export function exactPartStream(body, expected) {
   if (!body) throw new ApiError('INVALID_INPUT', 400);
+  // Keep Cloudflare's byte path in native code: no JS pull callback for every
+  // network chunk. FixedLengthStream rejects both short and excessive bodies.
+  if (typeof globalThis.FixedLengthStream === 'function') {
+    const { readable, writable } = new globalThis.FixedLengthStream(expected);
+    void body.pipeTo(writable).catch(() => { /* The readable side carries the failure to fetch. */ });
+    return readable;
+  }
   const reader = body.getReader();
   let bytes = 0;
   return new ReadableStream({
@@ -115,8 +122,7 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
       throw error;
     }
   };
-  async function authorizeUpload() {
-    const current = await getStorageAccessForUser(db, user, storageId);
+  async function authorizeUpload(current) {
     if (!current || current.mount.status !== 'active' || current.mount.shared_storage_project_id !== mount.shared_storage_project_id) throw new ApiError('NOT_FOUND', 404);
     const response = await call('/capabilities');
     const caps = (response?.data ?? response)?.capabilities;
@@ -127,7 +133,8 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
     if (!transfers.resumableUpload) throw new ApiError('CAPABILITY_UNAVAILABLE', 422);
     return transfers;
   }
-  const transfers = !cancellation ? await authorizeUpload() : null;
+  // Reuse this request's freshly resolved access, never a cross-request cache.
+  const transfers = !cancellation ? await authorizeUpload(access) : null;
   const url = new URL(request.url);
   let row;
   const id = tail[1];
@@ -232,7 +239,7 @@ export async function handleUploadSessions({ request, env, user, storageId, tail
     if (Object.keys(body).some(k => k !== 'version') || !Number.isInteger(body.version) || body.version < 0) throw new ApiError('INVALID_INPUT', 400);
     // Refresh authorization immediately before publication, never trust creation grants.
     if (tail[2] === 'complete') {
-      const current = await authorizeUpload();
+      const current = await authorizeUpload(await getStorageAccessForUser(db, user, storageId));
       if (row.size_bytes > current.maxFileBytes) throw new ApiError('UPLOAD_TOO_LARGE', 413);
     }
     return receive(await call(`${base}/${tail[2]}`, { method: 'POST', contentType: 'application/json', body: JSON.stringify(body) }));

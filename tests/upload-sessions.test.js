@@ -340,3 +340,35 @@ test('upload diagnostics correlate upstream failure without logging identifiers,
     assert.ok(!output.includes(id));
   } finally { f.db.close(); }
 });
+
+test('upstream Cloudflare 1102 is normalized without exposing its raw error page', async () => {
+  for (const payload of ['<html>Cloudflare Error 1102 worker_exceeded_resources private-provider-detail</html>', JSON.stringify({ error: { code: 'worker_exceeded_resources' } })]) {
+    const mock = mockProvider();
+    const f = await fixture((url, init) => new URL(url).pathname.includes('/parts/') ? new Response(payload, { status: 503 }) : mock.fetchImpl(url, init));
+    try {
+      const id = (await (await create(f)).json()).data.transferId;
+      const result = await put(f, id), body = await result.text();
+      assert.equal(result.status, 503);
+      assert.match(body, /WORKER_RESOURCE_LIMIT/u);
+      assert.doesNotMatch(body, /private-provider-detail|worker_exceeded_resources/u);
+    } finally { f.db.close(); }
+  }
+});
+
+test('request-scoped authorization removes duplicate lookups while completion still refreshes access', async () => {
+  const mock = mockProvider(), f = await fixture(mock.fetchImpl);
+  try {
+    const id = (await (await create(f)).json()).data.transferId;
+    const prepare = f.env.DB.prepare;
+    let lookups = 0;
+    f.env.DB.prepare = sql => { if (sql.includes('FROM storage_access a')) lookups++; return prepare(sql); };
+    assert.equal((await f.request(`/${id}`)).status, 200);
+    assert.equal(lookups, 1);
+    lookups = 0;
+    assert.equal((await put(f, id)).status, 200);
+    assert.equal(lookups, 1);
+    lookups = 0;
+    assert.equal((await f.request(`/${id}/complete`, { method: 'POST', body: { version: 1 } })).status, 200);
+    assert.equal(lookups, 2);
+  } finally { f.db.close(); }
+});

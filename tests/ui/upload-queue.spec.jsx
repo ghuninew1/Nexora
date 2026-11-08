@@ -285,7 +285,7 @@ it('StrictMode lifecycle replay does not duplicate uploads', async () => {
   expect(complete).toHaveBeenCalledTimes(1);
 });
 
-it('serializes several parts per logical session and uses server-reconciled progress between parts', async () => {
+it('serializes parts and advances only from validated server receipts without duplicate status reads', async () => {
   const h = setup(); const second = deferred();
   const size = limits.partSizeBytes + 2;
   h.api.hooks.part = (id, source, number) => number === 2 ? second.promise : undefined;
@@ -295,7 +295,7 @@ it('serializes several parts per logical session and uses server-reconciled prog
   expect(h.result.current.items[0].completedParts).toBe(1);
   const names = h.api.calls.map(c => c.name);
   const parts = names.flatMap((name, i) => name === 'part' ? [i] : []);
-  expect(names.slice(parts[0] + 1, parts[1])).toContain('parts');
+  expect(names.slice(parts[0] + 1, parts[1])).not.toContain('parts');
   await act(async () => second.resolve()); await waitFor(() => expect(h.status()).toBe('success'));
   expect(h.result.current.items[0].completedParts).toBe(2);
 });
@@ -693,4 +693,24 @@ it('an expired session on manual reconciliation stops without replacement or fur
   expect(h.result.current.items[0].diagnostics.originalFileAvailable).toBe(false);
   expect(h.api.sessions.size).toBe(1);
   expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(3);
+});
+
+it('keeps resource-limit failures manual-only and resumes the same verified session after a fix', async () => {
+  const h = setup({ waitForRetry: vi.fn(async () => {}) });
+  let resourceLimited = true;
+  h.api.hooks.part = (id, file, number) => { if (number === 2 && resourceLimited) throw err('WORKER_RESOURCE_LIMIT'); };
+  const [id] = h.add([{ name: 'resource.bin', size: limits.partSizeBytes + 3 }]);
+  await waitFor(() => expect(h.status()).toBe('error'));
+  expect(h.result.current.items[0]).toMatchObject({ completedParts: 1, acknowledgedBytes: limits.partSizeBytes, errorCode: 'WORKER_RESOURCE_LIMIT', retryable: true });
+  expect(h.options.waitForRetry).not.toHaveBeenCalled();
+  expect(h.api.calls.filter(c => c.name === 'part')).toHaveLength(2);
+  const view = render(<UploadQueue items={h.result.current.items} concurrency={1} onRetry={h.result.current.retryUpload} />);
+  expect(screen.getByText('Retry after fix')).toBeTruthy();
+  expect(screen.getByText(/Automatic retries are stopped/)).toBeTruthy();
+  view.unmount(); resourceLimited = false;
+  act(() => { h.result.current.retryUpload(id); h.result.current.retryUpload(id); });
+  await waitFor(() => expect(h.status()).toBe('success'));
+  expect(h.api.calls.filter(c => c.name === 'part' && c.args[2] === 1)).toHaveLength(1);
+  expect(h.api.calls.filter(c => c.name === 'create')).toHaveLength(1);
+  expect(h.options.onComplete).toHaveBeenCalledTimes(1);
 });

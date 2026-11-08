@@ -23,6 +23,7 @@ const integer = value => Number.isSafeInteger(value) && value >= 0;
 const id = value => typeof value === 'string' && ID.test(value) ? value : fail('INVALID_INPUT');
 
 export function classifyMultipartError(status, code) {
+  if (status >= 500 && ['WORKER_RESOURCE_LIMIT', 'worker_exceeded_resources', 1102, '1102'].includes(code)) return 'WORKER_RESOURCE_LIMIT';
   if (status === 401) return 'AUTHENTICATION_FAILURE';
   if (status === 403) return 'PERMISSION_REVOKED';
   if (status === 404) return 'SESSION_UNAVAILABLE';
@@ -36,6 +37,27 @@ export function classifyMultipartError(status, code) {
   if (status === 429) return 'RATE_LIMITED';
   if (status >= 500) return 'PROVIDER_UNAVAILABLE';
   return 'VALIDATION_FAILURE';
+}
+
+// Error pages are untrusted and may be HTML. Inspect only a bounded prefix and
+// retain an allowlisted code, never the provider message or raw page.
+async function readErrorResponse(response) {
+  const reader = response.body?.getReader();
+  if (!reader) return null;
+  const bytes = new Uint8Array(16 * 1024);
+  let length = 0;
+  try {
+    while (length < bytes.length) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const size = Math.min(value.byteLength, bytes.length - length);
+      bytes.set(value.subarray(0, size), length); length += size;
+    }
+  } finally { await reader.cancel().catch(() => {}); }
+  const text = new TextDecoder().decode(bytes.subarray(0, length));
+  if (/\bworker_exceeded_resources\b|\berror(?:\s+code)?\s*:?\s*1102\b/iu.test(text)
+    || (/\bcloudflare\b/iu.test(text) && /\b1102\b/u.test(text))) return { error: { code: 'WORKER_RESOURCE_LIMIT' } };
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 function normalizeSession(p, expectedId) {
@@ -150,13 +172,15 @@ export function createMultipartUploadClient({ storageId, fetchImpl = fetch, cryp
         return error;
       };
       let payload;
-      try { payload = await response.json(); } catch {
+      try { payload = response.ok ? await response.json() : await readErrorResponse(response); } catch {
         responseBody = { format: 'non-json' };
         if (!response.ok) throw responseError();
         fail();
       }
       // Keep only the allowlisted error code; raw messages/HTML can contain secrets.
-      if (!response.ok) responseBody = { error: { code: RESPONSE_CODES.has(payload?.error?.code) ? payload.error.code : 'UNRECOGNIZED' } };
+      if (!response.ok) responseBody = classifyMultipartError(status, payload?.error?.code) === 'WORKER_RESOURCE_LIMIT'
+        ? { error: { code: 'WORKER_RESOURCE_LIMIT' } }
+        : payload ? { error: { code: RESPONSE_CODES.has(payload?.error?.code) ? payload.error.code : 'UNRECOGNIZED' } } : { format: 'non-json' };
       if (!response.ok) throw responseError(payload?.error?.code);
       if (!payload?.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) fail();
       return payload.data;

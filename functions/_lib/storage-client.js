@@ -176,7 +176,7 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
     try {
       if (!result.response.ok) {
         if (result.redirectBlocked) throw new ApiError('INTERNAL_ERROR', 502);
-        const payload = await readBoundedJson(result.response);
+        const payload = await readBoundedJson(result.response, 16_384, true);
         const code = normalizeUpstreamError(payload, result.response.status);
         if (result.operation === 'copy') {
           const rawCode = payload?.error?.code;
@@ -190,7 +190,7 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
         } else diagnostic(logger, result.operation, `result=http-error status=${result.response.status}`);
         const failure = new ApiError(code, statusFor(code));
         failure.upstreamStatus = result.response.status;
-        failure.upstreamFailure = 'http-error';
+        failure.upstreamFailure = code === 'WORKER_RESOURCE_LIMIT' ? 'resource-limit' : 'http-error';
         throw failure;
       }
       try {
@@ -215,7 +215,7 @@ export function createStorageClient({ env, fetchImpl = fetch, logger = console }
   return { request, jsonRequest };
 }
 
-export async function readBoundedJson(response, maxBytes = 16_384) {
+export async function readBoundedJson(response, maxBytes = 16_384, recognizeResourceError = false) {
   const reader = response.body?.getReader();
   if (!reader) return null;
   const chunks = [];
@@ -225,14 +225,23 @@ export async function readBoundedJson(response, maxBytes = 16_384) {
       const { done, value } = await reader.read();
       if (done) break;
       length += value.byteLength;
-      if (length > maxBytes) { await reader.cancel(); return null; }
+      if (length > maxBytes) {
+        await reader.cancel();
+        if (!recognizeResourceError) return null;
+        chunks.push(value.subarray(0, maxBytes - (length - value.byteLength)));
+        length = maxBytes;
+        break;
+      }
       chunks.push(value);
     }
-  } catch { return null; }
+  } catch { await reader.cancel().catch(() => {}); return null; }
   const bytes = new Uint8Array(length);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { return null; }
+  const text = new TextDecoder().decode(bytes);
+  if (recognizeResourceError && (/\bworker_exceeded_resources\b|\berror(?:\s+code)?\s*:?\s*1102\b/iu.test(text)
+    || (/\bcloudflare\b/iu.test(text) && /\b1102\b/u.test(text)))) return { error: { code: 'WORKER_RESOURCE_LIMIT' } };
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 export function normalizeObject(object) {

@@ -44,6 +44,7 @@ function errorMessage(error) {
     RECEIPT_CONFLICT: 'Server receipts are inconsistent. Upload stopped safely.',
     INVALID_RESPONSE: 'Storage returned an invalid response. Upload stopped safely.',
     PROVIDER_UNAVAILABLE: 'Storage is temporarily unavailable. Retry connection shortly.',
+    WORKER_RESOURCE_LIMIT: 'Cloudflare stopped this request because the Worker exceeded its CPU or memory limit. Automatic retries are stopped. Retry after the deployment is corrected; verified parts are retained.',
     RATE_LIMITED: 'Storage is temporarily busy. Retry shortly.',
     QUOTA_EXCEEDED: 'The storage limit has been reached.',
     UNAUTHENTICATED: 'Your session has expired. Sign in again to continue.',
@@ -302,11 +303,15 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
             const receipt = await client.uploadPart(task.transferId, task.file, number);
             check();
             if (receipt.state === 'completed') { finish(task, { file: receipt.object }); return; }
-            // Use authoritative counters from all verified receipts, never local dispatch bytes.
-            session = await client.getCompletedParts(task.transferId);
+            // The client has reconciled before this PUT and validated its exact
+            // length/digest receipt. Count that server acknowledgement directly;
+            // another GET here duplicates the next part's reconciliation.
+            if (receipt.partNumber !== number || receipt.sizeBytes !== Math.min(session.partSizeBytes,
+              task.sizeBytes - (number - 1) * session.partSizeBytes)) throw new MultipartUploadError('INVALID_RESPONSE');
+            verified.add(number);
+            session = { ...session, acknowledgedBytes: session.acknowledgedBytes + receipt.sizeBytes,
+              parts: [...session.parts, receipt] };
             snapshot(session);
-            if (session.state === 'completed') { finish(task, { file: session.object }); return; }
-            if (session.state !== 'active') throw new MultipartUploadError('VERSION_CONFLICT');
           }
         }
         allowed(); update(task, { status: 'finalizing' });
@@ -379,7 +384,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
         update(task, { status, error: cancelled ? null : handling === 'cancel'
           ? 'Cancellation is unconfirmed. Retry cancellation to check this session.'
           : handling === 'pause' ? 'Pause is unconfirmed. Retry pause before resuming.' : errorMessage(error),
-        errorCode: error?.code, retryable: !cancelled && (TRANSIENT.has(error?.code) || (task.strategy === 'legacy' && !['FORBIDDEN', 'INVALID_INPUT', 'UPLOAD_TOO_LARGE', 'CAPABILITY_UNAVAILABLE'].includes(error?.code))),
+        errorCode: error?.code, retryable: !cancelled && (TRANSIENT.has(error?.code) || error?.code === 'WORKER_RESOURCE_LIMIT' || (task.strategy === 'legacy' && !['FORBIDDEN', 'INVALID_INPUT', 'UPLOAD_TOO_LARGE', 'CAPABILITY_UNAVAILABLE'].includes(error?.code))),
         pendingAction: handling || null });
         return;
       }
