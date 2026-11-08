@@ -85,7 +85,7 @@ function FileListItem({
     const canMove = Boolean(capabilities.move && !readOnly && !busy);
     const canCopy = Boolean(capabilities.copy && !readOnly && !busy);
     const canTrash = Boolean(capabilities.trash && !readOnly && !busy);
-    const canDownload = Boolean(!isFolder && capabilities.download && !busy);
+    const canDownload = Boolean((isFolder ? capabilities.downloadFolder : capabilities.download) && !busy);
     const canPreview = Boolean(
         !isFolder &&
         !busy &&
@@ -226,10 +226,10 @@ function FileListItem({
                             Preview
                         </DropdownMenuItem>
                     )}
-                    {!isFolder && (
+                    {(
                         <DropdownMenuItem disabled={!canDownload} onClick={() => onDownload?.(file)}>
                             <Download />
-                            Download
+                            {isFolder ? 'Download Folder as ZIP' : 'Download'}
                         </DropdownMenuItem>
                     )}
                     {allowFavorites && (

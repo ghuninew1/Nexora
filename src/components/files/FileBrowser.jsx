@@ -1,3 +1,4 @@
+import { droppedEntries } from '../../utils/folder-upload';
 import ShareDialog from './ShareDialog';
 import { useStorage } from '../../hooks/useStorage';
 import { usePreferences } from '../../hooks/usePreferences';
@@ -36,6 +37,12 @@ function FileBrowser() {
   const { clipboard, setClipboard } = useFilesData();
   const [clipboardMessage, setClipboardMessage] = useState("");
   const pasteBusy = useRef(false);
+  const dropScope = useRef(null);
+  useEffect(() => {
+    dropScope.current = JSON.stringify([browser.storageId, browser.folderId, browser.canUpload]);
+    return () => { dropScope.current = null; };
+  }, [browser.storageId, browser.folderId, browser.canUpload]);
+  const [dropError, setDropError] = useState('');
   const { capabilities, activeStorage, status: storageStatus } = useStorage();
   const [shareFile, setShareFile] = useState(null);
   const canShare = file => Boolean(file && activeStorage?.permissions?.share === true && !activeStorage?.readOnly && !capabilities?.readOnly && capabilities?.stat && capabilities?.[file.type === "folder" ? "list" : "download"]);
@@ -172,9 +179,31 @@ function FileBrowser() {
   }
 
   return (
-    <div className={cx("relative")}>
+    <div className={cx("relative")} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={async event => {
+      event.preventDefault();
+      if (!browser.canUpload || !isReady) return;
+      const scope = dropScope.current;
+      if (event.dataTransfer.files.length > 50) { setDropError('Choose at most 50 files/folders per upload.'); return; }
+      const files = Array.from(event.dataTransfer.files);
+      try {
+        const pending = droppedEntries(event.dataTransfer.items, files);
+        const entries = await pending;
+        if (dropScope.current !== scope) return;
+        setDropError(''); browser.uploadFiles(entries ? [] : files, entries);
+      } catch (error) { if (dropScope.current === scope) setDropError(error.message); }
+    }}>
+      {dropError && <p role="alert" className={cx('mb-3 text-sm text-destructive')}>{dropError}</p>}
       <section className={cx("flex min-w-0 flex-col gap-5")}>
         <h1 className={cx("sr-only")}>My Files</h1>
+        <p className={cx('text-xs text-muted-foreground')}>Folder ZIP: up to 64 MiB, 500 files/folders, 32 levels. Drop folders here to upload (up to 50 files/folders).</p>
+        {browser.folderDownload?.state && <div className={cx('rounded-xl border border-border bg-card p-3')}>
+          <p role={browser.folderDownload.state.stage === 'error' ? 'alert' : 'status'} className={cx('text-sm [overflow-wrap:anywhere]')}>{browser.folderDownload.state.message || `${browser.folderDownload.state.stage === 'listing' ? 'Reading folder' : 'Preparing ZIP'}: ${browser.folderDownload.state.name}`}</p>
+          {['listing', 'downloading'].includes(browser.folderDownload.state.stage) && <>
+            <p className={cx('mt-1 text-xs text-muted-foreground')}>{browser.folderDownload.state.transferred ?? 0} / {browser.folderDownload.state.total ?? '…'} bytes received</p>
+            <div role="progressbar" aria-label="Folder ZIP download" aria-valuemin={0} aria-valuemax={browser.folderDownload.state.total || undefined} aria-valuenow={browser.folderDownload.state.total ? browser.folderDownload.state.transferred : undefined} className={cx('my-2 h-1.5 overflow-hidden rounded-full bg-muted')}><div className={cx('h-full bg-primary')} style={{ width: `${browser.folderDownload.state.total ? browser.folderDownload.state.transferred / browser.folderDownload.state.total * 100 : 0}%` }} /></div>
+            <Button type="button" variant="outline" size="sm" onClick={browser.folderDownload.cancel}>Cancel folder ZIP</Button>
+          </>}
+        </div>}
         <div className={cx("flex flex-wrap items-center justify-between gap-3")}>
           <FileBreadcrumbs abbreviated={browser.breadcrumbsAbbreviated} items={browser.breadcrumbs.map((item) => ({ id: item.objectId, label: item.label }))} onNavigate={browser.navigateToBreadcrumb} />
           <span className={cx("inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground")}><Info className={cx("size-3.5")} aria-hidden="true" />Connected storage · Preview on demand</span>
@@ -258,7 +287,7 @@ function FileBrowser() {
             onTrash={(file) => void requestTrash(file)}
             onToggleFavorite={(id) => { const file = browser.currentFiles.find((item) => item.id === id); if (file) void browser.toggleFavorite(file); }}
             allowFavorites={browser.canFavorite}
-            capabilities={{ share: canShare, download: browser.canDownload, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}
+            capabilities={{ share: canShare, download: browser.canDownload, downloadFolder: browser.canDownloadFolder, preview: browser.canPreviewFile, rename: browser.canRename, move: browser.canMove, copy: browser.canCopy, trash: browser.canTrash }}
             mutatingIds={browser.mutatingIds}
             canCreateFolder={browser.canCreateFolder}
             onCreateFolder={() => setNewFolderOpen(true)}

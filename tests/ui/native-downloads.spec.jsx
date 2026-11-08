@@ -68,3 +68,12 @@ it('cleans up the native link even if the browser rejects initiation', async () 
   await expect(startStorageObjectDownload('mount_a', 'file_a')).rejects.toThrow('blocked');
   expect(document.querySelector('a[download]')).toBeNull();
 });
+it('folder ZIP requires read and download grants plus list/stat/download capabilities', () => {
+  mocks.storage.activeStorage.permissions.read = true;
+  mocks.storage.capabilities.stat = true;
+  const hook = setup();
+  expect(hook.result.current.canDownloadFolder).toBe(true);
+  mocks.storage = { ...mocks.storage, activeStorage: { ...mocks.storage.activeStorage, permissions: { ...mocks.storage.activeStorage.permissions, read: false } } };
+  hook.rerender();
+  expect(hook.result.current.canDownloadFolder).toBe(false);
+});

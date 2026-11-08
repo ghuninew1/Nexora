@@ -132,6 +132,10 @@ pnpm storage:mount:create:remote
 pnpm preview
 pnpm deploy
 pnpm cf-typegen
+pnpm log
+pnpm migrate
+pnpm migrate-apply
+pnpm test:ui
 ```
 
 `pnpm test` runs Node tests with in-memory SQLite and mocked services, then Vitest/Testing Library UI tests in jsdom; it never writes remote D1. `pnpm test:ui` runs the UI tests alone. `pnpm db:migrate:local` always uses Wrangler `--local`; never remove that flag for routine validation. `pnpm admin:create:local` remains local-only. The explicit `*:remote` provisioning commands target `nexora-db` with `--remote`; never run them during validation or without a reviewed operator request. `pnpm preview` builds and starts Wrangler Pages locally. `pnpm deploy` deploys; it is not a validation command and requires explicit authorization.
@@ -163,7 +167,6 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - Multi-selection supports Move and Move to Trash through existing single-object APIs, maximum two simultaneous requests, independent results, selection retention for failures, and targeted source/destination cache invalidation. Server authorization/capability/readOnly checks run per object. Copy/Share and bulk Trash lifecycle actions remain out of scope.
 - See `docs/PHASE_9_7.md` for validation and remaining QA. Production metrics integration, browser QA, and deployment are not claimed.
 
-
 ## Phase 9.8 — Activity boundary
 
 - `/activity` and authenticated `GET /api/activity` show successful user-owned mutations only; keep Activity separate from Recent access and never record anonymous public-link usage, reads, previews, downloads, or failed mutations.
@@ -171,13 +174,11 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - Retain at most 500 events per user and 180 days. Use session-derived ownership and stable cursor ordering; do not accept browser `userId`. Bulk Move/Trash produce per-object events from existing routes, without batch duplicates.
 - See `docs/PHASE_9_8.md` for implementation, checks, and pending browser/production QA. Migration/deployment requires separately approved production rollout.
 
-
 ## Phase 9.9 — Backup and production safety
 
 - Backup/recovery is an infrastructure/operator responsibility. Never run production export, restore, migration, service stop, QNAP/Docker command, secret rotation, cutover, or delete without explicit user authorization and verified target. Restore tests start in disposable infrastructure; never import over existing production data by default.
 - Treat Nexora D1, Storage API SQLite metadata, Garage metadata and Garage object blocks as separate authoritative components with cross-system dependencies. Use SQLite Online Backup API for live WAL databases; never raw-copy a live `.db` as the default. Garage metadata and data must be a coordinated recovery set.
 - Consult `docs/BACKUP_RECOVERY.md` before proposing operational commands and `docs/PHASE_9_9.md` for known findings. Do not repeat or persist secret values.
-
 
 ## Nexora v1 release baseline
 
@@ -185,7 +186,6 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - Account creation is administrator-provisioned; do not describe a public self-service registration route. Keep production implementation, user-reported smoke tests, and local validation distinct.
 - Backup/recovery design exists in `docs/BACKUP_RECOVERY.md`; automated backup and an isolated restore drill are not implemented/completed. Never claim recovery proven without an actual isolated restore.
 - Runtime SQLite artifacts in adjacent IssueDesk are no longer tracked; do not read or delete local DB/WAL/SHM files during Git hygiene checks. `garage/garage.toml` has since been removed from the adjacent IssueDesk index while preserving its local ignored copy; its example template uses a placeholder. Changes are staged/uncommitted and history was not rewritten; historical RPC secret material remains a follow-up. Do not print it or rotate production credentials without a separately authorized task.
-
 
 ## Phase 10.0.1 — Live verification boundary
 
@@ -201,7 +201,6 @@ When dependencies appear incomplete, inspect the package manager/store and prese
 - Login has D1 throttling; public-share reads and costly upload/download/storage routes still need platform rate controls. Do not modify Cloudflare rate rules, Access policies, host firewall, Garage, or Storage without separate authorization.
 - Treat public share URLs as bearer capabilities. `no-referrer` helps prevent onward leakage; platform access logs still need explicit path redaction. Never log capability URLs or tokens.
 - Refer to `docs/PHASE_10_1.md` and `docs/PHASE_10_1_1.md` for MUST/OPTIONAL and production/operator gates. Record the 2026-10-28 post-CSP all-functions smoke check as operator-confirmed, not tool-verified. Preserve nonce CSP and `public/_headers`; never restore script `unsafe-inline` or `unsafe-eval`. Never read or print secret values or rewrite Git history.
-
 
 ## File Browser clipboard (local implementation)
 
@@ -300,9 +299,7 @@ The Storage page counts the current account’s active assigned mounts and shows
 
 The capability normalizer retains validated public resumable-upload limits when explicitly advertised, and `src/services/multipart-upload.js` implements the isolated Phase4.1 session/part/reconciliation client. Phase4.2 connects it to the existing workspace Upload Queue for files exceeding the effective legacy limit, only with compatible advertised capabilities. Phase4.3 adds metadata-only IndexedDB recovery and original-file reselection; Phase4.4 adds same-origin Web Locks ownership and bounded automatic network recovery; Phase4.5 adds global Transfer Manager presentation. Use stable caller-retained create keys, verify all receipt pages/source digests, serialize per-session work and reconcile uncertain writes before retrying. See `docs/LARGE_FILE_TRANSFER_FRONTEND.md`; keep the existing small-file queue and default-disabled feature boundary until the remaining recovery, coordination, UI and verification work is complete.
 
-
 Phase4.2 queue invariants: preserve legacy25MiB maximum/fallback and per-tab single-file scheduling; one sequential operation/session and bounded queue retries, no multipart-to-legacy fallback after failure. Pause/Cancel stop local scheduling and confirm server state; uncertain controls require explicit retry. Retry reuses the original create key/transfer ID. Progress uses verified receipts, capped at99% until completed. Auth initiation/owner/mount teardown abort requests and discard scope without server cancellation; use `AuthProvider.signingOut` to stop before logout returns. Preserve epoch guards against late responses. Transient discovery keeps the last confirmed upload mount; known permission changes stop writes but preserve creator cancellation. Keep File/controllers in refs, never React state or persistent browser storage. Phase4.3 persists only allowlisted owner-scoped session metadata/keys in IndexedDB; see the durable recovery boundary below. See frontend docs/handoff for tests, mocked browser evidence and unresolved real-provider gates.
-
 
 ## Large File Transfer — Phase4.3 durable recovery
 
@@ -311,7 +308,6 @@ Phase4.2 queue invariants: preserve legacy25MiB maximum/fallback and per-tab sin
 - Commit key/body before first create, transfer ID before parts; serialize terminal deletes after older writes. Startup known sessions use status/all receipts only, never create. Unknown-create identity can replay the exact original key only after explicit Resume/Cancel. Pending cancel intents cannot resume. Always reselect original bytes, compare name/size/lastModified, then server geometry and verified-part SHA-256; mismatch never mutates the server. Selection alone never uploads.
 - Retain at most50 valid v1 records per owner across mounts; durable completed history is0. Remove confirmed cancelled/expired/completed metadata; preserve unavailable/inaccessible sessions for explicit reconciliation. Never infer completion/expiration from last UI state. Quota/corruption/blocked APIs fall back to memory with a notice. Failed local deletion may reappear and must be reported. Do not delete future schema data or unknown databases/stores.
 - Logout/owner change/unmount release local references/abort requests without server cancellation or deleting durable owner records. Clear local history forgets only inactive local metadata and never cancels server sessions. Preserve Phase4.2 small-file/concurrency/permission guards and backend default-off flag. Phase4.4 implements same-origin Web Locks coordination; Phase4.5 provides global Transfer Manager presentation; Upload FileSystemFileHandle reuse is not implemented; backend Range support is retained for native downloads. Native/browser mocks do not establish real Garage acceptance.
-
 
 ## Large File Transfer — Phase4.4 ownership and network recovery
 
@@ -322,20 +318,17 @@ Phase4.2 queue invariants: preserve legacy25MiB maximum/fallback and per-tab sin
 - Share two automatic attempts across ordinary transient retry and online recovery; explicit Retry/Resume resets the budget. Honor Retry-After deadlines across client replacement, suppress immediate cooldown requests, and stop automatic replay for delays over5 minutes instead of shortening them. Preserve uncertain write/control/finalization reconciliation; no new sessions for known transfers. No bytes/credentials/new schema in IndexedDB.
 - Keep Waiting for network/Recovering connection/Active in another tab/Waiting for ownership/Resume available/Retry connection minimal within the existing queue. See frontend guide and PROJECT_HANDOFF.md for executed local/native browser evidence and real-provider/platform limitations. Do not enable production flags, deploy or migrate as validation.
 
-
 ## Large File Transfer — Phase4.5 global UI
 
 `Header` renders `TransferManager`, a presentation-only Base UI dialog consuming `RemoteFilesContext`. `FilesProvider`/`useRemoteFilesState` remains the single queue owner; never call `useUploadQueue` from the panel or route pages. File Browser no longer renders a second queue presentation. Closing the dialog and authenticated route changes do not reset work; auth/signingOut/owner/mount teardown retains existing guards and owner-scoped durable recovery. Bulk Pause/Resume dispatch existing supported per-item controls only; legacy uploads never show Pause or measured progress. Measured speed uses positive server acknowledgement deltas over at least1 second of uninterrupted uploading, excludes reconciliation, and resets outside uploading; ETA estimates remaining acknowledgement time, not finalization. Keep progress capped99 until backend-confirmed success. Downloads use native browser downloads and never get a presentation section or queue entry. See frontend guide/handoff for checks and provider limitations.
-
 
 ## Large File Transfer — Phase 5.1 backend downloads
 
 Authenticated object/file download aliases accept GET/HEAD and a bounded single byte Range/If-Range contract. `functions/_lib/range-download.js` validates opaque validators, exact206/416 geometry, lengths, inactivity and cancellation. Shared v3 uses authoritative S3 HEAD + conditional GetObject; v2 remains legacy. Explicit `rangeRead` requires upstream support plus effective download permission, independently from multipart flags. Preserve no-store, logical IDs and server-only auth; do not forward browser credentials/arbitrary headers or expose provider references. Malformed/multi-range falls back full200; unsatisfiable single-range416. Resume requires a matching opaque strong ETag; dates/weak/stale validators fall back200. Consumers must discard previous bytes on200 and reject truncated/error streams. HEAD/416 do not write Recent. Public-share/preview do not forward Range and retain their security checks; public full downloads use checked streams/idle deadlines. See `docs/LARGE_FILE_TRANSFER_DOWNLOAD.md` for local tests and required real Garage/browser/platform acceptance. No Download Manager/persistence or production changes are included.
 
-
 ## Downloads — native browser product behavior
 
-All normal authenticated download actions use `startStorageObjectDownload` through the shared `downloadObject` callback. Authenticate before clicking a same-origin native anchor with empty download attribute; preserve server Content-Disposition filenames and never fetch/buffer file bytes for downloads. Independent requests do not serialize, cancel each other or add Transfer Manager rows. Abort pending initiation on logout, owner/mount/permission change or unmount; native work belongs to the browser after handoff. Backend reauthorizes actual downloads.
+All normal authenticated single-file download actions use `startStorageObjectDownload` through the shared `downloadObject` callback. Authenticate before clicking a same-origin native anchor with empty download attribute; preserve server Content-Disposition filenames and never fetch/buffer bytes for single-file downloads. The explicitly bounded folder ZIP exception is documented below. Independent requests do not serialize, cancel each other or add Transfer Manager rows. Abort pending initiation on logout, owner/mount/permission change or unmount; native work belongs to the browser after handoff. Backend reauthorizes actual downloads.
 
 TransferManager displays Upload Queue only; keep the Header Transfers entry and upload counters, controls, progress, IndexedDB and Web Locks unchanged. No download queue/concurrency, File System Access API, download IndexedDB or download lock exists in runtime source. Removed Phase5.2/5.3 features remain historical in PROJECT_HANDOFF. Old browser download recovery data is no longer read/restored; no automatic migration/deletion is performed and no uploaded recovery store is touched. Public downloads and safe on-demand preview remain separate and unchanged. Preserve backend streaming/HEAD/Range206/ETag/If-Range/auth/Content-Disposition even though frontend managed recovery was removed. See docs/LARGE_FILE_TRANSFER_DOWNLOAD.md.
 
@@ -349,17 +342,20 @@ Acceptance includes streamed checksums, interrupted download/original If-Range r
 
 Current upload policy: cap new files at decimal 5 GB (5,000,000,000 bytes); old oversized sessions retain cancellation. Queue one file per tab; this is not a global admission limit. Real Garage 5 GB boundary is not yet verified. See PROJECT_HANDOFF.md.
 
-
 ## Upload rejection and capability limits
 
 `maxUploadBytes` and `STORAGE_MAX_UPLOAD_BYTES` limit the direct path (hard cap 25 MiB), not multipart files. Multipart requires both active server flags and compatible provider capabilities; absent/disabled/incompatible support produces a local `MULTIPART_UNAVAILABLE` readiness error, never an oversized direct fallback. Negotiate `transfers.maxFileBytes` as `min(provider maximum, 5_000_000_000)` while retaining fixed 8 MiB part geometry. Enforce this maximum on create and further writes/resume/complete, while preserving existing-session status/cancellation. Quota, permission and capability errors remain distinct. See `docs/UPLOAD_REJECTION_FIX.md` for read-only findings and operator steps; live Garage success is not established by local tests.
-
 
 ## Multipart interruption recovery
 
 Manual Retry/Resume/reconciliation must retain enqueue intent while an old worker is finishing IndexedDB writes and releasing Web Locks; dispatch only after that worker releases its active slot. Deduplicate clicks and preserve cancellation/logout/epoch guards. Manual retry resets the existing automatic retry budget, retains server Retry-After, reconciles the same session and may explicitly resume a paused valid session. Never recreate an identified session or resend a verified part unnecessarily. Error diagnostics are bounded, in memory only and contain endpoint templates, allowlisted response codes/format, request UUID/validated Ray ID, timestamp, stage/part/status, original-File availability and last-confirmed session state; never raw provider messages, body, URLs or auth. See `docs/MULTIPART_UPLOAD_RECOVERY.md` for source findings and production evidence limits.
 
-
 ## Multipart Cloudflare resource safety
 
 Use native `FixedLengthStream` in Pages for exact part streaming; retain the bounded JS fallback for non-Cloudflare tests. Never materialize/hash full file or part bodies in Pages. SHA-256 remains browser + Shared validation before Garage writes. Initial authorization may reuse only the access resolved in the same request; no global grant/capability cache, and completion must freshly reauthorize. Queue progress may aggregate validated server receipts after PUT, retaining reconciliation before each missing-part write and completion; do not reintroduce duplicate post-PUT status reads. Treat explicit1102/worker_exceeded_resources as `WORKER_RESOURCE_LIMIT`, not TRANSIENT: stop automatic writes/reconciliation retries, retain receipts/session/File and allow explicit Retry after fix or Cancel. Detect bounded JSON/HTML/plain error markers without exposing raw bodies. See `docs/UPLOAD_RESOURCE_LIMIT.md` for production CPU evidence versus local optimization limits.
+
+## Folder transfer implementation
+
+Folder uploads use bounded relative-path manifests (`src/utils/folder-upload.js`) and parent-dependent folder tasks in `useUploadQueue`. Keep admission at 50 total files/folders per selection and total queue, depth 32, and concurrency one. Do not flatten folders, merge conflicting names automatically, or replay completed batch files. Batch rows stay until explicitly cleared; persistent recovery remains per-started multipart file only. Directory pickers cannot expose empty folders; directory drops preserve exposed empty entries. See `docs/FOLDER_TRANSFERS.md` for cancellation ambiguity and recovery limits.
+
+Folder ZIP uses existing authenticated stat/list/download APIs and a bounded client-side ZIP32 STORE writer. Keep 64 MiB payload, 500 total entries and depth 32; verify body lengths, CRC, safe paths, object identity, ancestry, pagination and cancellation. Do not add an unbounded Blob/ZIP or Pages buffering endpoint. Single-file downloads remain native; folder ZIP status/Cancel is in My Files. See `src/hooks/useFolderDownload.js`, `src/services/folder-download.js`, `src/utils/folder-zip.js`.

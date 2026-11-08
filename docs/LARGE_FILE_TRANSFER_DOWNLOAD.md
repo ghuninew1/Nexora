@@ -2,7 +2,9 @@
 
 > **Final Phase 6 (2026-11-08):** สถานะรวมและ runbook ปัจจุบันอยู่ใน [Production readiness](LARGE_FILE_TRANSFER_PRODUCTION_READINESS.md). Source integration/local validation complete; real-provider acceptance BLOCKED, controlled rollout/production NOT READY. D1 schema0011 verified read-only on target; Shared schema0002 remains unverified. Earlier phase statements below retain their historical scope.
 
-วันที่: 2026-11-08 (Asia/Bangkok). Current product behavior is native browser download only; see the current-product section below. Phase5.1 sections record the retained backend contract and historical validation, not deployed Garage/Cloudflare proof. No deployment, production flag/config change or migration.
+วันที่: 2026-11-08 (Asia/Bangkok). Current single-file behavior is native browser download; bounded folder ZIP is described in [FOLDER_TRANSFERS.md](FOLDER_TRANSFERS.md); see the current-product section below. Phase5.1 sections record the retained backend contract and historical validation, not deployed Garage/Cloudflare proof. No deployment, production flag/config change or migration.
+
+> **2026-11-09 Folder ZIP:** My Files can prepare folder ZIPs in the browser, capped at 64 MiB payload, 500 entries and depth 32, with progress and Cancel. Single-file/native downloads and retained backend streaming contracts remain unchanged. See [folder transfer scope and limits](FOLDER_TRANSFERS.md).
 
 ## เส้นทางและ authorization
 

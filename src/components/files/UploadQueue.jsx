@@ -54,6 +54,12 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
   const activeCount = items.filter((item) => ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'cancelling', 'retry_wait', 'reconciling', 'recovering_connection'].includes(item.status)).length;
   const pausable = items.filter(item => item.strategy === 'multipart' && ['queued', 'uploading', 'verifying', 'retry_wait', 'reconciling', 'waiting_network', 'recovering_connection', 'other_tab'].includes(item.status));
   const resumable = items.filter(item => item.strategy === 'multipart' && item.status === 'paused' && !item.needsFile);
+  const batches = [...new Set(items.map(item => item.batchId).filter(Boolean))].map(id => {
+    const members = items.filter(item => item.batchId === id);
+    const files = members.filter(item => item.strategy !== 'folder');
+    return { id, members, files, bytes: files.reduce((sum, item) => sum + item.sizeBytes, 0),
+      acknowledged: files.reduce((sum, item) => sum + (item.status === 'success' ? item.sizeBytes : item.acknowledgedBytes || 0), 0) };
+  });
   const queuedCount = items.filter((item) => item.status === 'queued').length;
   const finishedCount = items.filter((item) => ['success', 'error', 'expired', 'cancelled'].includes(item.status)).length;
 
@@ -74,6 +80,11 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
     </div>
     {restoring && <p role="status" className={cx('px-4 py-3 text-sm text-muted-foreground')}>Restoring uploads…</p>}
     {persistenceWarning && <p role="alert" className={cx('px-4 py-3 text-sm text-destructive')}>{persistenceWarning}</p>}
+    {batches.map(batch => <div key={batch.id} className={cx('border-b border-border px-4 py-3')}>
+      <p role="status" className={cx('text-xs text-muted-foreground')}>Folder upload · {batch.files.length} files · {batch.files.filter(item => item.status === 'success').length} completed · {batch.files.filter(item => ['error', 'expired', 'cancelled'].includes(item.status)).length} failed/cancelled · {batch.files.filter(item => !['success', 'error', 'expired', 'cancelled'].includes(item.status)).length} pending · {batch.members.filter(item => item.strategy === 'folder' && item.status === 'success').length}/{batch.members.filter(item => item.strategy === 'folder').length} folders created · {formatBytes(batch.acknowledged)} / {formatBytes(batch.bytes)} verified</p>
+      <div role="progressbar" aria-label="Folder upload verified bytes" aria-valuemin={0} aria-valuemax={batch.bytes || 1} aria-valuenow={batch.acknowledged} className={cx('mt-2 h-1.5 overflow-hidden rounded-full bg-muted')}><div className={cx('h-full bg-primary')} style={{ width: `${batch.bytes ? batch.acknowledged / batch.bytes * 100 : batch.members.every(item => item.status === 'success') ? 100 : 0}%` }} /></div>
+      <div className={cx('mt-2 flex flex-wrap gap-2')}><Button type="button" variant="outline" size="sm" onClick={() => batch.members.forEach(item => onCancel(item.id))}>Cancel folder upload</Button><Button type="button" variant="outline" size="sm" disabled={!canRetry} onClick={() => batch.members.filter(item => item.status === 'error' && item.retryable).forEach(item => onRetry(item.id))}>Retry incomplete items</Button></div>
+    </div>)}
     <ul className={cx('divide-y divide-border')}>
       {items.map((item) => {
         const config = STATUS[item.status] ?? STATUS.queued;
@@ -88,8 +99,8 @@ function UploadQueue({ items, concurrency, onCancel, onRetry, onPause, onResume,
           <Icon className={cx('mt-0.5 size-5 shrink-0 text-muted-foreground', ['uploading', 'verifying', 'finalizing', 'pausing', 'resuming', 'reconciling', 'cancelling'].includes(item.status) && 'motion-safe:animate-spin', item.status === 'success' && 'text-primary', item.status === 'error' && 'text-destructive')} aria-hidden="true" />
           <div className={cx('min-w-0 flex-1 basis-36')}>
             <div className={cx('flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1')}>
-              <span className={cx('min-w-0 max-w-full break-all text-sm font-medium text-foreground')} title={item.name}>{item.name}</span>
-              <span className={cx('shrink-0 text-xs text-muted-foreground')}>{config.label} · {formatBytes(item.sizeBytes)}</span>
+              <span className={cx('min-w-0 max-w-full break-all text-sm font-medium text-foreground')} title={item.relativePath || item.name}>{item.relativePath || item.name}</span>
+              <span className={cx('shrink-0 text-xs text-muted-foreground')}>{item.strategy === 'folder' && item.status === 'success' ? 'Folder created' : config.label} · {item.strategy === 'folder' ? 'Folder' : formatBytes(item.sizeBytes)}</span>
             </div>
             {multipart && <div className={cx('mt-2')}>
               <div role="progressbar" aria-label={`Uploading ${item.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}

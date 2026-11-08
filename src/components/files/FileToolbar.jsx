@@ -40,7 +40,7 @@ function FileToolbar({ canFavorite, canPaste, onClipboardCopy, onClipboardCut, o
               <DropdownMenuItem disabled={!canCreateFolder || isBusy} onClick={onNewFolder}><FolderPlus />Folder</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <UploadButton onFilesSelected={onUploadFiles} disabled={!canUpload || isBusy} />
+          <UploadButton onFilesSelected={onUploadFiles} canUploadFolder={canCreateFolder} disabled={!canUpload || isBusy} />
         </>}
       </div>
       <div className={cx("flex min-w-0 items-center gap-2")}>

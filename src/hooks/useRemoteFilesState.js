@@ -27,6 +27,7 @@ import {
   validateStorageObjectName,
 } from '../services/storage';
 import { appendBreadcrumb, breadcrumbDestination, isValidObjectId, normalizeFileBrowserRouteState, rootBreadcrumbs } from '../utils/storage-files';
+import useFolderDownload from './useFolderDownload';
 import useUploadQueue from './useUploadQueue';
 import { RemoteFilesCache } from '../utils/remote-files-cache';
 import { getStoragePreviewSpec, MAX_TEXT_PREVIEW_BYTES } from '../utils/storage-preview';
@@ -518,6 +519,10 @@ export default function useRemoteFilesState() {
   }
   uploadAllowedRef.current = authStatus === 'authenticated' && !signingOut && uploadScopeRef.current.allowed;
   const uploadQueue = useUploadQueue({
+    createFolder: async ({ storageId: target, parentId, name, signal }) => {
+      if (!uploadAllowedRef.current || target !== uploadScopeRef.current.storageId) throw new StorageApiError('FORBIDDEN', 403);
+      return createStorageFolder(target, { parentId, name }, { signal });
+    },
     onAdmissionError: message => setOperationFeedback({ type: 'error', message }),
     uploadFile: ({ file, storageId: targetStorageId, parentId, maxUploadBytes, signal }) => {
       if (!uploadAllowedRef.current || targetStorageId !== uploadScopeRef.current.storageId) return Promise.reject({ code: 'FORBIDDEN' });
@@ -541,7 +546,7 @@ export default function useRemoteFilesState() {
   const canUseCapability = useCallback((name) => Boolean(
     storageStatus === 'ready'
     && activeStorage
-    && activeStorage.permissions?.[({ trash: 'delete', restore: 'delete' })[name] || name] === true
+    && activeStorage.permissions?.[({ trash: 'delete', restore: 'delete', list: 'read', stat: 'read' })[name] || name] === true
     && canUseStorageCapability(capabilities, activeStorage, name),
   ), [storageStatus, activeStorage, capabilities]);
 
@@ -641,13 +646,14 @@ export default function useRemoteFilesState() {
     };
   }, [location.pathname, storageStatus, storageId, canAccessTrash, refreshTrash]);
 
-  const uploadFiles = useCallback((files) => {
-    if (!canUseCapability('upload')) {
+  const uploadFiles = useCallback((files, entries = null) => {
+    if (!canUseCapability('upload') || (entries?.some(entry => entry.kind === 'folder' || entry.path.includes('/')) && !canUseCapability('createFolder'))) {
       setOperationFeedback({ type: 'error', message: 'Uploads are unavailable for this storage.' });
       return [];
     }
     setOperationFeedback(null);
     return addFiles(files, {
+      entries,
       storageId,
       parentId: folderId,
       maxUploadBytes: capabilities.maxUploadBytes ?? null,
@@ -738,7 +744,15 @@ export default function useRemoteFilesState() {
     return () => { controller.abort(); };
   }, [canStartDownload, storageId, user?.id, user?.email]);
 
+  const folderDownload = useFolderDownload({ storageId,
+    scopeKey: JSON.stringify([authStatus, signingOut, user?.id, storageId]),
+    allowed: canStartDownload && canUseCapability('list') && canUseCapability('stat'), onUnauthorized: expireSession });
   const downloadObject = useCallback(async (file) => {
+    if (file?.type === 'folder') {
+      if (!canStartDownload || !canUseCapability('list') || !canUseCapability('stat') || !isValidObjectId(file.objectId)
+        || (file.storageId && file.storageId !== storageId)) return { error: 'FORBIDDEN' };
+      return folderDownload.start(file);
+    }
     if (!canStartDownload || file?.type !== 'file' || !isValidObjectId(file.objectId)
       || (file.storageId && file.storageId !== storageId)) return { error: 'FORBIDDEN' };
     const signal = downloadInitiationRef.current?.signal;
@@ -756,7 +770,7 @@ export default function useRemoteFilesState() {
       setOperationFeedback({ type: 'error', message: operationErrorMessage(code) });
       return { error: code };
     }
-  }, [canStartDownload, storageId, refreshRecent, expireSession]);
+  }, [canStartDownload, canUseCapability, storageId, refreshRecent, expireSession, folderDownload]);
 
   const trashObject = useCallback((file) => runObjectOperation({
     file,
@@ -1076,6 +1090,8 @@ export default function useRemoteFilesState() {
     canCreateFolder: canUseCapability('createFolder'),
     canUpload: canUseCapability('upload'),
     canDownload: canUseCapability('download'),
+    canDownloadFolder: canStartDownload && canUseCapability('list') && canUseCapability('stat'),
+    folderDownload,
     canTrash: canUseCapability('trash'),
     canRestore: canUseCapability('restore'),
     canPermanentDelete: canUseCapability('permanentDelete'),
@@ -1145,7 +1161,7 @@ export default function useRemoteFilesState() {
   }), [storageId, folderId, breadcrumbs, displayState, storageStatus, location.state, notice, activeStorage, capabilities,
     storageError, canUseCapability, isCreatingFolder, mutatingIds,
     operationFeedback, clearOperationFeedback, uploadQueue, uploadFiles, cancelUpload, pauseUpload, resumeUpload, retryUpload, clearFinishedUploads,
-    renameObject, moveObject, copyObject, downloadObject, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
+    renameObject, moveObject, copyObject, downloadObject, folderDownload, canStartDownload, trashObject, moveObjects, trashObjects, restoreTrashObject, permanentlyDeleteTrashObject,
     openFolder, navigateToBreadcrumb, navigateRoot, refreshCurrentFolder, loadMore, createFolder,
     preview, openPreview, closePreview, trashState, canAccessTrash, refreshTrash, loadMoreTrash,
     favoriteState, refreshFavorites, toggleFavorite, recentState, refreshRecent, recordRecentAccess,

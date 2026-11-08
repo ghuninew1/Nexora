@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createMultipartUploadClient, MultipartUploadError } from '../services/multipart-upload';
 import { withUploadOwnership, withUploadBudget } from '../services/upload-coordination';
+import { folderManifest } from '../utils/folder-upload';
 import { selectUploadStrategy } from '../utils/upload-strategy';
 import { uploadRecoveryStore, normalizeRecoveryRecord, matchesOriginalFile } from '../services/upload-recovery';
 
@@ -27,6 +28,7 @@ function displayTask(task) {
 
 function errorMessage(error) {
   const messages = {
+    PARENT_INCOMPLETE: 'Parent folder is incomplete. Retry the parent first, then retry this item.',
     NAME_CONFLICT: 'A file or folder with this name already exists here.',
     UPLOAD_TOO_LARGE: 'This file is too large for the connected storage.',
     MULTIPART_UNAVAILABLE: 'This file exceeds the direct upload limit. Multipart uploads are not available. Ask the administrator to enable compatible multipart uploads on Nexora and Shared Storage.',
@@ -66,7 +68,7 @@ function retryDelay(attempt, signal, retryAfterMs = 0) {
   });
 }
 
-export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized, onAdmissionError, canUpload = () => true,
+export default function useUploadQueue({ uploadFile, createFolder, onComplete, onUnauthorized, onAdmissionError, canUpload = () => true,
   scopeKey = 'workspace', autoClear = true,
   createClient = createMultipartUploadClient, waitForRetry = retryDelay,
   recoveryScope = null, recoveryStorageId = null, recoveryStore = uploadRecoveryStore } = {}) {
@@ -86,7 +88,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const offlineRef = useRef(globalThis.navigator?.onLine === false);
   const concurrency = 1;
   useLayoutEffect(() => {
-    optionsRef.current = { uploadFile, onComplete, onUnauthorized, onAdmissionError, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry, recoveryScope, recoveryStore };
+    optionsRef.current = { uploadFile, createFolder, onComplete, onUnauthorized, onAdmissionError, canUpload, scopeKey, concurrency, autoClear, createClient, waitForRetry, recoveryScope, recoveryStore };
     for (const task of activeRef.current.values()) {
       if (task.intent !== 'cancel' && !canUpload(task.storageId)) {
         task.permissionRevoked = true;
@@ -98,7 +100,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
   const alive = useCallback(task => mountedRef.current && task.epoch === epochRef.current
     && task.scopeKey === optionsRef.current.scopeKey && tasksRef.current.get(task.id) === task, []);
   const persist = useCallback(async (task, remove = false) => {
-    if (task.strategy !== 'multipart' || !task.userScope || task.localOnly || (task.persistenceFailed && !remove && !['success','cancelled','expired'].includes(task.status))) return;
+    if ((task.batchId && !task.started && !task.transferId) || task.strategy !== 'multipart' || !task.userScope || task.localOnly || (task.persistenceFailed && !remove && !['success','cancelled','expired'].includes(task.status))) return;
     const removing = remove || ['success','cancelled','expired'].includes(task.status);
     try {
       const writing = removing ? task.recoveryStore.remove(task.userScope, task.id) : task.recoveryStore.save(taskRecord(task));
@@ -173,7 +175,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
       ...(task.strategy === 'multipart' ? { acknowledgedBytes: task.sizeBytes, completedParts: task.partCount } : {}) });
     try { optionsRef.current.onComplete?.(task, result); } catch { /* A refresh cannot undo confirmed publication. */ }
     task.file = null; task.client = null;
-    if (optionsRef.current.autoClear) {
+    if (optionsRef.current.autoClear && !task.batchId) {
       const timer = setTimeout(() => {
         timersRef.current.delete(task.id);
         if (!alive(task)) return;
@@ -239,6 +241,16 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           if (operationMode === 'select') { task.file = task.candidateFile; task.candidateFile = null; task.intent = 'pause'; }
           update(task, { status: task.file ? 'paused' : 'waiting_file', needsFile: !task.file, pendingAction: null, error: null });
           return;
+        }
+        if (task.parentTask) {
+          if (task.parentTask.status !== 'success' || !task.parentTask.objectId) throw new MultipartUploadError('PARENT_INCOMPLETE');
+          task.parentId = task.parentTask.objectId;
+          if (task.metadata) task.metadata.parentId = task.parentId;
+        }
+        if (task.strategy === 'folder') {
+          allowed(); update(task, { status: 'uploading', error: null });
+          const folder = await optionsRef.current.createFolder({ storageId: task.storageId, parentId: task.parentId, name: task.name, signal: task.controller.signal });
+          check(); task.objectId = folder.objectId; finish(task, { file: folder }); return;
         }
         if (task.strategy === 'legacy') {
           allowed();
@@ -377,14 +389,14 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
           }
           continue;
         }
-        const cancelled = task.strategy === 'legacy' && task.intent === 'cancel';
+        const cancelled = task.strategy !== 'multipart' && task.intent === 'cancel';
         const status = cancelled ? 'cancelled' : error?.code === 'SESSION_EXPIRED' ? 'expired'
           : error?.code === 'SESSION_CANCELLED' ? 'cancelled' : 'error';
         if (status === 'expired' || status === 'cancelled') task.file = null;
         update(task, { status, error: cancelled ? null : handling === 'cancel'
           ? 'Cancellation is unconfirmed. Retry cancellation to check this session.'
           : handling === 'pause' ? 'Pause is unconfirmed. Retry pause before resuming.' : errorMessage(error),
-        errorCode: error?.code, retryable: !cancelled && (TRANSIENT.has(error?.code) || error?.code === 'WORKER_RESOURCE_LIMIT' || (task.strategy === 'legacy' && !['FORBIDDEN', 'INVALID_INPUT', 'UPLOAD_TOO_LARGE', 'CAPABILITY_UNAVAILABLE'].includes(error?.code))),
+        errorCode: error?.code, retryable: !cancelled && (TRANSIENT.has(error?.code) || error?.code === 'PARENT_INCOMPLETE' || error?.code === 'WORKER_RESOURCE_LIMIT' || (['legacy', 'folder'].includes(task.strategy) && !['FORBIDDEN', 'INVALID_INPUT', 'UPLOAD_TOO_LARGE', 'CAPABILITY_UNAVAILABLE'].includes(error?.code))),
         pendingAction: handling || null });
         return;
       }
@@ -570,24 +582,36 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
     setItems(items => items.filter(item => !removed.has(item.id)));
   }, [persist]);
 
-  const addFiles = useCallback((files, { storageId, parentId = null, maxUploadBytes = null, transfers } = {}) => {
+  const addFiles = useCallback((files, { storageId, parentId = null, maxUploadBytes = null, transfers, entries = null } = {}) => {
     if (!mountedRef.current || blockedRef.current || writeBlockedRef.current || !optionsRef.current.canUpload(storageId)) return [];
     // Reject the whole selection before retaining Files or starting requests. Do
     // not silently upload a prefix of a selection or materialize an unbounded list.
+    let manifest;
+    try { manifest = entries ? folderManifest(entries) : null; }
+    catch (error) { optionsRef.current.onAdmissionError?.(error.message); return []; }
+    const batchId = manifest ? crypto.randomUUID() : null;
+    const byPath = new Map();
     const selectedFiles = [];
-    for (const file of files) {
+    for (const file of manifest ?? files) {
       if (tasksRef.current.size + selectedFiles.length >= MAX_QUEUE_ITEMS) {
         optionsRef.current.onAdmissionError?.('Upload queue is limited to 50 files. Clear finished uploads or choose a smaller selection. No files from this selection were added.');
         return [];
       }
       selectedFiles.push(file);
     }
-    const newItems = selectedFiles.map(file => {
-      const selected = selectUploadStrategy(file.size, maxUploadBytes, transfers);
+    const newItems = selectedFiles.map(entry => {
+      const folder = manifest && entry.kind === 'folder';
+      const file = manifest ? folder ? { name: entry.path.split('/').at(-1), size: 0 } : entry.file : entry;
+      const selected = folder ? { strategy: 'folder', smallLimit: maxUploadBytes } : selectUploadStrategy(file.size, maxUploadBytes, transfers);
       const task = { id: crypto.randomUUID(), file, storageId, parentId, maxUploadBytes: selected.smallLimit,
         sizeBytes: file.size, name: file.name, strategy: selected.strategy || 'legacy', limits: selected.limits,
         epoch: epochRef.current, scopeKey: optionsRef.current.scopeKey, status: selected.error ? 'error' : 'queued',
         intent: null, controller: null, notified: false, retryable: false };
+      if (manifest) {
+        task.batchId = batchId; task.relativePath = entry.path;
+        task.parentTask = byPath.get(entry.path.split('/').slice(0, -1).join('/'));
+        byPath.set(entry.path, task);
+      }
       if (task.strategy === 'multipart') {
         task.key = crypto.randomUUID();
         task.userScope = optionsRef.current.recoveryScope; task.recoveryStore = optionsRef.current.recoveryStore;
@@ -598,7 +622,7 @@ export default function useUploadQueue({ uploadFile, onComplete, onUnauthorized,
       tasksRef.current.set(task.id, task);
       if (!selected.error) pendingRef.current.push(task);
       return { id: task.id, scopeKey: task.scopeKey, name: file.name, sizeBytes: file.size, parentId,
-        strategy: task.strategy, status: task.status, acknowledgedBytes: 0, completedParts: 0, partCount: null,
+        strategy: task.strategy, status: task.status, batchId, relativePath: task.relativePath, acknowledgedBytes: 0, completedParts: 0, partCount: null,
         retryable: false, error: selected.error ? errorMessage({ code: selected.error }) : null };
     });
     setItems(current => [...current.filter(item => item.scopeKey === optionsRef.current.scopeKey), ...newItems]);

@@ -273,6 +273,11 @@ export async function listStorageObjects(storageId, { parentId = null, cursor = 
   };
 }
 
+export async function statStorageObject(storageId, objectId, options = {}) {
+  const data = await request(`/api/storage/v1/storages/${encodeURIComponent(storageId)}/objects/${encodeURIComponent(objectId)}`, options);
+  return normalizeStorageObject(data.object);
+}
+
 export async function listStorageTrash(storageId, { cursor = null, limit = 50, ...options } = {}) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new StorageApiError('INVALID_INPUT', 400);
   const query = new URLSearchParams({ limit: String(limit) });

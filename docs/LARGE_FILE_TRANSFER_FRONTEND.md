@@ -6,6 +6,8 @@
 
 Phase **4.1–4.5 COMPLETE locally** (2026-11-08). Multipart uploads retain metadata in native IndexedDB, coordinate same-origin tabs using Web Locks, and recover bounded network interruptions through the original session. Phase4.5 supplies the global upload Transfer Manager; real-provider acceptance remains pending. See PROJECT_HANDOFF.md for executed checks and the Phase4.4 completion result. Server flags stay disabled by default; local tests and mocked browser checks do not imply production activation or10GiB acceptance.
 
+> **2026-11-09 Folder upload:** Existing queue supports bounded parent-dependent folder/file manifests and directory drops, with retained batch outcomes and no persistent batch replay. My Files separately supports bounded folder ZIP; see [FOLDER_TRANSFERS.md](FOLDER_TRANSFERS.md).
+
 ## Durable recovery and original-file selection (Phase4.3)
 
 ### Storage contract
