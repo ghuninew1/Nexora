@@ -66,15 +66,28 @@ export async function collectSelectedZip(roots, { list, signal, onProgress = () 
   return { entries, bytes };
 }
 
-// Minimal ZIP32 STORE writer: no compression, UTF-8 names, CRC32 and DOS epoch.
+// Minimal ZIP32 STORE writer: no compression, UTF-8 names, CRC32 and local DOS timestamps.
 // The explicit 64 MiB / 500-entry policy stays well below ZIP64 boundaries.
 const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, i) => {
   for (let n = 0; n < 8; n++) i = i & 1 ? 0xedb88320 ^ (i >>> 1) : i >>> 1;
   return i >>> 0;
 });
+function dosTimestamp(now) {
+  const year = now.getFullYear();
+  // DOS stores local wall time, years 1980–2107, with two-second precision.
+  // Clamp the whole date to avoid invalid leap dates when only changing a year.
+  if (year < 1980) return { date: (1 << 5) | 1, time: 0 };
+  if (year > 2107) return { date: (127 << 9) | (12 << 5) | 31, time: (23 << 11) | (59 << 5) | 29 };
+  return {
+    date: ((year - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate(),
+    time: (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2),
+  };
+}
+
 function header(length) { const bytes = new Uint8Array(length); return { bytes, view: new DataView(bytes.buffer) }; }
 export async function buildFolderZip(manifest, { read, signal, onProgress = () => {} }) {
   if (manifest.entries.length > MAX_ZIP_ENTRIES || manifest.bytes > MAX_ZIP_BYTES) fail(ZIP_LIMIT_MESSAGE);
+  const timestamp = dosTimestamp(new Date());
   const chunks = [], central = [], paths = new Set(); let offset = 0, transferred = 0;
   const append = bytes => { chunks.push(bytes); offset += bytes.byteLength; };
   for (const entry of manifest.entries) {
@@ -87,7 +100,7 @@ export async function buildFolderZip(manifest, { read, signal, onProgress = () =
     if (!Number.isSafeInteger(size) || size < 0 || size > MAX_ZIP_BYTES) fail(ZIP_LIMIT_MESSAGE);
     onProgress({ name: entry.path, transferred, total: manifest.bytes, discoveredEntries: manifest.entries.length, stage: 'downloading' });
     const local = header(30); local.view.setUint32(0, 0x04034b50, true); local.view.setUint16(4, 20, true);
-    local.view.setUint16(6, 0x0808, true); local.view.setUint16(12, 33, true); local.view.setUint16(26, name.length, true);
+    local.view.setUint16(6, 0x0808, true); local.view.setUint16(10, timestamp.time, true); local.view.setUint16(12, timestamp.date, true); local.view.setUint16(26, name.length, true);
     append(local.bytes); append(name);
     let crc = 0xffffffff, received = 0;
     if (!folder) {
@@ -115,7 +128,7 @@ export async function buildFolderZip(manifest, { read, signal, onProgress = () =
     descriptor.view.setUint32(8, size, true); descriptor.view.setUint32(12, size, true); append(descriptor.bytes);
     const record = header(46); const v = record.view;
     v.setUint32(0, 0x02014b50, true); v.setUint16(4, 20, true); v.setUint16(6, 20, true); v.setUint16(8, 0x0808, true);
-    v.setUint16(14, 33, true); v.setUint32(16, crc, true); v.setUint32(20, size, true); v.setUint32(24, size, true);
+    v.setUint16(12, timestamp.time, true); v.setUint16(14, timestamp.date, true); v.setUint32(16, crc, true); v.setUint32(20, size, true); v.setUint32(24, size, true);
     v.setUint16(28, name.length, true); v.setUint32(38, folder ? 0x10 : 0, true); v.setUint32(42, start, true);
     central.push(record.bytes, name);
   }
